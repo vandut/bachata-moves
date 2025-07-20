@@ -66,17 +66,33 @@ const FiguresGallery: React.FC = () => {
       const lessonIdMap = new Map(fetchedLessons.map(lesson => [lesson.id, lesson]));
 
       const sortedFigures = [...fetchedFigures].sort((a, b) => {
+        const lessonA = lessonIdMap.get(a.lessonId);
+        const lessonB = lessonIdMap.get(b.lessonId);
+
+        // Fallback for figures with no lesson data to prevent crashes
+        if (!lessonA || !lessonB) {
+            if (sortOrder === 'oldest') {
+                return parseInt(a.id.split('-')[0], 10) - parseInt(b.id.split('-')[0], 10);
+            }
+            return parseInt(b.id.split('-')[0], 10) - parseInt(a.id.split('-')[0], 10);
+        }
+
         switch (sortOrder) {
-          case 'oldest':
-            // The id is `timestamp-random`. We parse the timestamp.
-            return parseInt(a.id.split('-')[0], 10) - parseInt(b.id.split('-')[0], 10);
+          case 'newest':
+          default: {
+            const dateComparison = new Date(lessonB.uploadDate).getTime() - new Date(lessonA.uploadDate).getTime();
+            if (dateComparison !== 0) return dateComparison;
+            return b.startTime - a.startTime;
+          }
+          case 'oldest': {
+            const dateComparison = new Date(lessonA.uploadDate).getTime() - new Date(lessonB.uploadDate).getTime();
+            if (dateComparison !== 0) return dateComparison;
+            return a.startTime - b.startTime;
+          }
           case 'alphabetical_asc':
             return a.name.localeCompare(b.name);
           case 'alphabetical_desc':
             return b.name.localeCompare(a.name);
-          case 'newest':
-          default:
-            return parseInt(b.id.split('-')[0], 10) - parseInt(a.id.split('-')[0], 10);
         }
       });
       
