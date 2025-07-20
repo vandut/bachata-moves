@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-t" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta
+      name="description"
+      content="Bachata Moves App"
+    />
+    <title>Bachata Moves</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Fonts for MUI (Roboto) -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
+    />
+
+    <!-- Google Icons for MUI -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+    />
+  <style>
+    /* Custom video controls to hide specific native elements */
+    .custom-video-controls::-webkit-media-controls-timeline,
+    .custom-video-controls::-webkit-media-controls-current-time-display,
+    .custom-video-controls::-webkit-media-controls-time-remaining-display,
+    .custom-video-controls::-webkit-media-controls-picture-in-picture-button,
+    .custom-video-controls::-webkit-media-controls-overflow-button {
+      display: none !important;
+    }
+  </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-dom": "https://esm.sh/react-dom@^19.1.0/",
+    "react-dom/client": "https://esm.sh/react-dom@19.1.0/client",
+    "@mui/material/": "https://esm.sh/@mui/material@7.2.0/",
+    "@emotion/react": "https://esm.sh/@emotion/react@11.14.0",
+    "@emotion/styled": "https://esm.sh/@emotion/styled@11.14.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.7.0",
+    "idb": "https://esm.sh/idb@8"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-gray-50">
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
