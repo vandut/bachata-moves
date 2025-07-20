@@ -1,5 +1,5 @@
 import type { Lesson, Figure, AppSettings, IDataService } from './types';
-import { openDB, type IDBPDatabase } from 'https://esm.sh/idb@8';
+import { openDB, type IDBPDatabase } from 'idb';
 
 // --- Helper Functions ---
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
