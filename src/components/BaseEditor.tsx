@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../App';
 
 interface BaseEditorProps {
     videoUrl: string | null;
@@ -46,6 +47,7 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     headerContent,
     msToSecondsString,
 }) => {
+    const { t } = useTranslation();
     
     const startTime = formData.startTime || 0;
     const endTime = formData.endTime > startTime ? formData.endTime : videoDurationMs;
@@ -75,7 +77,7 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
                     )}
                 </div>
                 <div className="mt-4">
-                    <h4 className="text-lg font-medium text-gray-800 mb-3">Trimming</h4>
+                    <h4 className="text-lg font-medium text-gray-800 mb-3">{t('editor.trimming')}</h4>
                     <div
                         ref={timelineRef}
                         onMouseDown={onTimelineMouseDown}
@@ -98,29 +100,29 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
                     </div>
                     <div className="flex justify-between items-center mt-6 space-x-4">
                         <div className="flex-1">
-                            <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">Start Time (sec)</label>
+                            <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">{t('editor.startTime')}</label>
                             <input type="number" id="startTime" value={msToSecondsString(formData.startTime)} onChange={onFormChange} step="0.04" min="0" max={msToSecondsString(videoDurationMs)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                         </div>
                         <div className="flex-1">
-                            <label htmlFor="endTime" className="block text-sm font-medium text-gray-700">End Time (sec)</label>
+                            <label htmlFor="endTime" className="block text-sm font-medium text-gray-700">{t('editor.endTime')}</label>
                             <input type="number" id="endTime" value={msToSecondsString(formData.endTime)} onChange={onFormChange} step="0.04" min="0" max={msToSecondsString(videoDurationMs)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                         </div>
                     </div>
-                    <button type="button" onClick={onSetThumbnail} disabled={isSaving} className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400">Set Thumbnail to Current Video Time</button>
+                    <button type="button" onClick={onSetThumbnail} disabled={isSaving} className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400">{t('editor.setThumb')}</button>
                 </div>
             </div>
             <div className="space-y-6 p-2">
                 <div className="space-y-4">
-                    <h4 className="text-lg font-medium text-gray-800">Metadata</h4>
+                    <h4 className="text-lg font-medium text-gray-800">{t('editor.metadata')}</h4>
                     {headerContent}
-                    <div><label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label><textarea id="description" rows={4} value={formData.description} onChange={onFormChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
+                    <div><label htmlFor="description" className="block text-sm font-medium text-gray-700">{t('common.description')}</label><textarea id="description" rows={4} value={formData.description} onChange={onFormChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
                 </div>
                 <div className="mt-4">
-                    <h4 className="text-lg font-medium text-gray-800 mb-3">Thumbnail</h4>
+                    <h4 className="text-lg font-medium text-gray-800 mb-3">{t('editor.thumbnail')}</h4>
                     <div className="aspect-video w-full max-w-xs bg-black rounded-md mx-auto flex items-center justify-center border border-gray-300 overflow-hidden">
                         {thumbnailPreviewUrl ? <img src={thumbnailPreviewUrl} alt="Current thumbnail" className="w-full h-full object-contain" /> : <i className="material-icons text-5xl text-gray-400">photo_size_select_actual</i>}
                     </div>
-                    <p className="text-center text-xs text-gray-500 mt-2">Thumbnail is at {msToSecondsString(formData.thumbTime)}s</p>
+                    <p className="text-center text-xs text-gray-500 mt-2">{t('editor.thumbAt', { time: msToSecondsString(formData.thumbTime) })}</p>
                 </div>
             </div>
         </div>

@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { dataService } from '../data-service';
 import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
+import { useTranslation } from '../App';
 
 interface GalleryContext {
     refresh: () => void;
@@ -12,6 +13,7 @@ interface GalleryContext {
 const AddLessonModal: React.FC = () => {
   const { refresh, isMobile } = useOutletContext<GalleryContext>();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -76,11 +78,11 @@ const AddLessonModal: React.FC = () => {
         setVideoDurationMs(durationMs);
       } catch (genError) {
         console.error(genError);
-        setError('Valid video selected, but failed to generate thumbnail.');
+        setError(t('addLessonModal.errorThumb'));
         setThumbnailUrl(null);
       }
     } else {
-      setError('Please select a valid video file.');
+      setError(t('addLessonModal.errorFile'));
       setVideoFile(null);
       setThumbnailUrl(null);
       setVideoDurationMs(0);
@@ -124,7 +126,7 @@ const AddLessonModal: React.FC = () => {
   
   const handleSave = async () => {
     if (!videoFile || !date) {
-        setError(!videoFile ? 'Please select a video file.' : 'Please select a lesson date.');
+        setError(!videoFile ? t('addLessonModal.errorFile') : t('addLessonModal.errorDate'));
         return;
     }
 
@@ -146,15 +148,15 @@ const AddLessonModal: React.FC = () => {
       navigate('/lessons');
     } catch (err) {
       console.error("Failed to add lesson:", err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred while saving.');
+      setError(err instanceof Error ? err.message : t('addLessonModal.errorSave'));
     } finally {
         setIsSaving(false);
     }
   };
   
   const primaryAction: ModalAction = {
-    label: "Save",
-    loadingLabel: "Saving...",
+    label: t('common.save'),
+    loadingLabel: t('common.saving'),
     onClick: handleSave,
     disabled: !videoFile || !date,
     isLoading: isSaving,
@@ -164,7 +166,7 @@ const AddLessonModal: React.FC = () => {
     <>
       {/* File Input & Thumbnail Preview */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Video <span className="text-red-500">*</span></label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">{t('addLessonModal.video')} <span className="text-red-500">{t('addLessonModal.required')}</span></label>
         <div 
             className={`mx-auto max-w-[50%] max-h-[50vh] mt-1 rounded-lg border-2 border-dashed transition-colors cursor-pointer group relative overflow-hidden bg-gray-100 aspect-[9/16] flex items-center justify-center ${
               isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
@@ -180,7 +182,7 @@ const AddLessonModal: React.FC = () => {
             ) : (
                 <div className="text-center text-gray-400 group-hover:text-gray-500 transition-colors">
                     <i className="material-icons text-6xl">ondemand_video</i>
-                    <p className="mt-2 text-sm font-medium">Click or drag video file</p>
+                    <p className="mt-2 text-sm font-medium">{t('addLessonModal.videoDesc')}</p>
                 </div>
             )}
             <input ref={fileInputRef} id="file-upload" name="file-upload" type="file" className="sr-only" accept="video/*" onChange={handleFileChange} />
@@ -195,7 +197,7 @@ const AddLessonModal: React.FC = () => {
 
       {/* Date Input */}
       <div>
-        <label htmlFor="lesson-date" className="block text-sm font-medium text-gray-700">Lesson Date <span className="text-red-500">*</span></label>
+        <label htmlFor="lesson-date" className="block text-sm font-medium text-gray-700">{t('addLessonModal.date')} <span className="text-red-500">{t('addLessonModal.required')}</span></label>
         <input
             type="date"
             id="lesson-date"
@@ -212,7 +214,7 @@ const AddLessonModal: React.FC = () => {
       {/* Description */}
       <div>
         <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-            Description (Optional)
+            {t('addLessonModal.descriptionOptional')}
         </label>
         <textarea
             id="description"
@@ -220,7 +222,7 @@ const AddLessonModal: React.FC = () => {
             value={description}
             onChange={e => setDescription(e.target.value)}
             className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            placeholder="e.g., 'Beginner footwork and basic turns'"
+            placeholder={t('addLessonModal.descriptionPlaceholder')}
         />
       </div>
     </>
@@ -230,7 +232,7 @@ const AddLessonModal: React.FC = () => {
     <BaseModal
       onClose={handleClose}
       primaryAction={primaryAction}
-      title="Add New Lesson"
+      title={t('addLessonModal.title')}
       isMobile={isMobile}
       error={error}
       desktopWidth="max-w-md"

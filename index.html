@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-t" />
+    <meta charset="utf-8" />
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
@@ -26,6 +26,11 @@
       href="https://fonts.googleapis.com/icon?family=Material+Icons"
     />
   <style>
+    body {
+      /* This font stack ensures that both standard text and complex emojis (like country flags) render correctly. */
+      font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    }
+    
     /* Custom video controls to hide specific native elements */
     .custom-video-controls::-webkit-media-controls-timeline,
     .custom-video-controls::-webkit-media-controls-current-time-display,
@@ -33,6 +38,11 @@
     .custom-video-controls::-webkit-media-controls-picture-in-picture-button,
     .custom-video-controls::-webkit-media-controls-overflow-button {
       display: none !important;
+    }
+
+    /* Fix for date picker icon color on some browsers */
+    input[type="date"] {
+      color-scheme: light;
     }
   </style>
   <script type="importmap">

@@ -6,6 +6,7 @@ import type { Lesson, Figure, ModalAction } from '../types';
 import CustomSlider from './CustomSlider';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useVideoSettings } from '../contexts/VideoSettingsContext';
+import { useTranslation } from '../App';
 
 // This context is provided by the parent gallery component (Lessons or Figures)
 interface GalleryContext {
@@ -20,6 +21,7 @@ const PlayerScreen: React.FC = () => {
   const location = useLocation();
   const { isMobile, refresh, itemIds } = useOutletContext<GalleryContext>();
   const { isMuted, setIsMuted, volume, setVolume } = useVideoSettings();
+  const { t, locale } = useTranslation();
 
   const [item, setItem] = useState<Lesson | Figure | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -90,7 +92,7 @@ const PlayerScreen: React.FC = () => {
           if (isCancelled) return;
           setVideoUrl(url);
         } else {
-          setError('Item not found.');
+          setError(t('player.itemNotFound'));
         }
       } catch (e) {
         if (isCancelled) return;
@@ -105,7 +107,7 @@ const PlayerScreen: React.FC = () => {
     loadData();
 
     return () => { isCancelled = true; }
-  }, [lessonId, figureId]);
+  }, [lessonId, figureId, t]);
 
   // Effect for Keyboard Navigation
   useEffect(() => {
@@ -246,17 +248,17 @@ const PlayerScreen: React.FC = () => {
       handleClose();
     } catch (e) {
       console.error(`Failed to delete ${itemType}:`, e);
-      setError(e instanceof Error ? e.message : `An unknown error occurred while deleting the ${itemType}.`);
+      setError(e instanceof Error ? e.message : t('player.errorDelete', { itemType: t(`player.${itemType}`) }));
       setShowDeleteConfirm(false);
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const modalTitle = item ? ('uploadDate' in item ? `Lesson from ${new Date(item.uploadDate).toLocaleDateString()}` : item.name) : 'Player';
+  const modalTitle = item ? ('uploadDate' in item ? t('player.titleLesson', { date: new Date(item.uploadDate).toLocaleDateString(locale) }) : item.name) : t('common.loading');
     
-  const primaryAction: ModalAction | undefined = item ? { label: "Edit", onClick: handleEdit, disabled: isDeleting } : undefined;
-  const secondaryActions: ModalAction[] | undefined = item ? [{ label: "Delete", onClick: handleRequestDelete, isDestructive: true, disabled: isDeleting }] : undefined;
+  const primaryAction: ModalAction | undefined = item ? { label: t('common.edit'), onClick: handleEdit, disabled: isDeleting } : undefined;
+  const secondaryActions: ModalAction[] | undefined = item ? [{ label: t('common.delete'), onClick: handleRequestDelete, isDestructive: true, disabled: isDeleting }] : undefined;
   
   return (
     <div className="h-full">
@@ -278,7 +280,7 @@ const PlayerScreen: React.FC = () => {
           onTouchEnd={handleTouchEnd}
         >
           <div 
-            className="bg-black flex-1 min-h-0 flex flex-col justify-center"
+            className="bg-black flex-1 min-h-0 flex flex-col items-center justify-center"
           >
             {videoUrl && item ? (
               <div className="w-full h-full flex flex-col justify-center">
@@ -302,7 +304,7 @@ const PlayerScreen: React.FC = () => {
                     max={item.endTime || videoDurationMs}
                     value={currentTimeMs}
                     onChange={handleSliderChange}
-                    aria-label="Video seek slider"
+                    aria-label={t('player.seekSlider')}
                   />
                 </div>
               </div>
@@ -313,12 +315,12 @@ const PlayerScreen: React.FC = () => {
             )}
           </div>
           <div className="px-4 pt-3 flex-shrink-0">
-            <h3 className="font-bold text-gray-800 mb-1">Description:</h3>
+            <h3 className="font-bold text-gray-800 mb-1">{t('common.description')}:</h3>
             <div className="h-[2.5rem] overflow-y-auto pr-2 text-sm text-gray-700">
               {item?.description ? (
                 <p className="whitespace-pre-wrap">{item.description}</p>
               ) : (
-                <p className="italic text-gray-500">(no description)</p>
+                <p className="italic text-gray-500">{t('common.noDescription')}</p>
               )}
             </div>
           </div>
@@ -331,15 +333,15 @@ const PlayerScreen: React.FC = () => {
             onClose={handleCancelDelete}
             onConfirm={handleConfirmDelete}
             isDeleting={isDeleting}
-            title={`Delete ${'uploadDate' in item ? 'Lesson' : 'Figure'}?`}
+            title={'uploadDate' in item ? t('deleteModal.titleLesson') : t('deleteModal.titleFigure')}
         >
             <p>
                 {'uploadDate' in item
-                    ? 'This will permanently delete the lesson and all of its associated figures.'
-                    : 'This will permanently delete the figure.'
+                    ? t('deleteModal.bodyLesson')
+                    : t('deleteModal.bodyFigure')
                 }
             </p>
-            <p className="mt-2 font-semibold">This action cannot be undone.</p>
+            <p className="mt-2 font-semibold">{t('deleteModal.warning')}</p>
         </ConfirmDeleteModal>
       )}
     </div>

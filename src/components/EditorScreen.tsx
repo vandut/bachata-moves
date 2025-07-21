@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
@@ -8,6 +5,7 @@ import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure } from '../types';
 import { dataService } from '../data-service';
 import { useVideoSettings } from '../contexts/VideoSettingsContext';
+import { useTranslation } from '../App';
 
 interface GalleryContext {
     refresh: () => void;
@@ -78,6 +76,7 @@ const EditorScreen: React.FC = () => {
     const location = useLocation();
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
     const { isMuted, setIsMuted, volume, setVolume } = useVideoSettings();
+    const { t, locale } = useTranslation();
     const query = useQuery();
 
     // --- State ---
@@ -173,20 +172,20 @@ const EditorScreen: React.FC = () => {
     // --- Dynamic Title Effect ---
     useEffect(() => {
         const getStaticTitle = () => {
-            if (isLoading) return 'Loading Editor...';
-            if (error && !item) return 'Error';
-            if (isCreatingFigure) return 'Create New Figure';
-            if (isEditingFigure) return 'Edit Figure';
+            if (isLoading) return t('editor.loading');
+            if (error && !item) return t('editor.error');
+            if (isCreatingFigure) return t('editor.createFigureTitle');
+            if (isEditingFigure) return t('editor.editFigureTitle');
             if (isEditingLesson) {
                 const dateString = formData.uploadDate 
-                    ? new Date(formData.uploadDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) 
-                    : 'Lesson';
-                return `Edit: ${dateString}`;
+                    ? new Date(formData.uploadDate).toLocaleDateString(locale, { timeZone: 'UTC' }) 
+                    : t('nav.lessons');
+                return t('editor.editLessonTitle', { date: dateString });
             }
             return 'Editor';
         };
         setTitle(getStaticTitle());
-    }, [isLoading, error, item, isCreatingFigure, isEditingFigure, isEditingLesson, formData.uploadDate]);
+    }, [isLoading, error, item, isCreatingFigure, isEditingFigure, isEditingLesson, formData.uploadDate, t, locale]);
 
     // --- Callbacks for BaseEditor ---
     const handleClose = () => {
@@ -270,7 +269,7 @@ const EditorScreen: React.FC = () => {
             setNewThumbnailUrl(dataUrl);
             setFormData(prev => ({ ...prev, thumbTime: Math.round(currentTimeSeconds * 1000) }));
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate thumbnail.');
+            setError(err instanceof Error ? err.message : t('editor.errorThumb'));
         }
     };
     
@@ -327,7 +326,7 @@ const EditorScreen: React.FC = () => {
     
     const handleSave = async () => {
         if ((isCreatingFigure || isEditingFigure) && !formData.name) {
-            setError('Figure name is required.');
+            setError(t('editor.nameRequiredError'));
             return;
         }
         setIsSaving(true);
@@ -347,7 +346,7 @@ const EditorScreen: React.FC = () => {
             navigate(isCreatingFigure ? baseNavPath : parentPath);
         } catch (err) {
             console.error("Failed to save:", err);
-            setError(err instanceof Error ? err.message : 'An unknown error occurred while saving.');
+            setError(err instanceof Error ? err.message : t('editor.errorSave'));
         } finally {
             setIsSaving(false);
         }
@@ -357,28 +356,28 @@ const EditorScreen: React.FC = () => {
     const renderHeaderContent = () => {
         const commonClasses = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm";
         if (isEditingLesson) {
-            return <div><label htmlFor="uploadDate" className="block text-sm font-medium text-gray-700">Lesson Date</label><input type="date" id="uploadDate" value={formData.uploadDate} onChange={handleFormChange} className={commonClasses} required/></div>;
+            return <div><label htmlFor="uploadDate" className="block text-sm font-medium text-gray-700">{t('editor.lessonDate')}</label><input type="date" id="uploadDate" value={formData.uploadDate} onChange={handleFormChange} className={commonClasses} required/></div>;
         }
         if (isCreatingFigure || isEditingFigure) {
-            return <div><label htmlFor="name" className="block text-sm font-medium text-gray-700">Name <span className="text-red-500">*</span></label><input type="text" id="name" value={formData.name} onChange={handleFormChange} className={commonClasses} required/></div>;
+            return <div><label htmlFor="name" className="block text-sm font-medium text-gray-700">{t('editor.name')} <span className="text-red-500">*</span></label><input type="text" id="name" value={formData.name} onChange={handleFormChange} className={commonClasses} required/></div>;
         }
         return null;
     };
     
     const isSaveDisabled = isSaving || ((isCreatingFigure || isEditingFigure) && !formData.name.trim());
-    const primaryAction: ModalAction = { label: "Save", loadingLabel: "Saving...", onClick: handleSave, isLoading: isSaving, disabled: isSaveDisabled };
+    const primaryAction: ModalAction = { label: t('common.save'), loadingLabel: t('common.saving'), onClick: handleSave, isLoading: isSaving, disabled: isSaveDisabled };
     
     const renderContent = () => {
         if (isLoading) {
-            return <div className="flex items-center justify-center h-[60vh]"><i className="material-icons text-5xl text-gray-400 animate-spin">sync</i><span className="ml-4 text-xl text-gray-600">Loading Editor...</span></div>;
+            return <div className="flex items-center justify-center h-[60vh]"><i className="material-icons text-5xl text-gray-400 animate-spin">sync</i><span className="ml-4 text-xl text-gray-600">{t('editor.loading')}</span></div>;
         }
 
         if (!item) {
             return (
                 <div className="flex flex-col items-center justify-center h-[60vh] bg-gray-50 rounded-lg p-4 text-center">
                     <i className="material-icons text-6xl text-red-400">error_outline</i>
-                    <h2 className="text-red-700 text-xl font-bold mt-4">Failed to Load Editor</h2>
-                    <p className="text-red-600 text-sm mt-1">{error || 'The item could not be found.'}</p>
+                    <h2 className="text-red-700 text-xl font-bold mt-4">{t('editor.failedToLoad')}</h2>
+                    <p className="text-red-600 text-sm mt-1">{error || t('editor.itemNotFound')}</p>
                 </div>
             );
         }

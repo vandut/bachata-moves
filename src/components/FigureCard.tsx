@@ -1,10 +1,9 @@
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { Figure, Lesson } from '../types';
 import { dataService } from '../data-service';
+import { useTranslation } from '../App';
+import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 
 interface FigureCardProps {
   figure: Figure;
@@ -12,11 +11,18 @@ interface FigureCardProps {
 }
 
 const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
+  const { t, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isHovering, setIsHovering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  
+  const cardRef = useRef<HTMLAnchorElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isVisible = useIntersectionObserver(cardRef, { threshold: 0.1 });
+
+  const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
 
   // Effect to load the thumbnail
   useEffect(() => {
@@ -33,14 +39,50 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
       .catch(err => {
         console.warn(`Could not get thumbnail for figure ${figure.id}:`, err.message);
         if (!isCancelled) {
-            setError('Thumbnail not available');
+            setError(t('card.thumbNotAvailable'));
         }
       });
     
     return () => { isCancelled = true; };
-  }, [figure.id]);
+  }, [figure.id, figure.thumbTime, t]);
 
-  // Effect to handle video playback logic
+  // Effect to load video URL
+  useEffect(() => {
+    let isCancelled = false;
+    if (shouldPlay && !videoUrl && parentLesson) {
+      dataService.getVideoObjectUrl(parentLesson)
+        .then(url => {
+          if (!isCancelled) setVideoUrl(url);
+        })
+        .catch(err => {
+          if (!isCancelled) {
+            console.error(`Could not load video for figure ${figure.id}:`, err);
+            setError(t('card.videoNotLoaded'));
+          }
+        });
+    }
+    return () => { isCancelled = true; };
+  }, [shouldPlay, videoUrl, parentLesson, figure.id, t]);
+
+  // Effect to set the final playing state
+  useEffect(() => {
+    setIsPlaying(shouldPlay && !!videoUrl && !!parentLesson);
+  }, [shouldPlay, videoUrl, parentLesson]);
+
+  // Effect to stop video playback when tab becomes inactive.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && isPlaying) {
+        setIsHovering(false); // Stop hover-play if tab is hidden
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isPlaying]);
+
+  // Effect to handle video element playback logic
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -67,58 +109,36 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
       if (video.readyState >= 3) { // HAVE_FUTURE_DATA
         playVideo();
       } else {
-        video.addEventListener('loadeddata', playVideo);
+        video.addEventListener('loadeddata', playVideo, { once: true });
       }
 
       return () => {
-        video.removeEventListener('loadeddata', playVideo);
         video.removeEventListener('timeupdate', handleTimeUpdate);
+        video.removeEventListener('loadeddata', playVideo);
         video.pause();
       };
     } else {
       video.pause();
     }
-  }, [isPlaying, videoUrl, figure.startTime, figure.endTime]);
+  }, [isPlaying, figure.startTime, figure.endTime]);
 
 
-  const handleMouseEnter = () => {
-    if (!parentLesson) {
-        setError('Video not available (lesson missing)');
-        return;
-    }
-    if (error === 'Video could not be loaded.') return;
-
-    if (!videoUrl) {
-      dataService.getVideoObjectUrl(parentLesson)
-        .then(url => {
-          setVideoUrl(url);
-          setIsPlaying(true);
-        })
-        .catch(err => {
-          console.error(`Could not load video for figure ${figure.id} from lesson ${parentLesson.id}:`, err);
-          setError('Video could not be loaded.');
-        });
-    } else {
-      setIsPlaying(true);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setIsPlaying(false);
-  };
+  const handleMouseEnter = () => setIsHovering(true);
+  const handleMouseLeave = () => setIsHovering(false);
 
   const showVideo = isPlaying && videoUrl;
   
   const getIconName = () => {
-    if (error?.includes('Video')) return 'videocam_off';
+    if (error === t('card.videoNotLoaded') || error === t('card.videoNotAvailable')) return 'videocam_off';
     if (error) return 'image_not_supported';
     return 'people';
   };
 
   return (
     <Link 
+        ref={cardRef}
         to={`/figures/${figure.id}`}
-        aria-label={`View figure: ${figure.name}`}
+        aria-label={t('card.viewFigure', { name: figure.name })}
         className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}

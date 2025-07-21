@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from '../App';
 
 interface SortOption {
   value: string;
@@ -14,8 +15,9 @@ interface SortControlProps {
 const SortControl: React.FC<SortControlProps> = ({ options, value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
-  const selectedLabel = options.find(opt => opt.value === value)?.label || 'Sort';
+  const selectedLabel = options.find(opt => opt.value === value)?.label || t('sort.sort');
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

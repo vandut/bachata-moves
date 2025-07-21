@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../App';
 
 interface ConfirmDeleteModalProps {
   isOpen: boolean;
@@ -17,6 +18,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
   isDeleting,
   children,
 }) => {
+  const { t } = useTranslation();
   if (!isOpen) return null;
 
   return (
@@ -47,7 +49,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             disabled={isDeleting}
             className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -55,7 +57,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             disabled={isDeleting}
             className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-red-400"
           >
-            {isDeleting ? 'Deleting...' : 'Delete'}
+            {isDeleting ? t('common.deleting') : t('common.delete')}
           </button>
         </div>
       </div>

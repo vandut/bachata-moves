@@ -7,8 +7,11 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
 import SortControl from './SortControl';
+import { useTranslation } from '../App';
 
-const AddNewCard: React.FC = () => (
+const AddNewCard: React.FC = () => {
+  const { t } = useTranslation();
+  return (
    <div 
     className="
       relative 
@@ -24,23 +27,24 @@ const AddNewCard: React.FC = () => (
     <div className="aspect-[9/16] flex items-center justify-center">
       <div className="text-center">
         <i className="material-icons text-7xl text-gray-400 group-hover:text-blue-500 transition-colors duration-300">add_circle_outline</i>
-        <p className="mt-2 text-lg font-medium text-gray-600 group-hover:text-blue-500">Add New</p>
+        <p className="mt-2 text-lg font-medium text-gray-600 group-hover:text-blue-500">{t('common.addNew')}</p>
       </div>
     </div>
   </div>
-);
-
-const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest First' },
-  { value: 'oldest', label: 'Oldest First' },
-];
+)};
 
 const LessonsGallery: React.FC = () => {
+  const { t } = useTranslation();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [sortOrder, setSortOrder] = useState<LessonSortOrder | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
+
+  const SORT_OPTIONS = [
+    { value: 'newest', label: t('sort.newest') },
+    { value: 'oldest', label: t('sort.oldest') },
+  ];
   
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as LessonSortOrder;
@@ -62,7 +66,15 @@ const LessonsGallery: React.FC = () => {
         const sorted = [...fetchedLessons].sort((a, b) => {
           const dateA = new Date(a.uploadDate).getTime();
           const dateB = new Date(b.uploadDate).getTime();
-          return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+          
+          if (dateA !== dateB) {
+            return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+          }
+          
+          // If dates are the same, sort by ID (which is also chronological)
+          const idA = parseInt(a.id.split('-')[0], 10);
+          const idB = parseInt(b.id.split('-')[0], 10);
+          return sortOrder === 'newest' ? idB - idA : idA - idB;
         });
         setLessons(sorted);
       })
@@ -101,12 +113,13 @@ const LessonsGallery: React.FC = () => {
 
   const outletContext = { refresh: intelligentRefresh, isMobile, itemIds: lessons.map(l => l.id) };
   const isChildRouteActive = location.pathname !== '/lessons';
+  const pageTitle = t('nav.lessons');
 
   if (isLoading && lessons.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <i className="material-icons text-5xl text-gray-400 animate-spin">sync</i>
-        <span className="ml-4 text-xl text-gray-600">Loading Lessons...</span>
+        <span className="ml-4 text-xl text-gray-600">{t('gallery.loading', { item: t('gallery.lessons') })}</span>
       </div>
     );
   }
@@ -127,7 +140,7 @@ const LessonsGallery: React.FC = () => {
     } else {
       return (
         <>
-          <MobileTopNav title="Lessons" />
+          <MobileTopNav title={pageTitle} />
           <div className="px-4 pt-4 pb-2 flex justify-end">
             {sortControl}
           </div>
@@ -136,7 +149,7 @@ const LessonsGallery: React.FC = () => {
                   {lessons.map((lesson) => (
                       <LessonCard key={lesson.id} lesson={lesson} />
                   ))}
-                  <Link to="add" aria-label="Add new lesson">
+                  <Link to="add" aria-label={t('common.addNew')}>
                       <AddNewCard />
                   </Link>
               </div>
@@ -149,12 +162,12 @@ const LessonsGallery: React.FC = () => {
     // On desktop, the gallery is always visible, and child routes render as an overlay.
     const galleryContent = (
       <div className="p-8">
-        <DesktopTopNav title="Lessons" rightAction={sortControl} />
+        <DesktopTopNav title={pageTitle} rightAction={sortControl} />
         <div className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
           {lessons.map((lesson) => (
             <LessonCard key={lesson.id} lesson={lesson} />
           ))}
-          <Link to="add" aria-label="Add new lesson">
+          <Link to="add" aria-label={t('common.addNew')}>
             <AddNewCard />
           </Link>
         </div>

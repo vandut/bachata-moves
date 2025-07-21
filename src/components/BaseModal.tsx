@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MobileTopNav from './MobileTopNav';
 import type { ModalAction } from '../types';
+import { useTranslation } from '../App';
 
 interface BaseModalProps {
   onClose: () => void;
@@ -29,6 +30,7 @@ const BaseModal: React.FC<BaseModalProps> = ({
   error,
   fillHeight = false,
 }) => {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +64,7 @@ const BaseModal: React.FC<BaseModalProps> = ({
   
   const renderActionButton = (action: ModalAction, isPrimary: boolean, key?: React.Key) => {
     const { label, onClick, isDestructive, disabled, isLoading, loadingLabel } = action;
-    const buttonLabel = isLoading ? (loadingLabel || 'Loading...') : label;
+    const buttonLabel = isLoading ? (loadingLabel || t('common.loading')) : label;
     const isDisabled = disabled || isLoading;
 
     if (isMobile && !isPrimary) { // Secondary actions in mobile menu
@@ -128,7 +130,7 @@ const BaseModal: React.FC<BaseModalProps> = ({
               className="p-2 text-gray-700 hover:bg-gray-100 rounded-full"
               aria-haspopup="true"
               aria-expanded={menuOpen}
-              aria-label="More actions"
+              aria-label={t('common.moreActions')}
             >
               <i className="material-icons">more_vert</i>
             </button>
@@ -205,7 +207,7 @@ const BaseModal: React.FC<BaseModalProps> = ({
               className="px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               disabled={primaryAction?.isLoading}
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             {primaryAction && renderActionButton(primaryAction, true)}
           </div>

@@ -1,8 +1,20 @@
+
 import type { Lesson, Figure, AppSettings, IDataService } from './types';
-import { openDB, type IDBPDatabase } from 'idb';
+import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
 
 // --- Helper Functions ---
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+const getInitialLanguage = (): 'english' | 'polish' => {
+  if (typeof navigator !== 'undefined' && navigator.language) {
+    const lang = navigator.language.toLowerCase();
+    if (lang.startsWith('pl')) {
+      return 'polish';
+    }
+  }
+  return 'english'; // Default language
+};
+
 
 // --- IndexedDB Configuration ---
 const DB_NAME = 'bachata-moves-db';
@@ -82,6 +94,24 @@ const generateThumbnailBlob = (file: File, thumbTime: number): Promise<Blob> => 
     video.src = videoUrl;
     video.load();
   });
+};
+
+// --- Helper Functions for Import/Export ---
+const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(blob);
+    });
+  };
+  
+const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
+    const res = await fetch(dataUrl);
+    if (!res.ok) {
+        throw new Error(`Failed to fetch data URL: ${res.statusText}`);
+    }
+    return res.blob();
 };
 
 
@@ -253,9 +283,10 @@ class AppDataService implements IDataService {
     const db = await openBachataDB();
     const savedSettings = await db.get(SETTINGS_STORE, SETTINGS_KEY);
     const defaultSettings: AppSettings = {
-      language: 'English',
+      language: getInitialLanguage(),
       lessonSortOrder: 'newest',
       figureSortOrder: 'newest',
+      autoplayGalleryVideos: false,
     };
 
     return { ...defaultSettings, ...(savedSettings || {}) };
@@ -334,6 +365,176 @@ class AppDataService implements IDataService {
         URL.revokeObjectURL(figureThumbUrl);
         this.figureThumbUrlCache.delete(id);
       }
+    }
+  }
+
+  async clearAllData(): Promise<void> {
+    // Revoke all cached URLs to prevent memory leaks before the page reloads.
+    this.videoUrlCache.forEach(url => URL.revokeObjectURL(url));
+    this.videoUrlCache.clear();
+    this.thumbUrlCache.forEach(url => URL.revokeObjectURL(url));
+    this.thumbUrlCache.clear();
+    this.figureThumbUrlCache.forEach(url => URL.revokeObjectURL(url));
+    this.figureThumbUrlCache.clear();
+
+    // The `deleteDB` function from the `idb` library closes any open connections
+    // before deleting the database, so we don't need to manage DB instances here.
+    await deleteDB(DB_NAME);
+  }
+
+  // --- Data Management ---
+  async exportAllData(): Promise<Blob> {
+    const db = await openBachataDB();
+    const tx = db.transaction(db.objectStoreNames, 'readonly');
+
+    const getAllEntries = async <T>(storeName: string): Promise<[IDBValidKey, T][]> => {
+        const store = tx.objectStore(storeName as any);
+        const entries: [IDBValidKey, T][] = [];
+        let cursor = await store.openCursor();
+        while (cursor) {
+            entries.push([cursor.key, cursor.value]);
+            cursor = await cursor.continue();
+        }
+        return entries;
+    };
+    
+    // 1. Fetch all data from IndexedDB. All these requests run in parallel within the same transaction.
+    const [
+      lessons,
+      figures,
+      settings,
+      videoEntries,
+      thumbnailEntries,
+      figureThumbnailEntries
+    ] = await Promise.all([
+      tx.objectStore(LESSONS_STORE).getAll(),
+      tx.objectStore(FIGURES_STORE).getAll(),
+      tx.objectStore(SETTINGS_STORE).get(SETTINGS_KEY),
+      getAllEntries<Blob>(VIDEOS_STORE),
+      getAllEntries<Blob>(THUMBNAILS_STORE),
+      getAllEntries<Blob>(FIGURE_THUMBNAILS_STORE)
+    ]);
+    
+    // Ensure the transaction is complete before proceeding to CPU-intensive work.
+    await tx.done;
+
+    // 2. After the transaction is closed, convert blobs to base64. This is async but doesn't need the DB.
+    const convertEntriesToBase64 = (entries: [IDBValidKey, Blob][]): Promise<[IDBValidKey, string][]> => {
+      if (!entries) return Promise.resolve([]);
+      const promises = entries.map(async ([key, blob]) => {
+        const base64Value = await blobToBase64(blob);
+        return [key, base64Value] as [IDBValidKey, string];
+      });
+      return Promise.all(promises);
+    };
+
+    const [
+      videos,
+      thumbnails,
+      figureThumbnails
+    ] = await Promise.all([
+      convertEntriesToBase64(videoEntries),
+      convertEntriesToBase64(thumbnailEntries),
+      convertEntriesToBase64(figureThumbnailEntries)
+    ]);
+
+    // 3. Construct the final export object.
+    const exportObject = {
+        '__BACHATA_MOVES_EXPORT__': true,
+        'version': 1,
+        'exportDate': new Date().toISOString(),
+        'data': {
+            lessons: lessons || [],
+            figures: figures || [],
+            settings: settings || {},
+            videos: videos || [],
+            thumbnails: thumbnails || [],
+            figureThumbnails: figureThumbnails || [],
+        },
+    };
+
+    const jsonString = JSON.stringify(exportObject);
+    return new Blob([jsonString], { type: 'application/json' });
+  }
+
+  async importData(dataBlob: Blob): Promise<void> {
+    const jsonString = await dataBlob.text();
+    const importObject = JSON.parse(jsonString);
+
+    if (!importObject || importObject.__BACHATA_MOVES_EXPORT__ !== true) {
+        throw new Error('Invalid import file format.');
+    }
+
+    const {
+        lessons = [],
+        figures = [],
+        settings = {},
+        videos: videoEntries = [],
+        thumbnails: thumbnailEntries = [],
+        figureThumbnails: figureThumbnailEntries = [],
+    } = importObject.data;
+
+    // --- Step 1: Convert all base64 data to Blobs *before* starting the transaction ---
+    const convertEntriesToBlobs = (entries: [IDBValidKey, string][]): Promise<[IDBValidKey, Blob][]> => {
+        if (!entries) return Promise.resolve([]);
+        const promises = entries.map(async ([key, base64Value]) => {
+            const blob = await dataUrlToBlob(base64Value);
+            return [key, blob] as [IDBValidKey, Blob];
+        });
+        return Promise.all(promises);
+    };
+    
+    const [
+        videoBlobs,
+        thumbnailBlobs,
+        figureThumbnailBlobs
+    ] = await Promise.all([
+        convertEntriesToBlobs(videoEntries),
+        convertEntriesToBlobs(thumbnailEntries),
+        convertEntriesToBlobs(figureThumbnailEntries),
+    ]);
+    
+    // Revoke all cached URLs to prevent memory leaks before the page reloads.
+    this.videoUrlCache.forEach(url => URL.revokeObjectURL(url));
+    this.videoUrlCache.clear();
+    this.thumbUrlCache.forEach(url => URL.revokeObjectURL(url));
+    this.thumbUrlCache.clear();
+    this.figureThumbUrlCache.forEach(url => URL.revokeObjectURL(url));
+    this.figureThumbUrlCache.clear();
+
+    // --- Step 2: Open a single transaction and write everything ---
+    const db = await openBachataDB();
+    const tx = db.transaction(db.objectStoreNames, 'readwrite');
+
+    try {
+        // First, get existing settings before clearing anything
+        const currentSettings = await tx.objectStore(SETTINGS_STORE).get(SETTINGS_KEY) || {};
+
+        // Now, clear all the other stores
+        const clearPromises = Array.from(db.objectStoreNames)
+            .filter(name => name !== SETTINGS_STORE)
+            .map(name => tx.objectStore(name as any).clear());
+        await Promise.all(clearPromises);
+
+        // Merge settings and write them back
+        const newSettings = { ...currentSettings, ...settings };
+
+        // Write all the new data in parallel
+        await Promise.all([
+            tx.objectStore(SETTINGS_STORE).put(newSettings, SETTINGS_KEY),
+            ...lessons.map((item: Lesson) => tx.objectStore(LESSONS_STORE).put(item)),
+            ...figures.map((item: Figure) => tx.objectStore(FIGURES_STORE).put(item)),
+            ...videoBlobs.map(([key, blob]) => tx.objectStore(VIDEOS_STORE).put(blob, key)),
+            ...thumbnailBlobs.map(([key, blob]) => tx.objectStore(THUMBNAILS_STORE).put(blob, key)),
+            ...figureThumbnailBlobs.map(([key, blob]) => tx.objectStore(FIGURE_THUMBNAILS_STORE).put(blob, key)),
+        ]);
+
+        await tx.done; // Commit transaction
+    } catch (err) {
+        console.error('Import transaction failed:', err);
+        // The transaction will be aborted automatically by the library on error.
+        // We just need to re-throw to notify the caller.
+        throw err;
     }
   }
 }

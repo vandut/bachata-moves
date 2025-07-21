@@ -1,6 +1,5 @@
-
-
 import React from 'react';
+import { useTranslation } from '../App';
 
 interface MobileTopNavProps {
   title: string;
@@ -10,6 +9,7 @@ interface MobileTopNavProps {
 }
 
 const MobileTopNav: React.FC<MobileTopNavProps> = ({ title, onBack, rightAction }) => {
+  const { t } = useTranslation();
   return (
     <header className="flex-shrink-0 flex items-center h-16 px-4 bg-white border-b border-gray-200 shadow-sm">
       <div className="w-1/5">
@@ -18,7 +18,7 @@ const MobileTopNav: React.FC<MobileTopNavProps> = ({ title, onBack, rightAction 
             type="button"
             onClick={onBack}
             className="p-2 -ml-2 text-gray-700 hover:bg-gray-100 rounded-full"
-            aria-label="Go back"
+            aria-label={t('common.goBack')}
           >
             <i className="material-icons">arrow_back</i>
           </button>

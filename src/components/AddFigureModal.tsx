@@ -1,10 +1,9 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import type { ModalAction, Lesson } from '../types';
 import { dataService } from '../data-service';
+import { useTranslation } from '../App';
 
 // --- SELECTABLE LESSON CARD ---
 
@@ -16,6 +15,7 @@ interface SelectableLessonCardProps {
 
 const SelectableLessonCard: React.FC<SelectableLessonCardProps> = ({ lesson, onSelect, isSelected }) => {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const { locale } = useTranslation();
 
   useEffect(() => {
     let isCancelled = false;
@@ -25,7 +25,7 @@ const SelectableLessonCard: React.FC<SelectableLessonCardProps> = ({ lesson, onS
     return () => { isCancelled = true; };
   }, [lesson.id]);
 
-  const formattedDate = new Date(lesson.uploadDate).toLocaleDateString('en-US', {
+  const formattedDate = new Date(lesson.uploadDate).toLocaleDateString(locale, {
     year: 'numeric', month: 'long', day: 'numeric',
   });
 
@@ -65,6 +65,7 @@ interface GalleryContext {
 const AddFigureModal: React.FC = () => {
     const navigate = useNavigate();
     const { isMobile } = useOutletContext<GalleryContext>();
+    const { t } = useTranslation();
     const [error, setError] = useState<string | null>(null);
     const [lessons, setLessons] = useState<Lesson[]>([]);
     const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
@@ -87,7 +88,7 @@ const AddFigureModal: React.FC = () => {
     };
     
     const primaryAction: ModalAction = { 
-        label: "Next", 
+        label: t('common.next'), 
         onClick: handleNext, 
         disabled: !selectedLessonId 
     };
@@ -96,24 +97,24 @@ const AddFigureModal: React.FC = () => {
         <BaseModal
             onClose={handleClose}
             primaryAction={primaryAction}
-            title="Add New Figure: Select Lesson"
+            title={t('addFigureModal.title')}
             isMobile={isMobile}
             desktopWidth="max-w-4xl"
             error={error}
         >
             <div className="space-y-4">
-                <p className="text-gray-600">Select the lesson video that contains the figure you want to create.</p>
+                <p className="text-gray-600">{t('addFigureModal.selectLesson')}</p>
                 {isLoadingLessons ? (
                     <div className="flex items-center justify-center h-48">
                         <i className="material-icons text-4xl text-gray-400 animate-spin">sync</i>
-                        <span className="ml-3 text-gray-600">Loading Lessons...</span>
+                        <span className="ml-3 text-gray-600">{t('gallery.loading', { item: t('nav.lessons') })}</span>
                     </div>
                 ) : lessons.length === 0 ? (
                     <div className="flex items-center justify-center h-48 text-center text-gray-500">
                         <div>
                            <i className="material-icons text-6xl">video_library</i>
-                           <p className="mt-2">No lessons found.</p>
-                           <p className="text-sm">You must add a lesson before you can create a figure.</p>
+                           <p className="mt-2">{t('addFigureModal.noLessons')}</p>
+                           <p className="text-sm">{t('addFigureModal.noLessonsDesc')}</p>
                         </div>
                     </div>
                 ) : (

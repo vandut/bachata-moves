@@ -7,8 +7,11 @@ import MobileTopNav from './MobileTopNav';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import DesktopTopNav from './DesktopTopNav';
 import SortControl from './SortControl';
+import { useTranslation } from '../App';
 
-const AddNewCard: React.FC = () => (
+const AddNewCard: React.FC = () => {
+  const { t } = useTranslation();
+  return (
    <div 
     className="
       relative 
@@ -24,26 +27,26 @@ const AddNewCard: React.FC = () => (
     <div className="aspect-[9/16] flex items-center justify-center">
       <div className="text-center">
         <i className="material-icons text-7xl text-gray-400 group-hover:text-blue-500 transition-colors duration-300">add_circle_outline</i>
-        <p className="mt-2 text-lg font-medium text-gray-600 group-hover:text-blue-500">Add New</p>
+        <p className="mt-2 text-lg font-medium text-gray-600 group-hover:text-blue-500">{t('common.addNew')}</p>
       </div>
     </div>
   </div>
-);
-
-const SORT_OPTIONS = [
-  { value: 'newest', label: 'Newest First' },
-  { value: 'oldest', label: 'Oldest First' },
-  { value: 'alphabetical_asc', label: 'Alphabetical (A-Z)' },
-  { value: 'alphabetical_desc', label: 'Alphabetical (Z-A)' },
-];
-
+)};
 
 const FiguresGallery: React.FC = () => {
+  const { t } = useTranslation();
   const [figures, setFigures] = useState<Figure[]>([]);
   const [lessonsMap, setLessonsMap] = useState<Map<string, Lesson>>(new Map());
   const [sortOrder, setSortOrder] = useState<FigureSortOrder | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
+
+  const SORT_OPTIONS = [
+    { value: 'newest', label: t('sort.newest') },
+    { value: 'oldest', label: t('sort.oldest') },
+    { value: 'alphabetical_asc', label: t('sort.alphaAsc') },
+    { value: 'alphabetical_desc', label: t('sort.alphaDesc') },
+  ];
 
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as FigureSortOrder;
@@ -82,17 +85,25 @@ const FiguresGallery: React.FC = () => {
           default: {
             const dateComparison = new Date(lessonB.uploadDate).getTime() - new Date(lessonA.uploadDate).getTime();
             if (dateComparison !== 0) return dateComparison;
+            
+            const idComparison = parseInt(lessonB.id.split('-')[0], 10) - parseInt(lessonA.id.split('-')[0], 10);
+            if (idComparison !== 0) return idComparison;
+
             return b.startTime - a.startTime;
           }
           case 'oldest': {
             const dateComparison = new Date(lessonA.uploadDate).getTime() - new Date(lessonB.uploadDate).getTime();
             if (dateComparison !== 0) return dateComparison;
+
+            const idComparison = parseInt(lessonA.id.split('-')[0], 10) - parseInt(lessonB.id.split('-')[0], 10);
+            if (idComparison !== 0) return idComparison;
+
             return a.startTime - b.startTime;
           }
           case 'alphabetical_asc':
-            return a.name.localeCompare(b.name);
+            return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
           case 'alphabetical_desc':
-            return b.name.localeCompare(a.name);
+            return b.name.localeCompare(a.name, undefined, { sensitivity: 'base' });
         }
       });
       
@@ -128,6 +139,16 @@ const FiguresGallery: React.FC = () => {
 
   const outletContext = { refresh: intelligentRefresh, isMobile, itemIds: figures.map(f => f.id) };
   const isChildRouteActive = location.pathname !== '/figures';
+  const pageTitle = t('nav.figures');
+
+  if (lessonsMap.size === 0 && figures.length > 0) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <i className="material-icons text-5xl text-gray-400 animate-spin">sync</i>
+        <span className="ml-4 text-xl text-gray-600">{t('gallery.loading', { item: t('gallery.figures') })}</span>
+      </div>
+    );
+  }
 
   const sortControl = (
     <SortControl
@@ -144,7 +165,7 @@ const FiguresGallery: React.FC = () => {
     } else {
       return (
         <>
-          <MobileTopNav title="Figures" />
+          <MobileTopNav title={pageTitle} />
           <div className="px-4 pt-4 pb-2 flex justify-end">
             {sortControl}
           </div>
@@ -157,7 +178,7 @@ const FiguresGallery: React.FC = () => {
                   parentLesson={lessonsMap.get(figure.lessonId)} 
                 />
               ))}
-              <Link to="add" aria-label="Add new figure">
+              <Link to="add" aria-label={t('common.addNew')}>
                 <AddNewCard />
               </Link>
             </div>
@@ -169,7 +190,7 @@ const FiguresGallery: React.FC = () => {
     // --- Desktop View ---
     const galleryContent = (
       <div className="p-8">
-        <DesktopTopNav title="Figures" rightAction={sortControl} />
+        <DesktopTopNav title={pageTitle} rightAction={sortControl} />
         <div className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
           {figures.map((figure) => (
             <FigureCard 
@@ -178,7 +199,7 @@ const FiguresGallery: React.FC = () => {
               parentLesson={lessonsMap.get(figure.lessonId)} 
             />
           ))}
-          <Link to="add" aria-label="Add new figure">
+          <Link to="add" aria-label={t('common.addNew')}>
             <AddNewCard />
           </Link>
         </div>

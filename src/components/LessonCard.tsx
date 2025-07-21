@@ -1,20 +1,27 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import type { Lesson } from '../types';
 import { dataService } from '../data-service';
+import { useTranslation } from '../App';
+import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 
 interface LessonCardProps {
   lesson: Lesson;
 }
 
 const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
+  const { t, locale, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isHovering, setIsHovering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  
+  const cardRef = useRef<HTMLAnchorElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isVisible = useIntersectionObserver(cardRef, { threshold: 0.1 });
+
+  const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
 
   useEffect(() => {
     let isCancelled = false;
@@ -33,18 +40,53 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
       .catch((err) => {
         console.warn(`Could not get thumbnail for lesson ${lesson.id}:`, err.message);
         if (!isCancelled) {
-          setError('Thumbnail not available');
+          setError(t('card.thumbNotAvailable'));
         }
       });
     return () => { isCancelled = true; };
-  }, [lesson.id]);
+  }, [lesson.id, lesson.thumbTime, t]);
+  
+  // Effect to load video URL when it should play
+  useEffect(() => {
+    let isCancelled = false;
+    if (shouldPlay && !videoUrl) {
+      dataService.getVideoObjectUrl(lesson)
+        .then(url => {
+          if (!isCancelled) setVideoUrl(url);
+        })
+        .catch(err => {
+          if (!isCancelled) {
+            console.error(`Could not load video for lesson ${lesson.id}:`, err);
+            setError(t('card.videoNotLoaded'));
+          }
+        });
+    }
+    return () => { isCancelled = true; };
+  }, [shouldPlay, videoUrl, lesson, t]);
+  
+  // Effect to set the final playing state
+  useEffect(() => {
+    setIsPlaying(shouldPlay && !!videoUrl);
+  }, [shouldPlay, videoUrl]);
+  
+  // Effect to stop video playback when tab becomes inactive.
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && isPlaying) {
+        setIsHovering(false); // Stop hover-play if tab is hidden
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isPlaying]);
 
-  // This effect handles playback and runs ONLY when the video element is mounted and isPlaying is true
+  // Effect that handles the actual video element playback
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Only set up listeners and play if isPlaying is true
     if (isPlaying) {
       const handleTimeUpdate = () => {
         const startTimeSec = (lesson.startTime || 0) / 1000;
@@ -64,48 +106,27 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
 
       video.addEventListener('timeupdate', handleTimeUpdate);
 
-      // If video is already loaded, `loadeddata` won't fire again.
       if (video.readyState >= 3) { // HAVE_FUTURE_DATA
         playVideo();
       } else {
-        video.addEventListener('loadeddata', playVideo);
+        video.addEventListener('loadeddata', playVideo, { once: true });
       }
 
       return () => {
-        video.removeEventListener('loadeddata', playVideo);
         video.removeEventListener('timeupdate', handleTimeUpdate);
+        video.removeEventListener('loadeddata', playVideo);
         video.pause();
       };
     } else {
       video.pause();
     }
-  }, [isPlaying, videoUrl, lesson.startTime, lesson.endTime]);
-
-  const handleMouseEnter = () => {
-    // Don't try to play if a video load has already failed
-    if (error === 'Video could not be loaded.') return;
-
-    if (!videoUrl) {
-      dataService.getVideoObjectUrl(lesson)
-        .then(url => {
-          setVideoUrl(url);
-          setIsPlaying(true);
-        })
-        .catch(err => {
-          console.error(`Could not load video for lesson ${lesson.id}:`, err);
-          setError('Video could not be loaded.');
-        });
-    } else {
-      setIsPlaying(true);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setIsPlaying(false);
-  };
+  }, [isPlaying, lesson.startTime, lesson.endTime]);
 
 
-  const formattedDate = new Date(lesson.uploadDate).toLocaleDateString('en-US', {
+  const handleMouseEnter = () => setIsHovering(true);
+  const handleMouseLeave = () => setIsHovering(false);
+
+  const formattedDate = new Date(lesson.uploadDate).toLocaleDateString(locale, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -115,8 +136,9 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
 
   return (
     <Link
+        ref={cardRef}
         to={`/lessons/${lesson.id}`}
-        aria-label={`View lesson from ${formattedDate}`}
+        aria-label={t('card.viewLesson', { date: formattedDate })}
         className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -154,7 +176,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
           )}
         </div>
         <div className="p-4 flex items-center justify-center">
-          <h3 className="text-lg font-medium text-gray-800" title={`Lesson from ${formattedDate}`}>
+          <h3 className="text-lg font-medium text-gray-800" title={t('card.lessonFrom', { date: formattedDate })}>
             {formattedDate}
           </h3>
         </div>

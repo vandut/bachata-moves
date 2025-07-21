@@ -31,9 +31,10 @@ export type LessonSortOrder = 'newest' | 'oldest';
 export type FigureSortOrder = 'newest' | 'oldest' | 'alphabetical_asc' | 'alphabetical_desc';
 
 export interface AppSettings {
-  language: 'English'; // Can be expanded to a union type later
+  language: 'english' | 'polish';
   lessonSortOrder: LessonSortOrder;
   figureSortOrder: FigureSortOrder;
+  autoplayGalleryVideos: boolean;
 }
 
 export interface AppData {
@@ -73,4 +74,9 @@ export interface IDataService {
   getLessonThumbnailUrl(lessonId: string): Promise<string | null>;
   getFigureThumbnailUrl(figureId: string): Promise<string | null>;
   getVideoFile(lessonId: string): Promise<File | undefined>;
+
+  // Data Management
+  exportAllData(): Promise<Blob>;
+  importData(dataBlob: Blob): Promise<void>;
+  clearAllData(): Promise<void>;
 }
