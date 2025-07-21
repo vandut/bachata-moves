@@ -1,4 +1,9 @@
 
+
+
+
+
+
 import React, { useState, useRef } from 'react';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
@@ -156,8 +161,13 @@ const SettingsView: React.FC = () => {
                         <span className="text-gray-700">{t('settings.autoplay')}</span>
                         <p className="text-sm text-gray-500">{t('settings.autoplayDesc')}</p>
                     </div>
-                    <div className={`w-12 h-6 flex items-center rounded-full p-1 duration-300 ease-in-out ${settings.autoplayGalleryVideos ? 'bg-blue-500' : 'bg-gray-300'}`}>
-                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${settings.autoplayGalleryVideos ? 'translate-x-6' : ''}`}></div>
+                    {/* Toggle switch */}
+                    <div className={`relative w-11 h-6 flex-shrink-0 rounded-full transition-colors duration-300 ease-in-out ${settings.autoplayGalleryVideos ? 'bg-blue-500' : 'bg-gray-300'}`}>
+                        <div
+                            className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ease-in-out ${
+                                settings.autoplayGalleryVideos ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                        ></div>
                     </div>
                 </div>
             </div>
