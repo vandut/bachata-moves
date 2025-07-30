@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
             name: 'Bachata Moves',
             short_name: 'Bachata Moves',
             description: "An application to browse and manage Bachata lessons and figures.",
-            theme_color: '#F9FAFB',
+            theme_color: '#ffffff',
             background_color: '#f9fafb',
             icons: [
               {
