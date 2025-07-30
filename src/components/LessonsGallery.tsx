@@ -135,6 +135,9 @@ const LessonsGallery: React.FC = () => {
       />
     </div>
   );
+  
+  const itemIds = lessons.map(l => l.id);
+  const baseRoute = '/lessons';
 
   // --- Mobile View ---
   // On mobile, child routes replace the gallery view.
@@ -151,7 +154,13 @@ const LessonsGallery: React.FC = () => {
           <div className="px-4 pt-2 pb-4">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
                   {lessons.map((lesson) => (
-                      <LessonCard key={lesson.id} lesson={lesson} onRefresh={refreshLessons} />
+                      <LessonCard 
+                        key={lesson.id} 
+                        lesson={lesson} 
+                        onRefresh={refreshLessons}
+                        itemIds={itemIds}
+                        baseRoute={baseRoute}
+                      />
                   ))}
                   <Link to="add" aria-label={t('common.addNew')}>
                       <AddNewCard />
@@ -169,7 +178,13 @@ const LessonsGallery: React.FC = () => {
         <DesktopTopNav title={pageTitle} rightAction={actionMenu} />
         <div className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
           {lessons.map((lesson) => (
-            <LessonCard key={lesson.id} lesson={lesson} onRefresh={refreshLessons} />
+            <LessonCard 
+              key={lesson.id} 
+              lesson={lesson} 
+              onRefresh={refreshLessons}
+              itemIds={itemIds}
+              baseRoute={baseRoute}
+            />
           ))}
           <Link to="add" aria-label={t('common.addNew')}>
             <AddNewCard />

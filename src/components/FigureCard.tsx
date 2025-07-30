@@ -12,9 +12,11 @@ interface FigureCardProps {
   figure: Figure;
   parentLesson?: Lesson;
   onRefresh: () => void;
+  itemIds: string[];
+  baseRoute: string;
 }
 
-const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh }) => {
+const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh, itemIds, baseRoute }) => {
   const { t, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -140,7 +142,13 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh
   };
   
   const handleOpen = () => {
-    playInFullscreen(figure, parentLesson, handleExitFullscreen);
+    playInFullscreen({
+        item: figure,
+        parentLesson,
+        onExit: handleExitFullscreen,
+        itemIds,
+        baseRoute,
+    });
   };
 
   const handleEdit = () => {

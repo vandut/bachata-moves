@@ -11,9 +11,11 @@ import ConfirmDeleteModal from './ConfirmDeleteModal';
 interface LessonCardProps {
   lesson: Lesson;
   onRefresh: () => void;
+  itemIds: string[];
+  baseRoute: string;
 }
 
-const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh }) => {
+const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh, itemIds, baseRoute }) => {
   const { t, locale, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -141,7 +143,12 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh }) => {
   };
   
   const handleOpen = () => {
-    playInFullscreen(lesson, undefined, handleExitFullscreen);
+    playInFullscreen({
+        item: lesson,
+        onExit: handleExitFullscreen,
+        itemIds,
+        baseRoute,
+    });
   };
 
   const handleEdit = () => {

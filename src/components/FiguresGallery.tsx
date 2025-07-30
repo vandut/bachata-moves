@@ -162,6 +162,9 @@ const FiguresGallery: React.FC = () => {
     </div>
   );
   
+  const itemIds = figures.map(f => f.id);
+  const baseRoute = '/figures';
+
   // --- Mobile View ---
   if (isMobile) {
     if (isChildRouteActive) {
@@ -181,6 +184,8 @@ const FiguresGallery: React.FC = () => {
                   figure={figure} 
                   parentLesson={lessonsMap.get(figure.lessonId)} 
                   onRefresh={refreshFigures}
+                  itemIds={itemIds}
+                  baseRoute={baseRoute}
                 />
               ))}
               <Link to="add" aria-label={t('common.addNew')}>
@@ -203,6 +208,8 @@ const FiguresGallery: React.FC = () => {
               figure={figure} 
               parentLesson={lessonsMap.get(figure.lessonId)} 
               onRefresh={refreshFigures}
+              itemIds={itemIds}
+              baseRoute={baseRoute}
             />
           ))}
           <Link to="add" aria-label={t('common.addNew')}>
