@@ -8,6 +8,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import DesktopTopNav from './DesktopTopNav';
 import SortControl from './SortControl';
 import { useTranslation } from '../App';
+import MuteToggleButton from './MuteToggleButton';
 
 const AddNewCard: React.FC = () => {
   const { t } = useTranslation();
@@ -150,12 +151,15 @@ const FiguresGallery: React.FC = () => {
     );
   }
 
-  const sortControl = (
-    <SortControl
-      options={SORT_OPTIONS}
-      value={sortOrder || 'newest'}
-      onChange={handleSortChange}
-    />
+  const actionMenu = (
+    <div className="flex items-center space-x-2">
+      <MuteToggleButton />
+      <SortControl
+        options={SORT_OPTIONS}
+        value={sortOrder || 'newest'}
+        onChange={handleSortChange}
+      />
+    </div>
   );
   
   // --- Mobile View ---
@@ -167,7 +171,7 @@ const FiguresGallery: React.FC = () => {
         <>
           <MobileTopNav title={pageTitle} />
           <div className="px-4 pt-4 pb-2 flex justify-end">
-            {sortControl}
+            {actionMenu}
           </div>
           <div className="px-4 pt-2 pb-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
@@ -190,7 +194,7 @@ const FiguresGallery: React.FC = () => {
     // --- Desktop View ---
     const galleryContent = (
       <div className="p-8">
-        <DesktopTopNav title={pageTitle} rightAction={sortControl} />
+        <DesktopTopNav title={pageTitle} rightAction={actionMenu} />
         <div className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
           {figures.map((figure) => (
             <FigureCard 

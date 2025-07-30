@@ -1,4 +1,5 @@
 
+
 import type { Lesson, Figure, AppSettings, IDataService } from './types';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
 
@@ -342,6 +343,10 @@ class AppDataService implements IDataService {
     const url = URL.createObjectURL(videoBlob);
     this.videoUrlCache.set(lesson.id, url);
     return url;
+  }
+
+  public revokeVideoObjectUrl(lessonId: string): void {
+    this.revokeAndClearCache(lessonId, 'video');
   }
 
   private revokeAndClearCache(id: string, type: 'thumbnail' | 'figure-thumbnail' | 'video' | 'all'): void {

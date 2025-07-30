@@ -21,6 +21,8 @@ export const en = {
     loading: 'Loading...',
     goBack: 'Go back',
     moreActions: 'More actions',
+    mute: 'Mute',
+    unmute: 'Unmute',
   },
   gallery: {
     loading: 'Loading {item}...',
@@ -157,6 +159,8 @@ export const pl = {
     loading: 'Ładowanie...',
     goBack: 'Wróć',
     moreActions: 'Więcej akcji',
+    mute: 'Wycisz',
+    unmute: 'Wyłącz wyciszenie',
   },
   gallery: {
     loading: 'Ładowanie {item}...',

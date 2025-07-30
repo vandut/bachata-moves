@@ -1,4 +1,5 @@
 
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -10,7 +11,6 @@ import DesktopDrawer from './components/DesktopDrawer';
 import MobileBottomNav from './components/MobileBottomNav';
 import AddLessonModal from './components/AddLessonModal';
 import AddFigureModal from './components/AddFigureModal';
-import PlayerScreen from './components/PlayerScreen';
 import EditorScreen from './components/EditorScreen';
 import { VideoSettingsProvider } from './contexts/VideoSettingsContext';
 import { dataService } from './data-service';
@@ -126,14 +126,10 @@ const AppContent: React.FC<{ isDesktop: boolean }> = ({ isDesktop }) => {
           <Route path="/" element={<Navigate to="/lessons" replace />} />
           <Route path="lessons" element={<LessonsGallery />}>
             <Route path="add" element={<AddLessonModal />} />
-            <Route path=":lessonId" element={<PlayerScreen />} />
-            <Route path=":lessonId/edit" element={<EditorScreen />} />
           </Route>
           <Route path="figures" element={<FiguresGallery />}>
             <Route path="add" element={<AddFigureModal />} />
             <Route path="create" element={<EditorScreen />} />
-            <Route path=":figureId" element={<PlayerScreen />} />
-            <Route path=":figureId/edit" element={<EditorScreen />} />
           </Route>
           <Route path="settings" element={<SettingsView />} />
         </Routes>

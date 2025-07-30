@@ -71,6 +71,7 @@ export interface IDataService {
   
   // File Handling
   getVideoObjectUrl(lesson: Lesson): Promise<string>;
+  revokeVideoObjectUrl(lessonId: string): void;
   getLessonThumbnailUrl(lessonId: string): Promise<string | null>;
   getFigureThumbnailUrl(figureId: string): Promise<string | null>;
   getVideoFile(lessonId: string): Promise<File | undefined>;

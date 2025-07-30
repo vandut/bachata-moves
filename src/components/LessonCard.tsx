@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import type { Lesson } from '../types';
 import { dataService } from '../data-service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
+import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 
 interface LessonCardProps {
   lesson: Lesson;
@@ -17,9 +17,10 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   
-  const cardRef = useRef<HTMLAnchorElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVisible = useIntersectionObserver(cardRef, { threshold: 0.1 });
+  const playInFullscreen = useFullscreenPlayer();
 
   const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
 
@@ -27,7 +28,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
     let isCancelled = false;
     // Reset state for new lesson prop
     setThumbnailUrl(null);
-    setVideoUrl(null);
+    // Do not reset videoUrl here, as it might be needed if hover state doesn't change
     setError(null);
     setIsPlaying(false);
 
@@ -126,6 +127,10 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
   const handleMouseEnter = () => setIsHovering(true);
   const handleMouseLeave = () => setIsHovering(false);
 
+  const handleExitFullscreen = () => {
+    setVideoUrl(null);
+  };
+
   const formattedDate = new Date(lesson.uploadDate).toLocaleDateString(locale, {
     year: 'numeric',
     month: 'long',
@@ -135,11 +140,14 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
   const showVideo = isPlaying && videoUrl;
 
   return (
-    <Link
+    <div
         ref={cardRef}
-        to={`/lessons/${lesson.id}`}
+        onClick={() => playInFullscreen(lesson, undefined, handleExitFullscreen)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') playInFullscreen(lesson, undefined, handleExitFullscreen); }}
+        role="button"
+        tabIndex={0}
         aria-label={t('card.viewLesson', { date: formattedDate })}
-        className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
     >
@@ -181,7 +189,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson }) => {
           </h3>
         </div>
       </div>
-    </Link>
+    </div>
   );
 };
 

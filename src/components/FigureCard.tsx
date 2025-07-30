@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import type { Figure, Lesson } from '../types';
 import { dataService } from '../data-service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
+import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 
 interface FigureCardProps {
   figure: Figure;
@@ -18,9 +18,10 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
   const [isHovering, setIsHovering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   
-  const cardRef = useRef<HTMLAnchorElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVisible = useIntersectionObserver(cardRef, { threshold: 0.1 });
+  const playInFullscreen = useFullscreenPlayer();
 
   const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
 
@@ -125,6 +126,10 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
 
   const handleMouseEnter = () => setIsHovering(true);
   const handleMouseLeave = () => setIsHovering(false);
+  
+  const handleExitFullscreen = () => {
+    setVideoUrl(null);
+  };
 
   const showVideo = isPlaying && videoUrl;
   
@@ -135,11 +140,14 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
   };
 
   return (
-    <Link 
+    <div
         ref={cardRef}
-        to={`/figures/${figure.id}`}
+        onClick={() => playInFullscreen(figure, parentLesson, handleExitFullscreen)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') playInFullscreen(figure, parentLesson, handleExitFullscreen); }}
+        role="button"
+        tabIndex={0}
         aria-label={t('card.viewFigure', { name: figure.name })}
-        className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
     >
@@ -177,7 +185,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
           <h3 className="text-lg font-medium text-gray-800 text-center" title={figure.name}>{figure.name}</h3>
         </div>
       </div>
-    </Link>
+    </div>
   );
 };
 
