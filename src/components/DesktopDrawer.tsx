@@ -15,7 +15,8 @@ const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems }) => {
   return (
     <div
       className="bg-white border-r border-gray-200 h-full flex flex-col shadow-lg flex-shrink-0"
-      style={{ width: DESKTOP_DRAWER_WIDTH }}
+      style={{ width: DESKTOP_DRAWER_WIDTH, userSelect: 'none' }}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex items-center justify-center h-20 border-b border-gray-200 flex-shrink-0">
         <i className="material-icons text-blue-600 text-3xl mr-2">music_note</i>

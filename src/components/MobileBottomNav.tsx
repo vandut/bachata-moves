@@ -11,7 +11,11 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ navItems }) => {
   const activePath = location.pathname;
 
   return (
-    <div className="bg-white border-t border-gray-200 shadow-[0_-1px_10px_rgba(0,0,0,0.05)] flex-shrink-0">
+    <div
+      className="bg-white border-t border-gray-200 shadow-[0_-1px_10px_rgba(0,0,0,0.05)] flex-shrink-0"
+      style={{ userSelect: 'none' }}
+      onContextMenu={(e) => e.preventDefault()}
+    >
       <nav className="flex justify-around">
         {navItems.map((item) => (
           <Link

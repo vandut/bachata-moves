@@ -138,7 +138,7 @@ const FiguresGallery: React.FC = () => {
   }, [sortOrder, refreshFigures]);
 
 
-  const outletContext = { refresh: intelligentRefresh, isMobile, itemIds: figures.map(f => f.id) };
+  const outletContext = { refresh: intelligentRefresh, isMobile };
   const isChildRouteActive = location.pathname !== '/figures';
   const pageTitle = t('nav.figures');
 
@@ -180,6 +180,7 @@ const FiguresGallery: React.FC = () => {
                   key={figure.id} 
                   figure={figure} 
                   parentLesson={lessonsMap.get(figure.lessonId)} 
+                  onRefresh={refreshFigures}
                 />
               ))}
               <Link to="add" aria-label={t('common.addNew')}>
@@ -201,6 +202,7 @@ const FiguresGallery: React.FC = () => {
               key={figure.id} 
               figure={figure} 
               parentLesson={lessonsMap.get(figure.lessonId)} 
+              onRefresh={refreshFigures}
             />
           ))}
           <Link to="add" aria-label={t('common.addNew')}>

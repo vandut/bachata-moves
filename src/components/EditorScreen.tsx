@@ -73,7 +73,6 @@ const useQuery = () => {
 const EditorScreen: React.FC = () => {
     const { lessonId: lessonIdParam, figureId } = useParams<{ lessonId?: string; figureId?: string }>();
     const navigate = useNavigate();
-    const location = useLocation();
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
     const { isMuted, setIsMuted, volume, setVolume } = useVideoSettings();
     const { t, locale } = useTranslation();
@@ -101,7 +100,6 @@ const EditorScreen: React.FC = () => {
     const isEditingFigure = !!figureId;
     const isEditingLesson = !!lessonIdParam && !isEditingFigure;
 
-    const parentPath = location.pathname.substring(0, location.pathname.lastIndexOf('/'));
     const baseNavPath = isEditingLesson ? '/lessons' : '/figures';
 
     // --- Data Loading Effect ---
@@ -192,7 +190,7 @@ const EditorScreen: React.FC = () => {
         if (isCreatingFigure) {
             navigate('/figures/add'); // Go back to lesson selection
         } else {
-            navigate(parentPath); // Go back to the item's player screen
+            navigate(baseNavPath); // Go back to the gallery page
         }
     };
 
@@ -343,7 +341,7 @@ const EditorScreen: React.FC = () => {
                 await dataService.updateLesson(lessonIdParam, updateData);
             }
             if (refresh) refresh();
-            navigate(isCreatingFigure ? baseNavPath : parentPath);
+            navigate(baseNavPath);
         } catch (err) {
             console.error("Failed to save:", err);
             setError(err instanceof Error ? err.message : t('editor.errorSave'));

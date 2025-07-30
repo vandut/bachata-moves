@@ -23,6 +23,8 @@ export const en = {
     moreActions: 'More actions',
     mute: 'Mute',
     unmute: 'Unmute',
+    open: 'Open',
+    remove: 'Remove',
   },
   gallery: {
     loading: 'Loading {item}...',
@@ -161,6 +163,8 @@ export const pl = {
     moreActions: 'Więcej akcji',
     mute: 'Wycisz',
     unmute: 'Wyłącz wyciszenie',
+    open: 'Otwórz',
+    remove: 'Usuń',
   },
   gallery: {
     loading: 'Ładowanie {item}...',

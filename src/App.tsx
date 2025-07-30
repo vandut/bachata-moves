@@ -1,5 +1,3 @@
-
-
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -126,10 +124,12 @@ const AppContent: React.FC<{ isDesktop: boolean }> = ({ isDesktop }) => {
           <Route path="/" element={<Navigate to="/lessons" replace />} />
           <Route path="lessons" element={<LessonsGallery />}>
             <Route path="add" element={<AddLessonModal />} />
+            <Route path=":lessonId/edit" element={<EditorScreen />} />
           </Route>
           <Route path="figures" element={<FiguresGallery />}>
             <Route path="add" element={<AddFigureModal />} />
             <Route path="create" element={<EditorScreen />} />
+            <Route path=":figureId/edit" element={<EditorScreen />} />
           </Route>
           <Route path="settings" element={<SettingsView />} />
         </Routes>

@@ -1,16 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Figure, Lesson } from '../types';
 import { dataService } from '../data-service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
+import ContextMenu from './ContextMenu';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 interface FigureCardProps {
   figure: Figure;
   parentLesson?: Lesson;
+  onRefresh: () => void;
 }
 
-const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
+const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh }) => {
   const { t, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -22,6 +26,11 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVisible = useIntersectionObserver(cardRef, { threshold: 0.1 });
   const playInFullscreen = useFullscreenPlayer();
+  const navigate = useNavigate();
+
+  const [menuState, setMenuState] = useState({ isOpen: false, position: { x: 0, y: 0 }});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
 
@@ -123,13 +132,51 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
     }
   }, [isPlaying, figure.startTime, figure.endTime]);
 
-
   const handleMouseEnter = () => setIsHovering(true);
   const handleMouseLeave = () => setIsHovering(false);
   
   const handleExitFullscreen = () => {
     setVideoUrl(null);
   };
+  
+  const handleOpen = () => {
+    playInFullscreen(figure, parentLesson, handleExitFullscreen);
+  };
+
+  const handleEdit = () => {
+    navigate(`/figures/${figure.id}/edit`);
+  };
+
+  const handleRequestRemove = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await dataService.deleteFigure(figure.id);
+      setShowDeleteConfirm(false);
+      onRefresh();
+    } catch (err) {
+      console.error("Failed to delete figure:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const showContextMenu = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuState({ isOpen: true, position: { x: event.clientX, y: event.clientY } });
+  }, []);
+
+  const closeContextMenu = useCallback(() => setMenuState(prev => ({ ...prev, isOpen: false })), []);
+
+  const menuActions = [
+    { label: t('common.open'), onClick: handleOpen, icon: 'open_in_full' },
+    { label: t('common.edit'), onClick: handleEdit, icon: 'edit' },
+    { label: t('common.remove'), onClick: handleRequestRemove, isDestructive: true, icon: 'delete' },
+  ];
 
   const showVideo = isPlaying && videoUrl;
   
@@ -140,52 +187,70 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson }) => {
   };
 
   return (
-    <div
-        ref={cardRef}
-        onClick={() => playInFullscreen(figure, parentLesson, handleExitFullscreen)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') playInFullscreen(figure, parentLesson, handleExitFullscreen); }}
-        role="button"
-        tabIndex={0}
-        aria-label={t('card.viewFigure', { name: figure.name })}
-        className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-    >
-      <div className="h-full flex flex-col">
-        <div className="aspect-[9/16] bg-gray-900 flex items-center justify-center relative text-white">
-          {showVideo ? (
-            <video
-              ref={videoRef}
-              src={videoUrl!}
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <>
-              <div 
-                className="w-full h-full bg-cover bg-center"
-                style={{ backgroundImage: thumbnailUrl ? `url(${thumbnailUrl})` : 'none' }}
-              ></div>
-              
-              {(error || !thumbnailUrl) && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2 bg-gray-900/50 pointer-events-none">
-                  <i className="material-icons text-6xl text-gray-400">
-                    {getIconName()}
-                  </i>
-                  {error && (
-                      <p className="mt-2 text-xs text-red-400">{error}</p>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-        <div className="p-4 flex items-center justify-center">
-          <h3 className="text-lg font-medium text-gray-800 text-center" title={figure.name}>{figure.name}</h3>
+    <>
+      <div
+          ref={cardRef}
+          onClick={handleOpen}
+          onContextMenu={showContextMenu}
+          role="button"
+          tabIndex={0}
+          aria-label={t('card.viewFigure', { name: figure.name })}
+          className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+      >
+        <div className="h-full flex flex-col">
+          <div className="aspect-[9/16] bg-gray-900 flex items-center justify-center relative text-white">
+            {showVideo ? (
+              <video
+                ref={videoRef}
+                src={videoUrl!}
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <>
+                <div 
+                  className="w-full h-full bg-cover bg-center"
+                  style={{ backgroundImage: thumbnailUrl ? `url(${thumbnailUrl})` : 'none' }}
+                ></div>
+                
+                {(error || !thumbnailUrl) && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2 bg-gray-900/50 pointer-events-none">
+                    <i className="material-icons text-6xl text-gray-400">
+                      {getIconName()}
+                    </i>
+                    {error && (
+                        <p className="mt-2 text-xs text-red-400">{error}</p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="p-4 flex items-center justify-center">
+            <h3 className="text-lg font-medium text-gray-800 text-center" title={figure.name}>{figure.name}</h3>
+          </div>
         </div>
       </div>
-    </div>
+      <ContextMenu
+        isOpen={menuState.isOpen}
+        onClose={closeContextMenu}
+        position={menuState.position}
+        actions={menuActions}
+      />
+      <ConfirmDeleteModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
+        title={t('deleteModal.titleFigure')}
+      >
+          <p>{t('deleteModal.bodyFigure')}</p>
+          <p className="mt-2 font-semibold">{t('deleteModal.warning')}</p>
+      </ConfirmDeleteModal>
+    </>
   );
 };
 
