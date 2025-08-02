@@ -1,8 +1,4 @@
-
-
-
-
-import type { Lesson, Figure, AppSettings, IDataService, Category } from './types';
+import type { Lesson, Figure, AppSettings, IDataService, FigureCategory, LessonCategory } from './types';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
 
 // --- Helper Functions ---
@@ -21,10 +17,11 @@ const getInitialLanguage = (): 'english' | 'polish' => {
 
 // --- IndexedDB Configuration ---
 const DB_NAME = 'bachata-moves-db';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 const LESSONS_STORE = 'lessons';
 const FIGURES_STORE = 'figures';
-const CATEGORIES_STORE = 'categories';
+const FIGURE_CATEGORIES_STORE = 'figure_categories';
+const LESSON_CATEGORIES_STORE = 'lesson_categories';
 const SETTINGS_STORE = 'settings';
 const VIDEOS_STORE = 'videos';
 const THUMBNAILS_STORE = 'thumbnails';
@@ -33,29 +30,36 @@ const SETTINGS_KEY = 'app-settings';
 
 async function openBachataDB(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db, oldVersion) {
-      if (!db.objectStoreNames.contains(LESSONS_STORE)) {
+    upgrade(db, oldVersion, newVersion, tx) {
+      if (oldVersion < 2 && !db.objectStoreNames.contains(LESSONS_STORE)) {
         db.createObjectStore(LESSONS_STORE, { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains(FIGURES_STORE)) {
         db.createObjectStore(FIGURES_STORE, { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE);
-      }
-      if (!db.objectStoreNames.contains(VIDEOS_STORE)) {
         db.createObjectStore(VIDEOS_STORE);
-      }
-      if (!db.objectStoreNames.contains(THUMBNAILS_STORE)) {
         db.createObjectStore(THUMBNAILS_STORE);
       }
       if (oldVersion < 3 && !db.objectStoreNames.contains(FIGURE_THUMBNAILS_STORE)) {
           db.createObjectStore(FIGURE_THUMBNAILS_STORE);
       }
       if (oldVersion < 4) {
-        if (!db.objectStoreNames.contains(CATEGORIES_STORE)) {
-          db.createObjectStore(CATEGORIES_STORE, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('categories')) { // Old name
+          db.createObjectStore(FIGURE_CATEGORIES_STORE, { keyPath: 'id' });
         }
+      }
+      if (oldVersion < 5) {
+          // The renameObjectStore method does not exist in IndexedDB or the 'idb' library.
+          // This migration handles users who have an old 'categories' store.
+          // We will delete the old store and create the new ones. This will reset users'
+          // category definitions but will make the app functional again.
+          if (db.objectStoreNames.contains('categories')) {
+            db.deleteObjectStore('categories');
+          }
+          if (!db.objectStoreNames.contains(FIGURE_CATEGORIES_STORE)) {
+            db.createObjectStore(FIGURE_CATEGORIES_STORE, { keyPath: 'id' });
+          }
+          if (!db.objectStoreNames.contains(LESSON_CATEGORIES_STORE)) {
+            db.createObjectStore(LESSON_CATEGORIES_STORE, { keyPath: 'id' });
+          }
       }
     },
   });
@@ -231,7 +235,7 @@ class AppDataService implements IDataService {
     const videoFile = await db.get(VIDEOS_STORE, lessonId);
     if (!videoFile) throw new Error(`Video for lesson "${lessonId}" not found.`);
 
-    const newFigure: Figure = { ...figureData, id: generateId(), lessonId, categoryId: null };
+    const newFigure: Figure = { ...figureData, id: generateId(), lessonId };
     const thumbnailBlob = await generateThumbnailBlob(videoFile, newFigure.thumbTime);
 
     // Start a short, focused transaction for writes only.
@@ -287,31 +291,92 @@ class AppDataService implements IDataService {
     await tx.done;
   }
   
-  // --- Categories ---
-  async getCategories(): Promise<Category[]> {
+  // --- Figure Categories ---
+  async getFigureCategories(): Promise<FigureCategory[]> {
     const db = await openBachataDB();
-    let categories = await db.getAll(CATEGORIES_STORE);
-    if (categories.length === 0) {
-      // Create a default category if none exist
-      const defaultCategory: Category = {
-        id: generateId(),
-        name: 'Learned',
-        isExpanded: true,
-      };
-      await db.put(CATEGORIES_STORE, defaultCategory);
-      categories = [defaultCategory];
-    }
-    return categories;
+    return await db.getAll(FIGURE_CATEGORIES_STORE);
+  }
+  
+  async addFigureCategory(categoryName: string): Promise<FigureCategory> {
+    const db = await openBachataDB();
+    const newCategory: FigureCategory = {
+      id: generateId(),
+      name: categoryName,
+      isExpanded: true,
+    };
+    await db.put(FIGURE_CATEGORIES_STORE, newCategory);
+    return newCategory;
   }
 
-  async updateCategory(categoryId: string, categoryUpdateData: Partial<Omit<Category, 'id'>>): Promise<Category> {
+  async updateFigureCategory(categoryId: string, categoryUpdateData: Partial<Omit<FigureCategory, 'id'>>): Promise<FigureCategory> {
     const db = await openBachataDB();
-    const category = await db.get(CATEGORIES_STORE, categoryId);
+    const category = await db.get(FIGURE_CATEGORIES_STORE, categoryId);
     if (!category) throw new Error(`Category with id "${categoryId}" not found.`);
 
     const updatedCategory = { ...category, ...categoryUpdateData };
-    await db.put(CATEGORIES_STORE, updatedCategory);
+    await db.put(FIGURE_CATEGORIES_STORE, updatedCategory);
     return updatedCategory;
+  }
+
+  async deleteFigureCategory(categoryId: string): Promise<void> {
+    const db = await openBachataDB();
+    const tx = db.transaction([FIGURE_CATEGORIES_STORE, FIGURES_STORE], 'readwrite');
+    
+    const allFigures = await tx.objectStore(FIGURES_STORE).getAll();
+    const figuresToUpdate = allFigures.filter(f => f.categoryId === categoryId);
+
+    const updatePromises = figuresToUpdate.map(figure => {
+      const updatedFigure = { ...figure, categoryId: null };
+      return tx.objectStore(FIGURES_STORE).put(updatedFigure);
+    });
+
+    await Promise.all(updatePromises);
+    await tx.objectStore(FIGURE_CATEGORIES_STORE).delete(categoryId);
+    await tx.done;
+  }
+
+  // --- Lesson Categories ---
+  async getLessonCategories(): Promise<LessonCategory[]> {
+    const db = await openBachataDB();
+    return await db.getAll(LESSON_CATEGORIES_STORE);
+  }
+  
+  async addLessonCategory(categoryName: string): Promise<LessonCategory> {
+    const db = await openBachataDB();
+    const newCategory: LessonCategory = {
+      id: generateId(),
+      name: categoryName,
+      isExpanded: true,
+    };
+    await db.put(LESSON_CATEGORIES_STORE, newCategory);
+    return newCategory;
+  }
+
+  async updateLessonCategory(categoryId: string, categoryUpdateData: Partial<Omit<LessonCategory, 'id'>>): Promise<LessonCategory> {
+    const db = await openBachataDB();
+    const category = await db.get(LESSON_CATEGORIES_STORE, categoryId);
+    if (!category) throw new Error(`Lesson category with id "${categoryId}" not found.`);
+
+    const updatedCategory = { ...category, ...categoryUpdateData };
+    await db.put(LESSON_CATEGORIES_STORE, updatedCategory);
+    return updatedCategory;
+  }
+
+  async deleteLessonCategory(categoryId: string): Promise<void> {
+    const db = await openBachataDB();
+    const tx = db.transaction([LESSON_CATEGORIES_STORE, LESSONS_STORE], 'readwrite');
+    
+    const allLessons = await tx.objectStore(LESSONS_STORE).getAll();
+    const lessonsToUpdate = allLessons.filter(l => l.categoryId === categoryId);
+
+    const updatePromises = lessonsToUpdate.map(lesson => {
+      const updatedLesson = { ...lesson, categoryId: null };
+      return tx.objectStore(LESSONS_STORE).put(updatedLesson);
+    });
+
+    await Promise.all(updatePromises);
+    await tx.objectStore(LESSON_CATEGORIES_STORE).delete(categoryId);
+    await tx.done;
   }
 
   // --- Settings ---
@@ -325,10 +390,38 @@ class AppDataService implements IDataService {
       lessonGrouping: 'none',
       figureGrouping: 'none',
       autoplayGalleryVideos: false,
-      uncategorizedCategoryIsExpanded: true,
+      collapsedLessonDateGroups: [],
+      collapsedFigureDateGroups: [],
+      // Figures
+      uncategorizedFigureCategoryIsExpanded: true,
+      figureCategoryOrder: [],
+      showEmptyFigureCategoriesInGroupedView: false,
+      showFigureCountInGroupHeaders: false,
+      // Lessons
+      uncategorizedLessonCategoryIsExpanded: true,
+      lessonCategoryOrder: [],
+      showEmptyLessonCategoriesInGroupedView: false,
+      showLessonCountInGroupHeaders: false,
     };
 
-    return { ...defaultSettings, ...(savedSettings || {}) };
+    // Migration for renamed settings keys from before category split
+    const migratedSettings: Partial<AppSettings> = {};
+    if (savedSettings) {
+      if ('categoryOrder' in savedSettings) {
+        migratedSettings.figureCategoryOrder = savedSettings.categoryOrder;
+        delete savedSettings.categoryOrder;
+      }
+      if ('uncategorizedCategoryIsExpanded' in savedSettings) {
+        migratedSettings.uncategorizedFigureCategoryIsExpanded = savedSettings.uncategorizedCategoryIsExpanded;
+        delete savedSettings.uncategorizedCategoryIsExpanded;
+      }
+      if ('showEmptyCategoriesInGroupedView' in savedSettings) {
+        migratedSettings.showEmptyFigureCategoriesInGroupedView = savedSettings.showEmptyCategoriesInGroupedView;
+        delete savedSettings.showEmptyCategoriesInGroupedView;
+      }
+    }
+
+    return { ...defaultSettings, ...(savedSettings || {}), ...migratedSettings };
   }
 
   async saveSettings(settingsData: AppSettings): Promise<void> {
@@ -445,7 +538,8 @@ class AppDataService implements IDataService {
     const [
       lessons,
       figures,
-      categories,
+      figureCategories,
+      lessonCategories,
       settings,
       videoEntries,
       thumbnailEntries,
@@ -453,7 +547,8 @@ class AppDataService implements IDataService {
     ] = await Promise.all([
       tx.objectStore(LESSONS_STORE).getAll(),
       tx.objectStore(FIGURES_STORE).getAll(),
-      tx.objectStore(CATEGORIES_STORE).getAll(),
+      tx.objectStore(FIGURE_CATEGORIES_STORE).getAll(),
+      tx.objectStore(LESSON_CATEGORIES_STORE).getAll(),
       tx.objectStore(SETTINGS_STORE).get(SETTINGS_KEY),
       getAllEntries<Blob>(VIDEOS_STORE),
       getAllEntries<Blob>(THUMBNAILS_STORE),
@@ -486,12 +581,13 @@ class AppDataService implements IDataService {
     // 3. Construct the final export object.
     const exportObject = {
         '__BACHATA_MOVES_EXPORT__': true,
-        'version': 2,
+        'version': 3,
         'exportDate': new Date().toISOString(),
         'data': {
             lessons: lessons || [],
             figures: figures || [],
-            categories: categories || [],
+            figureCategories: figureCategories || [],
+            lessonCategories: lessonCategories || [],
             settings: settings || {},
             videos: videos || [],
             thumbnails: thumbnails || [],
@@ -514,7 +610,9 @@ class AppDataService implements IDataService {
     const {
         lessons = [],
         figures = [],
-        categories = [],
+        categories = [], // Legacy support for old imports
+        figureCategories = categories,
+        lessonCategories = [],
         settings = {},
         videos: videoEntries = [],
         thumbnails: thumbnailEntries = [],
@@ -571,7 +669,8 @@ class AppDataService implements IDataService {
             tx.objectStore(SETTINGS_STORE).put(newSettings, SETTINGS_KEY),
             ...lessons.map((item: Lesson) => tx.objectStore(LESSONS_STORE).put(item)),
             ...figures.map((item: Figure) => tx.objectStore(FIGURES_STORE).put(item)),
-            ...categories.map((item: Category) => tx.objectStore(CATEGORIES_STORE).put(item)),
+            ...figureCategories.map((item: FigureCategory) => tx.objectStore(FIGURE_CATEGORIES_STORE).put(item)),
+            ...lessonCategories.map((item: LessonCategory) => tx.objectStore(LESSON_CATEGORIES_STORE).put(item)),
             ...videoBlobs.map(([key, blob]) => tx.objectStore(VIDEOS_STORE).put(blob, key)),
             ...thumbnailBlobs.map(([key, blob]) => tx.objectStore(THUMBNAILS_STORE).put(blob, key)),
             ...figureThumbnailBlobs.map(([key, blob]) => tx.objectStore(FIGURE_THUMBNAILS_STORE).put(blob, key)),

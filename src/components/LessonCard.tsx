@@ -1,21 +1,23 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Lesson } from '../types';
+import type { Lesson, LessonCategory } from '../types';
 import { dataService } from '../data-service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
-import ContextMenu from './ContextMenu';
+import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface LessonCardProps {
   lesson: Lesson;
+  lessonCategories: LessonCategory[];
   onRefresh: () => void;
   itemIds: string[];
   baseRoute: string;
 }
 
-const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh, itemIds, baseRoute }) => {
+const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRefresh, itemIds, baseRoute }) => {
   const { t, locale, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -28,6 +30,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh, itemIds, bas
   const isVisible = useIntersectionObserver(cardRef, { threshold: 0.1 });
   const playInFullscreen = useFullscreenPlayer();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const [menuState, setMenuState] = useState({ isOpen: false, position: { x: 0, y: 0 }});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -159,6 +162,15 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh, itemIds, bas
     setShowDeleteConfirm(true);
   };
 
+  const handleChangeCategory = async (newCategoryId: string | null) => {
+    try {
+      await dataService.updateLesson(lesson.id, { categoryId: newCategoryId });
+      onRefresh();
+    } catch (err) {
+      console.error("Failed to update lesson category:", err);
+    }
+  };
+
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
@@ -180,9 +192,23 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh, itemIds, bas
   }, []);
 
   const closeContextMenu = useCallback(() => setMenuState(prev => ({ ...prev, isOpen: false })), []);
+  
+  const categorySubMenu: ContextMenuAction[] = [
+    {
+      label: t('common.uncategorized'),
+      onClick: () => handleChangeCategory(null),
+      isChecked: !lesson.categoryId,
+    },
+    ...lessonCategories.map(cat => ({
+      label: cat.name,
+      onClick: () => handleChangeCategory(cat.id),
+      isChecked: lesson.categoryId === cat.id,
+    })),
+  ];
 
-  const menuActions = [
+  const menuActions: ContextMenuAction[] = [
     { label: t('common.open'), onClick: handleOpen, icon: 'open_in_full' },
+    { label: t('common.category'), icon: 'folder', submenu: categorySubMenu },
     { label: t('common.edit'), onClick: handleEdit, icon: 'edit' },
     { label: t('common.remove'), onClick: handleRequestRemove, isDestructive: true, icon: 'delete' },
   ];
@@ -252,6 +278,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onRefresh, itemIds, bas
         onClose={closeContextMenu}
         position={menuState.position}
         actions={menuActions}
+        isMobile={isMobile}
       />
       <ConfirmDeleteModal
         isOpen={showDeleteConfirm}

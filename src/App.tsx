@@ -13,7 +13,7 @@ import EditorScreen from './components/EditorScreen';
 import { VideoSettingsProvider } from './contexts/VideoSettingsContext';
 import { dataService } from './data-service';
 import { translations } from './i18n';
-import CustomizeCategoriesScreen from './components/CustomizeCategoriesScreen';
+import CustomizeGroupingScreen from './components/CustomizeCategoriesScreen';
 
 // --- I18N Provider and Hook ---
 type Language = 'english' | 'polish';
@@ -126,12 +126,13 @@ const AppContent: React.FC<{ isDesktop: boolean }> = ({ isDesktop }) => {
           <Route path="lessons" element={<LessonsGallery />}>
             <Route path="add" element={<AddLessonModal />} />
             <Route path=":lessonId/edit" element={<EditorScreen />} />
+            <Route path="categories" element={<CustomizeGroupingScreen />} />
           </Route>
           <Route path="figures" element={<FiguresGallery />}>
             <Route path="add" element={<AddFigureModal />} />
             <Route path="create" element={<EditorScreen />} />
             <Route path=":figureId/edit" element={<EditorScreen />} />
-            <Route path="categories" element={<CustomizeCategoriesScreen />} />
+            <Route path="categories" element={<CustomizeGroupingScreen />} />
           </Route>
           <Route path="settings" element={<SettingsView />} />
         </Routes>

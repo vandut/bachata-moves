@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data-service';
-import type { Figure, Lesson, FigureSortOrder, Category } from '../types';
+import type { Figure, Lesson, FigureSortOrder, FigureCategory, AppSettings } from '../types';
 import FigureCard from './FigureCard';
 import MobileTopNav from './MobileTopNav';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -10,6 +10,9 @@ import SortControl from './SortControl';
 import { useTranslation } from '../App';
 import MuteToggleButton from './MuteToggleButton';
 import GroupingControl from './GroupingControl';
+import EmptyState from './EmptyState';
+
+const UNCATEGORIZED_ID = '__uncategorized__';
 
 const EmptyCategoryMessage: React.FC = () => {
     const { t } = useTranslation();
@@ -20,40 +23,62 @@ const EmptyCategoryMessage: React.FC = () => {
     );
 };
 
-const CategoryHeader: React.FC<{ name: string; isExpanded: boolean; onToggle: () => void }> = ({ name, isExpanded, onToggle }) => {
-  return (
-    <div
-      className="flex items-center my-4 cursor-pointer group"
-      onClick={onToggle}
-      role="button"
-      tabIndex={0}
-      aria-expanded={isExpanded}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onToggle()}
-    >
-      <div className="flex items-center text-gray-600 group-hover:text-gray-800 transition-colors">
-        <i className={`material-icons transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}>
-          chevron_right
-        </i>
-        <h2 className="text-xl font-semibold ml-2">{name}</h2>
-      </div>
-      <div className="flex-grow border-t border-gray-300 group-hover:border-gray-400 transition-colors ml-4"></div>
-    </div>
-  );
+const getGroupInfo = (dateString: string, grouping: 'byMonth' | 'byYear', locale: string) => {
+    const date = new Date(dateString);
+    if (grouping === 'byYear') {
+        const year = date.getFullYear();
+        return {
+            key: `${year}`,
+            header: `${year}`
+        };
+    }
+    // byMonth
+    const year = date.getFullYear();
+    const month = date.getMonth(); // 0-11
+    const monthName = date.toLocaleDateString(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    return {
+        key: `${year}-${String(month).padStart(2, '0')}`, // e.g., "2024-06" for sorting
+        header: monthName
+    };
+};
+
+const CategoryHeader: React.FC<{ name: string; isExpanded?: boolean; onToggle?: () => void; count?: number; }> = ({ name, isExpanded, onToggle, count }) => {
+    const isCollapsible = onToggle !== undefined && isExpanded !== undefined;
+    return (
+        <div
+            className={`flex items-center my-4 ${isCollapsible ? 'cursor-pointer group' : ''}`}
+            onClick={isCollapsible ? onToggle : undefined}
+            role={isCollapsible ? 'button' : undefined}
+            tabIndex={isCollapsible ? 0 : undefined}
+            aria-expanded={isCollapsible ? isExpanded : undefined}
+            onKeyDown={(e) => isCollapsible && (e.key === 'Enter' || e.key === ' ') && onToggle()}
+        >
+            <div className={`flex items-center text-gray-600 ${isCollapsible ? 'group-hover:text-gray-800' : ''} transition-colors`}>
+                {isCollapsible ? (
+                    <i className={`material-icons transition-transform duration-300 ${isExpanded ? 'rotate-90' : ''}`}>
+                        chevron_right
+                    </i>
+                ) : <div className="w-6" />}
+                <h2 className={`text-xl font-semibold ml-2 ${name.match(/^[a-z]/) ? 'capitalize' : ''}`}>
+                    {name}
+                    {typeof count === 'number' && (
+                        <span className="ml-2">({count})</span>
+                    )}
+                </h2>
+            </div>
+            <div className={`flex-grow border-t border-gray-300 ${isCollapsible ? 'group-hover:border-gray-400' : ''} transition-colors ml-4`}></div>
+        </div>
+    );
 };
 
 const FigureGrid: React.FC<{
     figures: Figure[];
     lessonsMap: Map<string, Lesson>;
-    categories: Category[];
+    figureCategories: FigureCategory[];
     onRefresh: () => void;
     baseRoute: string;
     allFigureIds: string[];
-}> = ({ figures, lessonsMap, categories, onRefresh, baseRoute, allFigureIds }) => {
-    
-    if (figures.length === 0) {
-        return <EmptyCategoryMessage />;
-    }
-
+}> = ({ figures, lessonsMap, figureCategories, onRefresh, baseRoute, allFigureIds }) => {
     return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
             {figures.map((figure) => (
@@ -61,7 +86,7 @@ const FigureGrid: React.FC<{
                     key={figure.id} 
                     figure={figure} 
                     parentLesson={lessonsMap.get(figure.lessonId)} 
-                    categories={categories}
+                    figureCategories={figureCategories}
                     onRefresh={onRefresh}
                     itemIds={allFigureIds}
                     baseRoute={baseRoute}
@@ -73,10 +98,11 @@ const FigureGrid: React.FC<{
 
 
 const FiguresGallery: React.FC = () => {
-  const { t, settings, updateSettings } = useTranslation();
+  const { t, settings, updateSettings, reloadAllData, locale } = useTranslation();
   const [figures, setFigures] = useState<Figure[]>([]);
   const [lessonsMap, setLessonsMap] = useState<Map<string, Lesson>>(new Map());
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [figureCategories, setFigureCategories] = useState<FigureCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const navigate = useNavigate();
@@ -90,6 +116,8 @@ const FiguresGallery: React.FC = () => {
   
   const GROUPING_OPTIONS = [
       { value: 'none', label: t('grouping.none') },
+      { value: 'byMonth', label: t('grouping.byMonth') },
+      { value: 'byYear', label: t('grouping.byYear') },
       { value: 'byCategory', label: t('grouping.byCategory') },
       { value: 'divider', label: '-', isDivider: true },
       { value: 'customize', label: t('grouping.customize'), isAction: true },
@@ -105,7 +133,7 @@ const FiguresGallery: React.FC = () => {
   };
 
   const handleGroupingChange = async (newGroupingValue: string) => {
-      await updateSettings({ figureGrouping: newGroupingValue as 'none' | 'byCategory' });
+      await updateSettings({ figureGrouping: newGroupingValue as AppSettings['figureGrouping'] });
   };
   
   const handleGroupingAction = (action: string) => {
@@ -115,10 +143,10 @@ const FiguresGallery: React.FC = () => {
   };
 
   const handleToggleCategory = async (categoryId: string) => {
-    const category = categories.find(c => c.id === categoryId);
+    const category = figureCategories.find(c => c.id === categoryId);
     if (!category) return;
     try {
-      await dataService.updateCategory(categoryId, { isExpanded: !category.isExpanded });
+      await dataService.updateFigureCategory(categoryId, { isExpanded: !category.isExpanded });
       refreshGalleries(); // Refresh to get the updated category state
     } catch (err) {
       console.error("Failed to update category state:", err);
@@ -126,7 +154,18 @@ const FiguresGallery: React.FC = () => {
   };
   
   const handleToggleUncategorized = () => {
-    updateSettings({ uncategorizedCategoryIsExpanded: !settings.uncategorizedCategoryIsExpanded });
+    updateSettings({ uncategorizedFigureCategoryIsExpanded: !settings.uncategorizedFigureCategoryIsExpanded });
+  };
+
+  const handleToggleDateGroup = (groupKey: string) => {
+    const currentCollapsed = settings.collapsedFigureDateGroups || [];
+    const isCurrentlyCollapsed = currentCollapsed.includes(groupKey);
+
+    const newCollapsedKeys = isCurrentlyCollapsed
+      ? currentCollapsed.filter(key => key !== groupKey)
+      : [...currentCollapsed, groupKey];
+
+    updateSettings({ collapsedFigureDateGroups: newCollapsedKeys });
   };
 
   const sortFigures = (figuresToSort: Figure[], lessonDataMap: Map<string, Lesson>, currentSortOrder: FigureSortOrder): Figure[] => {
@@ -165,23 +204,29 @@ const FiguresGallery: React.FC = () => {
   };
 
   const refreshGalleries = useCallback(() => {
+    setIsLoading(true);
     Promise.all([
       dataService.getFigures(),
       dataService.getLessons(),
-      dataService.getCategories(),
+      dataService.getFigureCategories(),
+      // No need to get settings again as they are in the context
     ]).then(([fetchedFigures, fetchedLessons, fetchedCategories]) => {
       const lessonIdMap = new Map(fetchedLessons.map(lesson => [lesson.id, lesson]));
       setFigures(fetchedFigures);
       setLessonsMap(lessonIdMap);
-      setCategories(fetchedCategories);
-    }).catch(console.error);
+      setFigureCategories(fetchedCategories);
+    }).catch(console.error)
+    .finally(() => setIsLoading(false));
   }, []);
   
   useEffect(() => {
+    // When returning from the category editor, settings might be stale.
+    // The reloadAllData function from useTranslation will refetch them.
     if (location.pathname === '/figures') {
+        reloadAllData(); 
         refreshGalleries();
     }
-  }, [location.pathname, refreshGalleries]);
+  }, [location.pathname, refreshGalleries, reloadAllData]);
   
   const intelligentRefresh = refreshGalleries;
 
@@ -191,7 +236,7 @@ const FiguresGallery: React.FC = () => {
 
   const { categorized: categorizedFigures, new: uncategorizedFigures } = useMemo(() => {
     const grouped: { [key: string]: Figure[] } = {};
-    categories.forEach(c => {
+    figureCategories.forEach(c => {
         grouped[c.id] = [];
     });
     
@@ -214,12 +259,74 @@ const FiguresGallery: React.FC = () => {
     
     return { categorized: sortedCategorized, new: sortedNew };
 
-  }, [figures, categories, lessonsMap, settings.figureSortOrder]);
+  }, [figures, figureCategories, lessonsMap, settings.figureSortOrder]);
   
-  const sortedCategories = useMemo(() => 
-    [...categories].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })), 
-    [categories]
-  );
+  const dateBasedGroupedFigures = useMemo(() => {
+    if (settings.figureGrouping !== 'byMonth' && settings.figureGrouping !== 'byYear') {
+        return { groups: new Map(), groupOrder: [] };
+    }
+
+    const grouped = new Map<string, { header: string; figures: Figure[] }>();
+
+    for (const figure of allSortedFigures) {
+        const lesson = lessonsMap.get(figure.lessonId);
+        if (!lesson) continue;
+
+        const { key, header } = getGroupInfo(lesson.uploadDate, settings.figureGrouping, locale);
+        if (!grouped.has(key)) {
+            grouped.set(key, { header, figures: [] });
+        }
+        grouped.get(key)!.figures.push(figure);
+    }
+    
+    let groupOrder = [...grouped.keys()];
+    
+    if (settings.figureSortOrder === 'newest' || settings.figureSortOrder === 'oldest') {
+        groupOrder.sort((a, b) => {
+            return settings.figureSortOrder === 'newest' ? b.localeCompare(a) : a.localeCompare(b);
+        });
+    } else {
+        groupOrder.sort((a, b) => {
+            const headerA = grouped.get(a)!.header;
+            const headerB = grouped.get(b)!.header;
+            const comparison = headerA.localeCompare(headerB, locale);
+            return settings.figureSortOrder === 'alphabetical_asc' ? comparison : -comparison;
+        });
+    }
+
+    return { groups: grouped, groupOrder };
+  }, [allSortedFigures, lessonsMap, settings.figureGrouping, settings.figureSortOrder, locale]);
+  
+  const displayItems = useMemo(() => {
+    const categoryMap = new Map(figureCategories.map(c => [c.id, c]));
+    const orderedItems: ({ id: string; isUncategorized: true } | FigureCategory)[] = [];
+
+    // Use categoryOrder from settings, but ensure it's complete and valid.
+    let order = settings.figureCategoryOrder && settings.figureCategoryOrder.length > 0 
+        ? settings.figureCategoryOrder 
+        : [UNCATEGORIZED_ID, ...figureCategories.map(c => c.id).sort((a, b) => a.localeCompare(b))];
+    
+    const allKnownIds = new Set([UNCATEGORIZED_ID, ...figureCategories.map(c => c.id)]);
+    const orderSet = new Set(order);
+
+    // Add any missing items to the end of the order to prevent them from disappearing
+    if (order.length < allKnownIds.size) {
+        const missingIds = [...allKnownIds].filter(id => !orderSet.has(id));
+        order = [...order, ...missingIds];
+    }
+    
+    for (const id of order) {
+        if (id === UNCATEGORIZED_ID) {
+            orderedItems.push({ id: UNCATEGORIZED_ID, isUncategorized: true });
+        } else {
+            const category = categoryMap.get(id);
+            if (category) {
+                orderedItems.push(category);
+            }
+        }
+    }
+    return orderedItems;
+  }, [figureCategories, settings.figureCategoryOrder]);
   
   const outletContext = { refresh: intelligentRefresh, isMobile };
   const isChildRouteActive = location.pathname !== '/figures';
@@ -258,64 +365,154 @@ const FiguresGallery: React.FC = () => {
   const baseRoute = '/figures';
   const allFigureIds = useMemo(() => allSortedFigures.map(f => f.id), [allSortedFigures]);
 
-  const galleryContent = (
-    <div className={isMobile ? "px-4 pt-2 pb-4" : "p-8"}>
-        {!isMobile && <DesktopTopNav title={pageTitle} rightAction={actionMenu} />}
-        
-        {settings.figureGrouping === 'byCategory' ? (
-          <>
-            <div>
-                <CategoryHeader 
-                    name={t('common.uncategorized')} 
-                    isExpanded={settings.uncategorizedCategoryIsExpanded} 
-                    onToggle={handleToggleUncategorized} 
-                />
-                {settings.uncategorizedCategoryIsExpanded && (
-                    <div className="pt-2 pb-6">
-                        <FigureGrid
-                            figures={uncategorizedFigures}
-                            lessonsMap={lessonsMap}
-                            categories={categories}
-                            onRefresh={refreshGalleries}
-                            baseRoute={baseRoute}
-                            allFigureIds={allFigureIds}
-                        />
-                    </div>
-                )}
-            </div>
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <i className="material-icons text-5xl text-gray-400 animate-spin">sync</i>
+          <span className="ml-4 text-xl text-gray-600">{t('gallery.loading', { item: t('gallery.figures') })}</span>
+        </div>
+      );
+    }
+    
+    if (figures.length === 0) {
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon="people"
+            title={t('gallery.emptyFiguresTitle')}
+            description={t('gallery.emptyFiguresDescription')}
+            actionText={t('gallery.addFirstFigure')}
+            onAction={handleAddClick}
+          />
+        </div>
+      );
+    }
 
-            {sortedCategories.map(category => (
-                <div key={category.id}>
-                    <CategoryHeader name={category.name} isExpanded={category.isExpanded} onToggle={() => handleToggleCategory(category.id)} />
-                    {category.isExpanded && (
+    if (settings.figureGrouping === 'byMonth' || settings.figureGrouping === 'byYear') {
+      const { groups, groupOrder } = dateBasedGroupedFigures;
+      return (
+        <div>
+            {groupOrder.map(groupKey => {
+                const group = groups.get(groupKey)!;
+                if (!group || group.figures.length === 0) return null;
+
+                const isExpanded = !(settings.collapsedFigureDateGroups || []).includes(groupKey);
+
+                return (
+                    <div key={groupKey}>
+                        <CategoryHeader
+                            name={group.header}
+                            count={settings.showFigureCountInGroupHeaders ? group.figures.length : undefined}
+                            isExpanded={isExpanded}
+                            onToggle={() => handleToggleDateGroup(groupKey)}
+                        />
+                        {isExpanded && (
+                            <div className="pt-2 pb-6">
+                                <FigureGrid
+                                    figures={group.figures}
+                                    lessonsMap={lessonsMap}
+                                    figureCategories={figureCategories}
+                                    onRefresh={refreshGalleries}
+                                    baseRoute={baseRoute}
+                                    allFigureIds={allFigureIds}
+                                />
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+      );
+    }
+
+    if (settings.figureGrouping === 'byCategory') {
+      return (
+        <div>
+          {displayItems.map(item => {
+            if ('isUncategorized' in item) {
+              const count = uncategorizedFigures.length;
+              const showGroup = count > 0 || settings.showEmptyFigureCategoriesInGroupedView;
+              if (!showGroup) return null;
+              
+              return (
+                <div key={item.id}>
+                    <CategoryHeader 
+                        name={t('common.uncategorized')} 
+                        isExpanded={settings.uncategorizedFigureCategoryIsExpanded} 
+                        onToggle={handleToggleUncategorized} 
+                        count={settings.showFigureCountInGroupHeaders ? count : undefined}
+                    />
+                    {settings.uncategorizedFigureCategoryIsExpanded && (
                         <div className="pt-2 pb-6">
-                           <FigureGrid
-                                figures={categorizedFigures[category.id] || []}
-                                lessonsMap={lessonsMap}
-                                categories={categories}
-                                onRefresh={refreshGalleries}
-                                baseRoute={baseRoute}
-                                allFigureIds={allFigureIds}
-                            />
+                            {count > 0 ? (
+                                <FigureGrid
+                                    figures={uncategorizedFigures}
+                                    lessonsMap={lessonsMap}
+                                    figureCategories={figureCategories}
+                                    onRefresh={refreshGalleries}
+                                    baseRoute={baseRoute}
+                                    allFigureIds={allFigureIds}
+                                />
+                            ) : (
+                                <EmptyCategoryMessage />
+                            )}
                         </div>
                     )}
                 </div>
-            ))}
-          </>
-        ) : (
-          <div className="pt-2 pb-6">
-            <FigureGrid
-                figures={allSortedFigures}
-                lessonsMap={lessonsMap}
-                categories={categories}
-                onRefresh={refreshGalleries}
-                baseRoute={baseRoute}
-                allFigureIds={allFigureIds}
-            />
-          </div>
-        )}
-    </div>
-  );
+              );
+            } else {
+              const category = item;
+              const categoryFigures = categorizedFigures[category.id] || [];
+              const count = categoryFigures.length;
+              const showGroup = count > 0 || settings.showEmptyFigureCategoriesInGroupedView;
+              if (!showGroup) return null;
+
+              return (
+                <div key={category.id}>
+                  <CategoryHeader 
+                      name={category.name} 
+                      isExpanded={category.isExpanded} 
+                      onToggle={() => handleToggleCategory(category.id)}
+                      count={settings.showFigureCountInGroupHeaders ? count : undefined}
+                  />
+                  {category.isExpanded && (
+                      <div className="pt-2 pb-6">
+                         {count > 0 ? (
+                             <FigureGrid
+                                  figures={categoryFigures}
+                                  lessonsMap={lessonsMap}
+                                  figureCategories={figureCategories}
+                                  onRefresh={refreshGalleries}
+                                  baseRoute={baseRoute}
+                                  allFigureIds={allFigureIds}
+                              />
+                         ) : (
+                              <EmptyCategoryMessage />
+                         )}
+                      </div>
+                  )}
+                </div>
+              );
+            }
+          })}
+        </div>
+      );
+    }
+
+    return (
+      <div className="pt-2 pb-6">
+        <FigureGrid
+            figures={allSortedFigures}
+            lessonsMap={lessonsMap}
+            figureCategories={figureCategories}
+            onRefresh={refreshGalleries}
+            baseRoute={baseRoute}
+            allFigureIds={allFigureIds}
+        />
+      </div>
+    );
+  };
 
   // --- Mobile View ---
   if (isMobile) {
@@ -323,17 +520,27 @@ const FiguresGallery: React.FC = () => {
       return <Outlet context={outletContext} />;
     } else {
       return (
-        <>
+        <div className="h-full flex flex-col">
           <MobileTopNav title={pageTitle} />
           <div className="px-4 pt-4 pb-2 flex justify-end">
             {actionMenu}
           </div>
-          {galleryContent}
-        </>
+          <div className="px-4 pt-2 pb-4 flex-1 flex flex-col min-h-0 overflow-y-auto">
+            {renderContent()}
+          </div>
+        </div>
       );
     }
   } else {
     // --- Desktop View ---
+    const galleryContent = (
+      <div className="p-8 h-full flex flex-col">
+        <DesktopTopNav title={pageTitle} rightAction={actionMenu} />
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col p-2 -m-2">
+          {renderContent()}
+        </div>
+      </div>
+    );
     if (isChildRouteActive) {
       return (
          <>

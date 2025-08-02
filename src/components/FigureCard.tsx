@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Figure, Lesson, Category } from '../types';
+import type { Figure, Lesson, FigureCategory } from '../types';
 import { dataService } from '../data-service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
@@ -12,13 +12,13 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 interface FigureCardProps {
   figure: Figure;
   parentLesson?: Lesson;
-  categories: Category[];
+  figureCategories: FigureCategory[];
   onRefresh: () => void;
   itemIds: string[];
   baseRoute: string;
 }
 
-const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, categories, onRefresh, itemIds, baseRoute }) => {
+const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, onRefresh, itemIds, baseRoute }) => {
   const { t, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -199,7 +199,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, categorie
       onClick: () => handleChangeCategory(null),
       isChecked: !figure.categoryId,
     },
-    ...categories.map(cat => ({
+    ...figureCategories.map(cat => ({
       label: cat.name,
       onClick: () => handleChangeCategory(cat.id),
       isChecked: figure.categoryId === cat.id,

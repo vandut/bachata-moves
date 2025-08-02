@@ -7,7 +7,13 @@ export interface NavItem {
   icon: string;
 }
 
-export interface Category {
+export interface FigureCategory {
+  id: string;
+  name: string;
+  isExpanded: boolean;
+}
+
+export interface LessonCategory {
   id: string;
   name: string;
   isExpanded: boolean;
@@ -32,6 +38,7 @@ export interface Lesson {
   startTime: number; // Milliseconds
   endTime: number; // Milliseconds
   thumbTime: number; // Milliseconds from the start of the video
+  categoryId?: string | null;
 }
 
 export type LessonSortOrder = 'newest' | 'oldest';
@@ -41,10 +48,22 @@ export interface AppSettings {
   language: 'english' | 'polish';
   lessonSortOrder: LessonSortOrder;
   figureSortOrder: FigureSortOrder;
-  lessonGrouping: 'none';
-  figureGrouping: 'none' | 'byCategory';
+  lessonGrouping: 'none' | 'byMonth' | 'byYear' | 'byCategory';
+  figureGrouping: 'none' | 'byMonth' | 'byYear' | 'byCategory';
   autoplayGalleryVideos: boolean;
-  uncategorizedCategoryIsExpanded: boolean;
+  // Date Grouping Settings
+  collapsedLessonDateGroups: string[];
+  collapsedFigureDateGroups: string[];
+  // Figure Category Settings
+  uncategorizedFigureCategoryIsExpanded: boolean;
+  figureCategoryOrder: string[];
+  showEmptyFigureCategoriesInGroupedView: boolean;
+  showFigureCountInGroupHeaders: boolean;
+  // Lesson Category Settings
+  uncategorizedLessonCategoryIsExpanded: boolean;
+  lessonCategoryOrder: string[];
+  showEmptyLessonCategoriesInGroupedView: boolean;
+  showLessonCountInGroupHeaders: boolean;
 }
 
 export interface AppData {
@@ -75,9 +94,17 @@ export interface IDataService {
   updateFigure(figureId: string, figureUpdateData: Partial<Omit<Figure, 'id' | 'lessonId'>>): Promise<Figure>;
   deleteFigure(figureId: string): Promise<void>;
 
-  // Categories
-  getCategories(): Promise<Category[]>;
-  updateCategory(categoryId: string, categoryUpdateData: Partial<Omit<Category, 'id'>>): Promise<Category>;
+  // Figure Categories
+  getFigureCategories(): Promise<FigureCategory[]>;
+  addFigureCategory(categoryName: string): Promise<FigureCategory>;
+  updateFigureCategory(categoryId: string, categoryUpdateData: Partial<Omit<FigureCategory, 'id'>>): Promise<FigureCategory>;
+  deleteFigureCategory(categoryId: string): Promise<void>;
+  
+  // Lesson Categories
+  getLessonCategories(): Promise<LessonCategory[]>;
+  addLessonCategory(categoryName: string): Promise<LessonCategory>;
+  updateLessonCategory(categoryId: string, categoryUpdateData: Partial<Omit<LessonCategory, 'id'>>): Promise<LessonCategory>;
+  deleteLessonCategory(categoryId: string): Promise<void>;
 
   // Settings
   getSettings(): Promise<AppSettings>;

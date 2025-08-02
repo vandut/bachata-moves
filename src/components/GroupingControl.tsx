@@ -45,7 +45,7 @@ const GroupingControl: React.FC<GroupingControlProps> = ({ options, value, onCha
     setIsOpen(false);
   };
   
-  const buttonLabel = isMobile ? '' : (selectedOption ? `${t('grouping.groupBy')}: ${selectedOption.label}` : t('grouping.groupBy'));
+  const buttonLabel = isMobile ? '' : (selectedOption ? selectedOption.label : t('grouping.groupBy'));
 
   const buttonClass = isMobile
     ? "inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-300 shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
