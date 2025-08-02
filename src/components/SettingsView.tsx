@@ -22,6 +22,7 @@ const SettingsView: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [progress, setProgress] = useState<number | null>(null);
   
   const [dataManagementStatus, setDataManagementStatus] = useState<Status>(null);
   const [clearStatus, setClearStatus] = useState<Status>(null);
@@ -43,10 +44,11 @@ const SettingsView: React.FC = () => {
   
   const handleExport = async () => {
     setIsExporting(true);
+    setProgress(0);
     setDataManagementStatus(null);
     setClearStatus(null);
     try {
-        const dataBlob = await dataService.exportAllData();
+        const dataBlob = await dataService.exportAllData((p) => setProgress(p));
         const url = URL.createObjectURL(dataBlob);
         const a = document.createElement('a');
         const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
@@ -62,6 +64,7 @@ const SettingsView: React.FC = () => {
         setDataManagementStatus({ type: 'error', message: t('settings.exportError') });
     } finally {
         setIsExporting(false);
+        setProgress(null);
     }
   };
 
@@ -76,10 +79,11 @@ const SettingsView: React.FC = () => {
       if (!file) return;
 
       setIsImporting(true);
+      setProgress(0);
       setDataManagementStatus(null);
       setClearStatus(null);
       try {
-          await dataService.importData(file);
+          await dataService.importData(file, (p) => setProgress(p));
           setDataManagementStatus({ type: 'success', message: t('settings.importSuccess')});
           reloadAllData();
       } catch (err) {
@@ -87,6 +91,7 @@ const SettingsView: React.FC = () => {
           setDataManagementStatus({ type: 'error', message: t('settings.importError')});
       } finally {
           setIsImporting(false);
+          setProgress(null);
           if (fileInputRef.current) fileInputRef.current.value = '';
       }
   };
@@ -184,6 +189,20 @@ const SettingsView: React.FC = () => {
                   </button>
                   <input type="file" ref={fileInputRef} onChange={handleFileSelected} className="sr-only" accept=".bin,application/json" />
               </div>
+              {(isExporting || isImporting) && progress !== null && (
+                  <div className="mt-4">
+                      <div className="text-center text-sm text-gray-600 mb-1">
+                          <span>{isExporting ? t('settings.exporting') : t('settings.importing')}</span>
+                          <span className="font-semibold ml-2">{Math.round(progress * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                          <div
+                              className="bg-blue-600 h-2.5 rounded-full transition-all duration-200 ease-linear"
+                              style={{ width: `${progress * 100}%` }}
+                          ></div>
+                      </div>
+                  </div>
+              )}
               {dataManagementStatus && (
                   <p className={`text-sm mt-4 text-center ${dataManagementStatus.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
                       {dataManagementStatus.message}

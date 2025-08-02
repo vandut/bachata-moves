@@ -134,7 +134,7 @@ const AddLessonModal: React.FC = () => {
     setError(null);
 
     try {
-      const lessonData: Omit<Lesson, 'id' | 'videoFileName' | 'thumbTime'> = {
+      const lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'> = {
         uploadDate: new Date(date).toISOString(),
         description: description || null,
         startTime: 0,

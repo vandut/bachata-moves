@@ -109,7 +109,7 @@ export const useFullscreenPlayer = () => {
                 if (currentParentLessonId !== newParentLesson.id) {
                     // Load new video source if the parent lesson is different
                     const newVideoUrl = await dataService.getVideoObjectUrl(newParentLesson);
-                    dataService.revokeVideoObjectUrl(currentParentLessonId); // Clean up old video URL
+                    dataService.revokeVideoObjectUrl(currentLessonForVideoRef.current.videoId); // Clean up old video URL
                     currentLessonForVideoRef.current = newParentLesson; // Update parent lesson ref
                     videoRef.current.src = newVideoUrl;
                 } else {
@@ -169,7 +169,7 @@ export const useFullscreenPlayer = () => {
                 videoElem.src = '';
                 
                 if (currentLessonForVideoRef.current) {
-                    dataService.revokeVideoObjectUrl(currentLessonForVideoRef.current.id);
+                    dataService.revokeVideoObjectUrl(currentLessonForVideoRef.current.videoId);
                 }
 
                 if (videoElem.parentNode) {

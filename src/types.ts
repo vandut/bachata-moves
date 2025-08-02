@@ -9,7 +9,7 @@ export interface NavItem {
 
 export interface FigureCategory {
   id: string;
-  name: string;
+  name:string;
   isExpanded: boolean;
 }
 
@@ -32,7 +32,7 @@ export interface Figure {
 
 export interface Lesson {
   id:string;
-  videoFileName: string;
+  videoId: string;
   uploadDate: string; // ISO 8601 string
   description?: string | null;
   startTime: number; // Milliseconds
@@ -84,7 +84,7 @@ export interface ModalAction {
 export interface IDataService {
   // Lessons
   getLessons(): Promise<Lesson[]>;
-  addLesson(lessonData: Omit<Lesson, 'id' | 'videoFileName' | 'thumbTime'>, videoFile: File): Promise<Lesson>;
+  addLesson(lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, videoFile: File): Promise<Lesson>;
   updateLesson(lessonId: string, lessonUpdateData: Partial<Omit<Lesson, 'id'>>): Promise<Lesson>;
   deleteLesson(lessonId: string): Promise<void>;
 
@@ -112,13 +112,13 @@ export interface IDataService {
   
   // File Handling
   getVideoObjectUrl(lesson: Lesson): Promise<string>;
-  revokeVideoObjectUrl(lessonId: string): void;
+  revokeVideoObjectUrl(videoId: string): void;
   getLessonThumbnailUrl(lessonId: string): Promise<string | null>;
   getFigureThumbnailUrl(figureId: string): Promise<string | null>;
   getVideoFile(lessonId: string): Promise<File | undefined>;
 
   // Data Management
-  exportAllData(): Promise<Blob>;
-  importData(dataBlob: Blob): Promise<void>;
+  exportAllData(onProgress?: (progress: number) => void): Promise<Blob>;
+  importData(dataBlob: Blob, onProgress?: (progress: number) => void): Promise<void>;
   clearAllData(): Promise<void>;
 }
