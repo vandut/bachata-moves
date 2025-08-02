@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import type { ModalAction, Lesson } from '../types';
-import { dataService } from '../data-service';
+import { dataService } from '../data/service';
 import { useTranslation } from '../App';
 
 // --- SELECTABLE LESSON CARD ---

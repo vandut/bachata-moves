@@ -1,13 +1,12 @@
 import React from 'react';
-import { useVideoSettings } from '../contexts/VideoSettingsContext';
 import { useTranslation } from '../App';
 
 const MuteToggleButton: React.FC = () => {
-    const { isMuted, setIsMuted } = useVideoSettings();
-    const { t } = useTranslation();
+    const { t, settings, updateSettings } = useTranslation();
+    const { isMuted } = settings;
 
     const toggleMute = () => {
-        setIsMuted(prev => !prev);
+        updateSettings({ isMuted: !isMuted });
     };
     
     const label = isMuted ? t('common.unmute') : t('common.mute');

@@ -1,6 +1,7 @@
 
 
-import type { Lesson, Figure, AppSettings, IDataService, FigureCategory, LessonCategory } from './types';
+import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory } from '../types';
+import type { IDataService } from './service';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
 
 // --- Helper Functions ---
@@ -140,7 +141,7 @@ async function openBachataDB(): Promise<IDBPDatabase> {
             // Split settings into device and sync objects
             const deviceSettings: Partial<AppSettings> = {};
             const syncSettings: Partial<AppSettings> = {};
-            const deviceSettingKeys: (keyof AppSettings)[] = ['language', 'autoplayGalleryVideos'];
+            const deviceSettingKeys: (keyof AppSettings)[] = ['language', 'autoplayGalleryVideos', 'isMuted', 'volume'];
 
             for (const key in oldSettings) {
                 if (deviceSettingKeys.includes(key as keyof AppSettings)) {
@@ -224,7 +225,7 @@ const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
 };
 
 
-class AppDataService implements IDataService {
+export class AppDataService implements IDataService {
   private videoUrlCache = new Map<string, string>();
   private thumbUrlCache = new Map<string, string>();
   private figureThumbUrlCache = new Map<string, string>();
@@ -498,6 +499,8 @@ class AppDataService implements IDataService {
     const defaultDeviceSettings: Partial<AppSettings> = {
       language: getInitialLanguage(),
       autoplayGalleryVideos: false,
+      isMuted: false,
+      volume: 1,
     };
 
     const defaultSyncSettings: Partial<AppSettings> = {
@@ -529,7 +532,7 @@ class AppDataService implements IDataService {
     const db = await openBachataDB();
     const deviceSettings: Partial<AppSettings> = {};
     const syncSettings: Partial<AppSettings> = {};
-    const deviceSettingKeys: (keyof AppSettings)[] = ['language', 'autoplayGalleryVideos'];
+    const deviceSettingKeys: (keyof AppSettings)[] = ['language', 'autoplayGalleryVideos', 'isMuted', 'volume'];
 
     for (const key in settingsData) {
         const typedKey = key as keyof AppSettings;
@@ -858,9 +861,3 @@ class AppDataService implements IDataService {
     }
   }
 }
-
-/**
- * A singleton instance of the AppDataService.
- * Components will import this instance to interact with the application's data layer.
- */
-export const dataService = new AppDataService();

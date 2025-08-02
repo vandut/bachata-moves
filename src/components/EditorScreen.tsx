@@ -1,10 +1,11 @@
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure } from '../types';
-import { dataService } from '../data-service';
-import { useVideoSettings } from '../contexts/VideoSettingsContext';
+import { dataService } from '../data/service';
 import { useTranslation } from '../App';
 
 interface GalleryContext {
@@ -74,8 +75,8 @@ const EditorScreen: React.FC = () => {
     const { lessonId: lessonIdParam, figureId } = useParams<{ lessonId?: string; figureId?: string }>();
     const navigate = useNavigate();
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
-    const { isMuted, setIsMuted, volume, setVolume } = useVideoSettings();
-    const { t, locale } = useTranslation();
+    const { t, locale, settings, updateSettings } = useTranslation();
+    const { isMuted, volume } = settings;
     const query = useQuery();
 
     // --- State ---
@@ -205,8 +206,8 @@ const EditorScreen: React.FC = () => {
     const handleVolumeChange = () => {
         const video = videoRef.current;
         if (!video) return;
-        setIsMuted(video.muted);
-        setVolume(video.volume);
+        if(video.muted !== isMuted) updateSettings({ isMuted: video.muted });
+        if(video.volume !== volume) updateSettings({ volume: video.volume });
     };
 
     const handleLoadedMetadata = () => {

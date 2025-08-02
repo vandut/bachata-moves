@@ -1,11 +1,12 @@
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
-import { dataService } from '../data-service';
+import { dataService } from '../data/service';
 import type { Lesson, Figure, ModalAction } from '../types';
 import CustomSlider from './CustomSlider';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
-import { useVideoSettings } from '../contexts/VideoSettingsContext';
 import { useTranslation } from '../App';
 
 // This context is provided by the parent gallery component (Lessons or Figures)
@@ -20,8 +21,8 @@ const PlayerScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, refresh, itemIds } = useOutletContext<GalleryContext>();
-  const { isMuted, setIsMuted, volume, setVolume } = useVideoSettings();
-  const { t, locale } = useTranslation();
+  const { t, locale, settings, updateSettings } = useTranslation();
+  const { isMuted, volume } = settings;
 
   const [item, setItem] = useState<Lesson | Figure | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -161,8 +162,8 @@ const PlayerScreen: React.FC = () => {
   const handleVolumeChange = () => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.muted !== isMuted) setIsMuted(video.muted);
-    if (video.volume !== volume) setVolume(video.volume);
+    if (video.muted !== isMuted) updateSettings({ isMuted: video.muted });
+    if (video.volume !== volume) updateSettings({ volume: video.volume });
   };
   
   const handleTouchStart = (e: React.TouchEvent) => {

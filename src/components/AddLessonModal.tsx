@@ -1,6 +1,7 @@
+
 import React, { useState, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { dataService } from '../data-service';
+import { dataService } from '../data/service';
 import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';

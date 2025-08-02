@@ -1,16 +1,12 @@
 
-
-
-
-
-
 import React, { useState, useRef } from 'react';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
 import { useTranslation } from '../App';
-import { dataService } from '../data-service';
+import { dataService } from '../data/service';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import GoogleDriveSync from './GoogleDriveSync';
 
 type Status = { type: 'success' | 'error'; message: string } | null;
 
@@ -175,6 +171,14 @@ const SettingsView: React.FC = () => {
                         ></div>
                     </div>
                 </div>
+            </div>
+            
+            <div className="border-t border-gray-200 pt-6">
+              <h2 className="text-xl font-semibold text-gray-700">{t('settings.googleDriveSync')}</h2>
+              <p className="text-gray-500 mt-1">{t('settings.googleDriveSyncDesc')}</p>
+              <div className="mt-4">
+                <GoogleDriveSync />
+              </div>
             </div>
 
             <div className="border-t border-gray-200 pt-6">

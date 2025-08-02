@@ -1,8 +1,10 @@
 
+
+
 import { useRef, useCallback } from 'react';
-import { dataService } from '../data-service';
-import type { Lesson, Figure } from '../types';
-import { useVideoSettings } from '../contexts/VideoSettingsContext';
+import { dataService } from '../data/service';
+import type { Lesson, Figure, AppSettings } from '../types';
+import { useTranslation } from '../App';
 
 type OnExitCallback = () => void;
 
@@ -23,7 +25,8 @@ export const useFullscreenPlayer = () => {
     const onExitRef = useRef<OnExitCallback | undefined>(undefined);
     const touchStartRef = useRef<{ x: number, y: number } | null>(null);
 
-    const { isMuted, setIsMuted, volume, setVolume } = useVideoSettings();
+    const { settings, updateSettings } = useTranslation();
+    const { isMuted, volume } = settings;
 
     const play = useCallback(async ({ item, parentLesson, onExit, itemIds, baseRoute }: PlayOptions) => {
         if (videoRef.current || document.fullscreenElement) {
@@ -150,8 +153,8 @@ export const useFullscreenPlayer = () => {
         const handleVolumeChange = () => {
             const videoElem = videoRef.current;
             if (!videoElem) return;
-            if (videoElem.muted !== isMuted) setIsMuted(videoElem.muted);
-            if (videoElem.volume !== volume) setVolume(videoElem.volume);
+            if (videoElem.muted !== isMuted) updateSettings({ isMuted: videoElem.muted });
+            if (videoElem.volume !== volume) updateSettings({ volume: videoElem.volume });
         };
 
         const cleanup = () => {
@@ -230,7 +233,7 @@ export const useFullscreenPlayer = () => {
             console.error("Failed to enter fullscreen:", err);
             cleanup();
         }
-    }, [isMuted, volume, setIsMuted, setVolume]);
+    }, [isMuted, volume, updateSettings]);
 
     return play;
 };

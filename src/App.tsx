@@ -1,3 +1,5 @@
+
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -10,8 +12,7 @@ import MobileBottomNav from './components/MobileBottomNav';
 import AddLessonModal from './components/AddLessonModal';
 import AddFigureModal from './components/AddFigureModal';
 import EditorScreen from './components/EditorScreen';
-import { VideoSettingsProvider } from './contexts/VideoSettingsContext';
-import { dataService } from './data-service';
+import { dataService } from './data/service';
 import { translations } from './i18n';
 import CustomizeGroupingScreen from './components/CustomizeCategoriesScreen';
 
@@ -150,9 +151,7 @@ const App: React.FC = () => {
 
   return (
     <I18nProvider>
-      <VideoSettingsProvider>
-        <AppContent isDesktop={isDesktop} />
-      </VideoSettingsProvider>
+      <AppContent isDesktop={isDesktop} />
     </I18nProvider>
   );
 };

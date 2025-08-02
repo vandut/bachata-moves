@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
 import type { ModalAction, FigureCategory, LessonCategory, AppSettings } from '../types';
-import { dataService } from '../data-service';
+import { dataService } from '../data/service';
 
 interface GalleryContext {
     isMobile: boolean;
