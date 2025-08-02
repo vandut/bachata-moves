@@ -1,5 +1,6 @@
 
 
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -15,6 +16,7 @@ import EditorScreen from './components/EditorScreen';
 import { dataService } from './data/service';
 import { translations } from './i18n';
 import CustomizeGroupingScreen from './components/CustomizeCategoriesScreen';
+import { GoogleDriveProvider } from './hooks/useGoogleDrive';
 
 // --- I18N Provider and Hook ---
 type Language = 'english' | 'polish';
@@ -151,7 +153,9 @@ const App: React.FC = () => {
 
   return (
     <I18nProvider>
-      <AppContent isDesktop={isDesktop} />
+      <GoogleDriveProvider>
+        <AppContent isDesktop={isDesktop} />
+      </GoogleDriveProvider>
     </I18nProvider>
   );
 };

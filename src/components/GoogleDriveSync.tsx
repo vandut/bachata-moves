@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import { useTranslation } from '../App';
@@ -12,12 +13,8 @@ const GoogleIcon: React.FC = () => (
 );
 
 const GoogleDriveSync: React.FC = () => {
-    const { isGisReady, isSignedIn, userProfile, error, signIn, signOut } = useGoogleDrive();
+    const { isSignedIn, userProfile, error, signIn, signOut } = useGoogleDrive();
     const { t } = useTranslation();
-
-    if (!isGisReady) {
-        return <div className="text-sm text-gray-500 text-center py-2">{t('settings.syncInitializing')}</div>;
-    }
     
     if (error) {
         return (
@@ -29,10 +26,10 @@ const GoogleDriveSync: React.FC = () => {
 
     if (!isSignedIn) {
         return (
-            <div className="flex justify-center">
+            <div className="sm:flex sm:justify-start">
                 <button
                     onClick={signIn}
-                    className="inline-flex items-center justify-center bg-white border border-gray-300 text-gray-700 font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 gap-2"
+                    className="w-full sm:w-auto inline-flex items-center justify-center bg-white border border-gray-300 text-gray-700 font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 gap-2"
                 >
                     <GoogleIcon />
                     {t('settings.signInWithGoogle')}
@@ -50,16 +47,16 @@ const GoogleDriveSync: React.FC = () => {
                     <p className="text-gray-500 truncate">{userProfile?.email}</p>
                 </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
                 <button
                     disabled // Functionality to be implemented in a future task
-                    className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                     {t('settings.syncData')}
                 </button>
                 <button
                     onClick={signOut}
-                    className="w-full bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors"
+                    className="w-full sm:w-auto bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors"
                 >
                     {t('settings.signOut')}
                 </button>
