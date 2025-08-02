@@ -1,5 +1,3 @@
-
-
 export const en = {
   nav: {
     lessons: 'Lessons',
@@ -25,18 +23,31 @@ export const en = {
     unmute: 'Unmute',
     open: 'Open',
     remove: 'Remove',
+    category: 'Category',
+    uncategorized: 'Uncategorized',
   },
   gallery: {
     loading: 'Loading {item}...',
     lessons: 'Lessons',
     figures: 'Figures',
+    emptyCategory: 'This category is empty. Assign figures here using the context menu on a figure.',
   },
   sort: {
-    newest: 'Newest First',
-    oldest: 'Oldest First',
+    newest: 'Newest',
+    oldest: 'Oldest',
     alphaAsc: 'Alphabetical (A-Z)',
     alphaDesc: 'Alphabetical (Z-A)',
     sort: 'Sort',
+  },
+  grouping: {
+    groupBy: 'Group By',
+    none: 'None',
+    byCategory: 'Category',
+    customize: 'Customize',
+  },
+  customizeGrouping: {
+    title: 'Customize Grouping',
+    notImplemented: 'This feature is not yet implemented. Please check back later.',
   },
   card: {
     lessonFrom: 'Lesson from {date}',
@@ -165,18 +176,31 @@ export const pl = {
     unmute: 'Wyłącz wyciszenie',
     open: 'Otwórz',
     remove: 'Usuń',
+    category: 'Kategoria',
+    uncategorized: 'Bez kategorii',
   },
   gallery: {
     loading: 'Ładowanie {item}...',
     lessons: 'Lekcji',
     figures: 'Figur',
+    emptyCategory: 'Ta kategoria jest pusta. Przypisz tu figury za pomocą menu kontekstowego na figurze.',
   },
   sort: {
-    newest: 'Od najnowszych',
-    oldest: 'Od najstarszych',
+    newest: 'Najnowsze',
+    oldest: 'Najstarsze',
     alphaAsc: 'Alfabetycznie (A-Z)',
     alphaDesc: 'Alfabetycznie (Z-A)',
     sort: 'Sortuj',
+  },
+  grouping: {
+    groupBy: 'Grupuj wg',
+    none: 'Brak',
+    byCategory: 'Kategoria',
+    customize: 'Dostosuj',
+  },
+  customizeGrouping: {
+    title: 'Dostosuj grupowanie',
+    notImplemented: 'Ta funkcja nie jest jeszcze zaimplementowana. Sprawdź ponownie później.',
   },
   card: {
     lessonFrom: 'Lekcja z {date}',

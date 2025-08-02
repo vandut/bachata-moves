@@ -7,6 +7,12 @@ export interface NavItem {
   icon: string;
 }
 
+export interface Category {
+  id: string;
+  name: string;
+  isExpanded: boolean;
+}
+
 export interface Figure {
   id: string;
   lessonId: string;
@@ -15,6 +21,7 @@ export interface Figure {
   startTime: number; // Milliseconds
   endTime: number; // Milliseconds
   thumbTime: number; // Milliseconds from the start of the video
+  categoryId?: string | null;
 }
 
 export interface Lesson {
@@ -34,7 +41,10 @@ export interface AppSettings {
   language: 'english' | 'polish';
   lessonSortOrder: LessonSortOrder;
   figureSortOrder: FigureSortOrder;
+  lessonGrouping: 'none';
+  figureGrouping: 'none' | 'byCategory';
   autoplayGalleryVideos: boolean;
+  uncategorizedCategoryIsExpanded: boolean;
 }
 
 export interface AppData {
@@ -64,6 +74,10 @@ export interface IDataService {
   addFigure(lessonId: string, figureData: Omit<Figure, 'id' | 'lessonId'>): Promise<Figure>;
   updateFigure(figureId: string, figureUpdateData: Partial<Omit<Figure, 'id' | 'lessonId'>>): Promise<Figure>;
   deleteFigure(figureId: string): Promise<void>;
+
+  // Categories
+  getCategories(): Promise<Category[]>;
+  updateCategory(categoryId: string, categoryUpdateData: Partial<Omit<Category, 'id'>>): Promise<Category>;
 
   // Settings
   getSettings(): Promise<AppSettings>;

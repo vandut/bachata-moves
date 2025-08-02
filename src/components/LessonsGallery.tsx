@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data-service';
 import type { Lesson, LessonSortOrder } from '../types';
 import LessonCard from './LessonCard';
@@ -9,57 +9,41 @@ import DesktopTopNav from './DesktopTopNav';
 import SortControl from './SortControl';
 import { useTranslation } from '../App';
 import MuteToggleButton from './MuteToggleButton';
-
-const AddNewCard: React.FC = () => {
-  const { t } = useTranslation();
-  return (
-   <div 
-    className="
-      relative 
-      rounded-lg 
-      border-2 border-dashed border-gray-400 
-      hover:border-blue-500 hover:text-blue-500 
-      transition-all duration-300 
-      cursor-pointer 
-      group
-      bg-gray-50/50 h-full
-    "
-  >
-    <div className="aspect-[9/16] flex items-center justify-center">
-      <div className="text-center">
-        <i className="material-icons text-7xl text-gray-400 group-hover:text-blue-500 transition-colors duration-300">add_circle_outline</i>
-        <p className="mt-2 text-lg font-medium text-gray-600 group-hover:text-blue-500">{t('common.addNew')}</p>
-      </div>
-    </div>
-  </div>
-)};
+import GroupingControl from './GroupingControl';
 
 const LessonsGallery: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, settings, updateSettings } = useTranslation();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [sortOrder, setSortOrder] = useState<LessonSortOrder | null>(null);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
+  const navigate = useNavigate();
 
   const SORT_OPTIONS = [
     { value: 'newest', label: t('sort.newest') },
     { value: 'oldest', label: t('sort.oldest') },
   ];
   
+  const GROUPING_OPTIONS = [
+      { value: 'none', label: t('grouping.none') },
+  ];
+
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as LessonSortOrder;
-    setSortOrder(newSortOrder);
     try {
-      const currentSettings = await dataService.getSettings();
-      await dataService.saveSettings({ ...currentSettings, lessonSortOrder: newSortOrder });
+      await updateSettings({ lessonSortOrder: newSortOrder });
     } catch (err) {
       console.error("Failed to save lesson sort order:", err);
     }
   };
+  
+  const handleGroupingChange = async (newGroupingValue: string) => {
+      // For lessons, only 'none' is supported, but we keep the structure for consistency.
+      await updateSettings({ lessonGrouping: newGroupingValue as 'none' });
+  };
 
   const refreshLessons = useCallback(() => {
-    if (sortOrder === null) return; // Don't refresh if sort order isn't loaded yet
+    if (!settings) return;
     
     setIsLoading(true);
     dataService.getLessons()
@@ -69,48 +53,30 @@ const LessonsGallery: React.FC = () => {
           const dateB = new Date(b.uploadDate).getTime();
           
           if (dateA !== dateB) {
-            return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+            return settings.lessonSortOrder === 'newest' ? dateB - dateA : dateA - dateB;
           }
           
-          // If dates are the same, sort by ID (which is also chronological)
           const idA = parseInt(a.id.split('-')[0], 10);
           const idB = parseInt(b.id.split('-')[0], 10);
-          return sortOrder === 'newest' ? idB - idA : idA - idB;
+          return settings.lessonSortOrder === 'newest' ? idB - idA : idA - idB;
         });
         setLessons(sorted);
       })
       .catch(console.error)
       .finally(() => setIsLoading(false));
-  }, [sortOrder]);
+  }, [settings]);
   
-  // Effect to load settings on initial mount or when returning to the gallery
   useEffect(() => {
-    if (location.pathname === '/lessons') {
-      dataService.getSettings().then(settings => {
-        setSortOrder(settings.lessonSortOrder);
-      });
-    }
-  }, [location.pathname]);
-
-  // Effect to refresh data when sort order changes
-  useEffect(() => {
-    if (location.pathname === '/lessons' && sortOrder !== null) {
+    if (location.pathname === '/lessons' && settings) {
       refreshLessons();
     }
-  }, [location.pathname, sortOrder, refreshLessons]);
+  }, [location.pathname, settings, refreshLessons]);
 
-  const intelligentRefresh = useCallback(() => {
-    if (sortOrder) {
-      refreshLessons();
-    } else {
-      // If a child route calls refresh before settings are loaded, load them first.
-      // This will then trigger the other useEffect to perform the refresh.
-      dataService.getSettings().then(settings => {
-        setSortOrder(settings.lessonSortOrder);
-      });
-    }
-  }, [sortOrder, refreshLessons]);
+  const intelligentRefresh = refreshLessons;
 
+  const handleAddClick = () => {
+    navigate('/lessons/add');
+  };
 
   const outletContext = { refresh: intelligentRefresh, isMobile };
   const isChildRouteActive = location.pathname !== '/lessons';
@@ -127,20 +93,49 @@ const LessonsGallery: React.FC = () => {
 
   const actionMenu = (
     <div className="flex items-center space-x-2">
+      <button
+        onClick={handleAddClick}
+        className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-transparent shadow-sm bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        aria-label={t('common.addNew')}
+      >
+        <i className="material-icons">add</i>
+      </button>
       <MuteToggleButton />
+      <GroupingControl
+        options={GROUPING_OPTIONS}
+        value={settings.lessonGrouping}
+        onChange={handleGroupingChange}
+        onAction={() => {}}
+        isMobile={isMobile}
+      />
       <SortControl
         options={SORT_OPTIONS}
-        value={sortOrder || 'newest'}
+        value={settings.lessonSortOrder}
         onChange={handleSortChange}
+        isMobile={isMobile}
       />
     </div>
   );
   
   const itemIds = lessons.map(l => l.id);
   const baseRoute = '/lessons';
+  const gridClass = isMobile ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]";
+
+  const galleryGrid = (
+    <div className={`grid ${gridClass} gap-6`}>
+        {lessons.map((lesson) => (
+            <LessonCard 
+              key={lesson.id} 
+              lesson={lesson} 
+              onRefresh={refreshLessons}
+              itemIds={itemIds}
+              baseRoute={baseRoute}
+            />
+        ))}
+    </div>
+  );
 
   // --- Mobile View ---
-  // On mobile, child routes replace the gallery view.
   if (isMobile) {
     if (isChildRouteActive) {
       return <Outlet context={outletContext} />;
@@ -152,44 +147,17 @@ const LessonsGallery: React.FC = () => {
             {actionMenu}
           </div>
           <div className="px-4 pt-2 pb-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                  {lessons.map((lesson) => (
-                      <LessonCard 
-                        key={lesson.id} 
-                        lesson={lesson} 
-                        onRefresh={refreshLessons}
-                        itemIds={itemIds}
-                        baseRoute={baseRoute}
-                      />
-                  ))}
-                  <Link to="add" aria-label={t('common.addNew')}>
-                      <AddNewCard />
-                  </Link>
-              </div>
+              {galleryGrid}
           </div>
         </>
       );
     }
   } else {
     // --- Desktop View ---
-    // On desktop, the gallery is always visible, and child routes render as an overlay.
     const galleryContent = (
       <div className="p-8">
         <DesktopTopNav title={pageTitle} rightAction={actionMenu} />
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
-          {lessons.map((lesson) => (
-            <LessonCard 
-              key={lesson.id} 
-              lesson={lesson} 
-              onRefresh={refreshLessons}
-              itemIds={itemIds}
-              baseRoute={baseRoute}
-            />
-          ))}
-          <Link to="add" aria-label={t('common.addNew')}>
-            <AddNewCard />
-          </Link>
-        </div>
+        {galleryGrid}
       </div>
     );
     

@@ -13,6 +13,7 @@ import EditorScreen from './components/EditorScreen';
 import { VideoSettingsProvider } from './contexts/VideoSettingsContext';
 import { dataService } from './data-service';
 import { translations } from './i18n';
+import CustomizeCategoriesScreen from './components/CustomizeCategoriesScreen';
 
 // --- I18N Provider and Hook ---
 type Language = 'english' | 'polish';
@@ -130,6 +131,7 @@ const AppContent: React.FC<{ isDesktop: boolean }> = ({ isDesktop }) => {
             <Route path="add" element={<AddFigureModal />} />
             <Route path="create" element={<EditorScreen />} />
             <Route path=":figureId/edit" element={<EditorScreen />} />
+            <Route path="categories" element={<CustomizeCategoriesScreen />} />
           </Route>
           <Route path="settings" element={<SettingsView />} />
         </Routes>

@@ -1,6 +1,8 @@
 
 
-import type { Lesson, Figure, AppSettings, IDataService } from './types';
+
+
+import type { Lesson, Figure, AppSettings, IDataService, Category } from './types';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
 
 // --- Helper Functions ---
@@ -19,9 +21,10 @@ const getInitialLanguage = (): 'english' | 'polish' => {
 
 // --- IndexedDB Configuration ---
 const DB_NAME = 'bachata-moves-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const LESSONS_STORE = 'lessons';
 const FIGURES_STORE = 'figures';
+const CATEGORIES_STORE = 'categories';
 const SETTINGS_STORE = 'settings';
 const VIDEOS_STORE = 'videos';
 const THUMBNAILS_STORE = 'thumbnails';
@@ -48,6 +51,11 @@ async function openBachataDB(): Promise<IDBPDatabase> {
       }
       if (oldVersion < 3 && !db.objectStoreNames.contains(FIGURE_THUMBNAILS_STORE)) {
           db.createObjectStore(FIGURE_THUMBNAILS_STORE);
+      }
+      if (oldVersion < 4) {
+        if (!db.objectStoreNames.contains(CATEGORIES_STORE)) {
+          db.createObjectStore(CATEGORIES_STORE, { keyPath: 'id' });
+        }
       }
     },
   });
@@ -223,7 +231,7 @@ class AppDataService implements IDataService {
     const videoFile = await db.get(VIDEOS_STORE, lessonId);
     if (!videoFile) throw new Error(`Video for lesson "${lessonId}" not found.`);
 
-    const newFigure: Figure = { ...figureData, id: generateId(), lessonId };
+    const newFigure: Figure = { ...figureData, id: generateId(), lessonId, categoryId: null };
     const thumbnailBlob = await generateThumbnailBlob(videoFile, newFigure.thumbTime);
 
     // Start a short, focused transaction for writes only.
@@ -279,6 +287,33 @@ class AppDataService implements IDataService {
     await tx.done;
   }
   
+  // --- Categories ---
+  async getCategories(): Promise<Category[]> {
+    const db = await openBachataDB();
+    let categories = await db.getAll(CATEGORIES_STORE);
+    if (categories.length === 0) {
+      // Create a default category if none exist
+      const defaultCategory: Category = {
+        id: generateId(),
+        name: 'Learned',
+        isExpanded: true,
+      };
+      await db.put(CATEGORIES_STORE, defaultCategory);
+      categories = [defaultCategory];
+    }
+    return categories;
+  }
+
+  async updateCategory(categoryId: string, categoryUpdateData: Partial<Omit<Category, 'id'>>): Promise<Category> {
+    const db = await openBachataDB();
+    const category = await db.get(CATEGORIES_STORE, categoryId);
+    if (!category) throw new Error(`Category with id "${categoryId}" not found.`);
+
+    const updatedCategory = { ...category, ...categoryUpdateData };
+    await db.put(CATEGORIES_STORE, updatedCategory);
+    return updatedCategory;
+  }
+
   // --- Settings ---
   async getSettings(): Promise<AppSettings> { 
     const db = await openBachataDB();
@@ -287,7 +322,10 @@ class AppDataService implements IDataService {
       language: getInitialLanguage(),
       lessonSortOrder: 'newest',
       figureSortOrder: 'newest',
+      lessonGrouping: 'none',
+      figureGrouping: 'none',
       autoplayGalleryVideos: false,
+      uncategorizedCategoryIsExpanded: true,
     };
 
     return { ...defaultSettings, ...(savedSettings || {}) };
@@ -407,6 +445,7 @@ class AppDataService implements IDataService {
     const [
       lessons,
       figures,
+      categories,
       settings,
       videoEntries,
       thumbnailEntries,
@@ -414,6 +453,7 @@ class AppDataService implements IDataService {
     ] = await Promise.all([
       tx.objectStore(LESSONS_STORE).getAll(),
       tx.objectStore(FIGURES_STORE).getAll(),
+      tx.objectStore(CATEGORIES_STORE).getAll(),
       tx.objectStore(SETTINGS_STORE).get(SETTINGS_KEY),
       getAllEntries<Blob>(VIDEOS_STORE),
       getAllEntries<Blob>(THUMBNAILS_STORE),
@@ -446,11 +486,12 @@ class AppDataService implements IDataService {
     // 3. Construct the final export object.
     const exportObject = {
         '__BACHATA_MOVES_EXPORT__': true,
-        'version': 1,
+        'version': 2,
         'exportDate': new Date().toISOString(),
         'data': {
             lessons: lessons || [],
             figures: figures || [],
+            categories: categories || [],
             settings: settings || {},
             videos: videos || [],
             thumbnails: thumbnails || [],
@@ -473,6 +514,7 @@ class AppDataService implements IDataService {
     const {
         lessons = [],
         figures = [],
+        categories = [],
         settings = {},
         videos: videoEntries = [],
         thumbnails: thumbnailEntries = [],
@@ -529,6 +571,7 @@ class AppDataService implements IDataService {
             tx.objectStore(SETTINGS_STORE).put(newSettings, SETTINGS_KEY),
             ...lessons.map((item: Lesson) => tx.objectStore(LESSONS_STORE).put(item)),
             ...figures.map((item: Figure) => tx.objectStore(FIGURES_STORE).put(item)),
+            ...categories.map((item: Category) => tx.objectStore(CATEGORIES_STORE).put(item)),
             ...videoBlobs.map(([key, blob]) => tx.objectStore(VIDEOS_STORE).put(blob, key)),
             ...thumbnailBlobs.map(([key, blob]) => tx.objectStore(THUMBNAILS_STORE).put(blob, key)),
             ...figureThumbnailBlobs.map(([key, blob]) => tx.objectStore(FIGURE_THUMBNAILS_STORE).put(blob, key)),

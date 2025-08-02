@@ -1,22 +1,24 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Figure, Lesson } from '../types';
+import type { Figure, Lesson, Category } from '../types';
 import { dataService } from '../data-service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
-import ContextMenu from './ContextMenu';
+import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface FigureCardProps {
   figure: Figure;
   parentLesson?: Lesson;
+  categories: Category[];
   onRefresh: () => void;
   itemIds: string[];
   baseRoute: string;
 }
 
-const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh, itemIds, baseRoute }) => {
+const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, categories, onRefresh, itemIds, baseRoute }) => {
   const { t, settings } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -29,6 +31,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh
   const isVisible = useIntersectionObserver(cardRef, { threshold: 0.1 });
   const playInFullscreen = useFullscreenPlayer();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const [menuState, setMenuState] = useState({ isOpen: false, position: { x: 0, y: 0 }});
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -159,6 +162,16 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh
     setShowDeleteConfirm(true);
   };
 
+  const handleChangeCategory = async (newCategoryId: string | null) => {
+    try {
+      await dataService.updateFigure(figure.id, { categoryId: newCategoryId });
+      onRefresh();
+    } catch (err) {
+      console.error("Failed to update figure category:", err);
+      // Optionally show an error to the user
+    }
+  };
+
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
@@ -179,9 +192,23 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh
   }, []);
 
   const closeContextMenu = useCallback(() => setMenuState(prev => ({ ...prev, isOpen: false })), []);
+  
+  const categorySubMenu: ContextMenuAction[] = [
+    {
+      label: t('common.uncategorized'),
+      onClick: () => handleChangeCategory(null),
+      isChecked: !figure.categoryId,
+    },
+    ...categories.map(cat => ({
+      label: cat.name,
+      onClick: () => handleChangeCategory(cat.id),
+      isChecked: figure.categoryId === cat.id,
+    })),
+  ];
 
-  const menuActions = [
+  const menuActions: ContextMenuAction[] = [
     { label: t('common.open'), onClick: handleOpen, icon: 'open_in_full' },
+    { label: t('common.category'), icon: 'folder', submenu: categorySubMenu },
     { label: t('common.edit'), onClick: handleEdit, icon: 'edit' },
     { label: t('common.remove'), onClick: handleRequestRemove, isDestructive: true, icon: 'delete' },
   ];
@@ -247,6 +274,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, onRefresh
         onClose={closeContextMenu}
         position={menuState.position}
         actions={menuActions}
+        isMobile={isMobile}
       />
       <ConfirmDeleteModal
         isOpen={showDeleteConfirm}
