@@ -1,8 +1,5 @@
-
-
 import React, { useState, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { dataService } from '../data/service';
 import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
@@ -17,7 +14,7 @@ const AddLessonModal: React.FC = () => {
   const { refresh, isMobile } = useOutletContext<GalleryContext>();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { isSignedIn, uploadLesson } = useGoogleDrive();
+  const { forceAddItem } = useGoogleDrive();
 
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -139,23 +136,19 @@ const AddLessonModal: React.FC = () => {
     setError(null);
 
     try {
-      const lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime' | 'modifiedTime'> = {
+      const lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime' | 'driveId' | 'videoDriveId' | 'modifiedTime'> = {
         uploadDate: new Date(date).toISOString(),
         description: description || null,
         startTime: 0,
         endTime: videoDurationMs,
       };
       
-      const newLesson = await dataService.addLesson(lessonData, videoFile);
-
-      if (isSignedIn) {
-          await uploadLesson(newLesson, videoFile);
-      }
+      await forceAddItem(lessonData, 'lesson', { videoFile });
 
       if (refresh) {
         refresh();
       }
-      navigate('/lessons');
+      navigate('/lessons', { state: { skipSync: true } });
     } catch (err) {
       console.error("Failed to add lesson:", err);
       setError(err instanceof Error ? err.message : t('addLessonModal.errorSave'));

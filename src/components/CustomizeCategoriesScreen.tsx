@@ -1,6 +1,4 @@
-
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
@@ -24,8 +22,8 @@ const CustomizeGroupingScreen: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { isMobile } = useOutletContext<GalleryContext>();
-    const { t, settings, updateSettings, reloadAllData } = useTranslation();
-    const { isSignedIn, uploadCategories, uploadSettings } = useGoogleDrive();
+    const { t, updateSettings, reloadAllData } = useTranslation();
+    const { isSignedIn, fetchLatestSettingsForEditing, forceUploadSettingsAndCategories } = useGoogleDrive();
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);
 
@@ -34,6 +32,7 @@ const CustomizeGroupingScreen: React.FC = () => {
     const [showEmpty, setShowEmpty] = useState(false);
     const [showCount, setShowCount] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -44,11 +43,6 @@ const CustomizeGroupingScreen: React.FC = () => {
                 addCategory: dataService.addLessonCategory,
                 updateCategory: dataService.updateLessonCategory,
                 deleteCategory: dataService.deleteLessonCategory,
-                settings: {
-                    order: settings.lessonCategoryOrder,
-                    showEmpty: settings.showEmptyLessonCategoriesInGroupedView,
-                    showCount: settings.showLessonCountInGroupHeaders,
-                },
                 updateSettingsKeys: {
                     order: 'lessonCategoryOrder' as keyof AppSettings,
                     showEmpty: 'showEmptyLessonCategoriesInGroupedView' as keyof AppSettings,
@@ -60,60 +54,87 @@ const CustomizeGroupingScreen: React.FC = () => {
                 addCategory: dataService.addFigureCategory,
                 updateCategory: dataService.updateFigureCategory,
                 deleteCategory: dataService.deleteFigureCategory,
-                settings: {
-                    order: settings.figureCategoryOrder,
-                    showEmpty: settings.showEmptyFigureCategoriesInGroupedView,
-                    showCount: settings.showFigureCountInGroupHeaders,
-                },
                 updateSettingsKeys: {
                     order: 'figureCategoryOrder' as keyof AppSettings,
                     showEmpty: 'showEmptyFigureCategoriesInGroupedView' as keyof AppSettings,
                     showCount: 'showFigureCountInGroupHeaders' as keyof AppSettings,
                 }
             };
-    }, [type, settings]);
-    
+    }, [type]);
+
     useEffect(() => {
-        setIsLoading(true);
-        config.getCategories().then(fetchedCategories => {
-            setInitialCategories(fetchedCategories);
-            
-            const uncategorizedItem: GenericCategory = {
-                id: UNCATEGORIZED_ID,
-                name: t('common.uncategorized'),
-                isSpecial: true,
-            };
+        const loadAndSyncData = async () => {
+            setIsLoading(true);
+            setError(null);
 
-            const allItemsMap = new Map<string, GenericCategory>();
-            fetchedCategories.forEach(cat => allItemsMap.set(cat.id, cat));
-            allItemsMap.set(uncategorizedItem.id, uncategorizedItem);
-            
-            let currentOrder = config.settings.order && config.settings.order.length > 0 ? config.settings.order : [];
-            const orderedItems: GenericCategory[] = [];
-            const processedIds = new Set<string>();
-
-            for (const id of currentOrder) {
-                if (allItemsMap.has(id)) {
-                    orderedItems.push(allItemsMap.get(id)!);
-                    processedIds.add(id);
+            try {
+                // Step 1: If signed in, check if remote data is newer and download if so.
+                // This function does NOT upload.
+                if (isSignedIn) {
+                    setIsSyncing(true);
+                    try {
+                        await fetchLatestSettingsForEditing(type);
+                    } catch (e: any) {
+                        console.error("Sync check failed on screen open:", e);
+                        setError(t('customizeCategories.errorSync'));
+                    } finally {
+                        setIsSyncing(false);
+                    }
                 }
-            }
 
-            for (const id of allItemsMap.keys()) {
-                if (!processedIds.has(id)) {
-                    orderedItems.push(allItemsMap.get(id)!);
+                // Step 2: After potential download, fetch data *directly* from the service to build the UI.
+                // This data is now the definitive version to be used as a snapshot for editing.
+                const [localDBSettings, fetchedCategories] = await Promise.all([
+                    dataService.getSettings(),
+                    config.getCategories()
+                ]);
+
+                setInitialCategories(fetchedCategories);
+
+                const uncategorizedItem: GenericCategory = {
+                    id: UNCATEGORIZED_ID,
+                    name: t('common.uncategorized'),
+                    isSpecial: true,
+                };
+
+                const allItemsMap = new Map<string, GenericCategory>();
+                fetchedCategories.forEach(cat => allItemsMap.set(cat.id, cat));
+                allItemsMap.set(uncategorizedItem.id, uncategorizedItem);
+                
+                const currentOrder = (type === 'lesson' ? localDBSettings.lessonCategoryOrder : localDBSettings.figureCategoryOrder) || [];
+                const currentShowEmpty = type === 'lesson' ? localDBSettings.showEmptyLessonCategoriesInGroupedView : localDBSettings.showEmptyFigureCategoriesInGroupedView;
+                const currentShowCount = type === 'lesson' ? localDBSettings.showLessonCountInGroupHeaders : localDBSettings.showFigureCountInGroupHeaders;
+                
+                const orderedItems: GenericCategory[] = [];
+                const processedIds = new Set<string>();
+
+                for (const id of currentOrder) {
+                    if (allItemsMap.has(id)) {
+                        orderedItems.push(allItemsMap.get(id)!);
+                        processedIds.add(id);
+                    }
                 }
-            }
 
-            setLocalItems(orderedItems);
-            setShowEmpty(config.settings.showEmpty);
-            setShowCount(config.settings.showCount);
-        }).catch(err => {
-            setError(err.message);
-        }).finally(() => {
-            setIsLoading(false);
-        });
-    }, [config, t]);
+                for (const id of allItemsMap.keys()) {
+                    if (!processedIds.has(id)) {
+                        orderedItems.push(allItemsMap.get(id)!);
+                    }
+                }
+                
+                setLocalItems(orderedItems);
+                setShowEmpty(!!currentShowEmpty);
+                setShowCount(!!currentShowCount);
+
+            } catch (err: any) {
+                setError(err.message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        loadAndSyncData();
+    }, [isSignedIn, type, fetchLatestSettingsForEditing, t, config]);
+
 
     const handleClose = () => navigate(type === 'lesson' ? '/lessons' : '/figures');
     
@@ -127,6 +148,7 @@ const CustomizeGroupingScreen: React.FC = () => {
         setIsSaving(true);
 
         try {
+            // --- Step 1: Apply changes to local DB first ---
             const initialIds = new Set(initialCategories.map(c => c.id));
             const finalRealItems = localItems.filter(item => !item.isSpecial);
             const finalIds = new Set(finalRealItems.map(item => item.id));
@@ -156,14 +178,15 @@ const CustomizeGroupingScreen: React.FC = () => {
                 [config.updateSettingsKeys.showEmpty]: showEmpty,
                 [config.updateSettingsKeys.showCount]: showCount,
             };
-
             await updateSettings(newSettings);
             
+            // --- Step 2: If signed in, perform a blocking UPLOAD to Drive ---
+            // This treats the user's save action as the source of truth.
             if (isSignedIn) {
-                await uploadCategories(type);
-                await uploadSettings();
+                await forceUploadSettingsAndCategories(type);
             }
-
+            
+            // Reload global app state to reflect changes on the next screen.
             reloadAllData();
             handleClose();
 
@@ -204,8 +227,8 @@ const CustomizeGroupingScreen: React.FC = () => {
     };
     
     const isSaveDisabled = useMemo(() => {
-      return isSaving || localItems.some(item => !item.isSpecial && item.name.trim() === '');
-    }, [isSaving, localItems]);
+      return isSaving || isLoading || isSyncing || localItems.some(item => !item.isSpecial && item.name.trim() === '');
+    }, [isSaving, isLoading, isSyncing, localItems]);
 
     const primaryAction: ModalAction = {
         label: t('common.save'),
@@ -215,10 +238,13 @@ const CustomizeGroupingScreen: React.FC = () => {
     };
 
     const renderContent = () => {
-        if (isLoading) {
+        if (isLoading || isSyncing) {
             return (
-                <div className="flex items-center justify-center h-48">
+                <div className="flex flex-col items-center justify-center h-48">
                     <i className="material-icons text-4xl text-gray-400 animate-spin">sync</i>
+                    <p className="mt-4 text-gray-600">
+                        {isSyncing ? t('sync.syncingSettings') : t('common.loading')}
+                    </p>
                 </div>
             );
         }

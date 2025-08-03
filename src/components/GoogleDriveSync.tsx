@@ -14,7 +14,7 @@ const GoogleIcon: React.FC = () => (
 );
 
 const GoogleDriveSync: React.FC = () => {
-    const { isSignedIn, isSyncing, syncProgress, userProfile, syncError, signIn, signOut, synchronize } = useGoogleDrive();
+    const { isSignedIn, isSyncActive, userProfile, syncError, signIn, signOut } = useGoogleDrive();
     const { t } = useTranslation();
     
     if (syncError) {
@@ -50,34 +50,13 @@ const GoogleDriveSync: React.FC = () => {
             </div>
             <div className="space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
                 <button
-                    onClick={() => synchronize()}
-                    disabled={isSyncing}
-                    className="w-full sm:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                   {isSyncing && <i className="material-icons animate-spin">sync</i>}
-                   {isSyncing ? t('settings.syncing') : t('settings.syncData')}
-                </button>
-                <button
                     onClick={() => signOut()}
-                    disabled={isSyncing}
+                    disabled={isSyncActive}
                     className="w-full sm:w-auto bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
                 >
                     {t('settings.signOut')}
                 </button>
             </div>
-            {isSyncing && (
-                  <div className="mt-4">
-                      <div className="text-center text-sm text-gray-600 mb-1">
-                          <span>{t('settings.syncInProgress', { progress: Math.round(syncProgress) })}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                          <div
-                              className="bg-blue-600 h-2.5 rounded-full transition-all duration-200 ease-linear"
-                              style={{ width: `${syncProgress}%` }}
-                          ></div>
-                      </div>
-                  </div>
-              )}
         </div>
     );
 };

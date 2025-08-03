@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
@@ -8,6 +6,7 @@ import type { Lesson, Figure, ModalAction } from '../types';
 import CustomSlider from './CustomSlider';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useTranslation } from '../App';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 // This context is provided by the parent gallery component (Lessons or Figures)
 interface GalleryContext {
@@ -22,6 +21,7 @@ const PlayerScreen: React.FC = () => {
   const location = useLocation();
   const { isMobile, refresh, itemIds } = useOutletContext<GalleryContext>();
   const { t, locale, settings, updateSettings } = useTranslation();
+  const { forceDeleteItem } = useGoogleDrive();
   const { isMuted, volume } = settings;
 
   const [item, setItem] = useState<Lesson | Figure | null>(null);
@@ -240,11 +240,7 @@ const PlayerScreen: React.FC = () => {
     setIsDeleting(true);
     setError(null);
     try {
-      if ('uploadDate' in item) {
-        await dataService.deleteLesson(item.id);
-      } else {
-        await dataService.deleteFigure(item.id);
-      }
+      await forceDeleteItem(item);
       if (refresh) refresh();
       handleClose();
     } catch (e) {

@@ -1,8 +1,9 @@
-
-
-import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory } from '../types';
+import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, SyncTask } from '../types';
 import type { IDataService } from './service';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('DataService');
 
 // --- Helper Functions ---
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -20,7 +21,7 @@ const getInitialLanguage = (): 'english' | 'polish' => {
 
 // --- IndexedDB Configuration ---
 const DB_NAME = 'bachata-moves-db';
-const DB_VERSION = 9; // Incremented version for sync properties
+const DB_VERSION = 11; // Incremented version for deleted IDs store
 const LESSONS_STORE = 'lessons';
 const FIGURES_STORE = 'figures';
 const FIGURE_CATEGORIES_STORE = 'figure_categories';
@@ -29,13 +30,15 @@ const SETTINGS_STORE = 'settings';
 const VIDEO_FILES_STORE = 'video_files';
 const LESSON_THUMBNAILS_STORE = 'lesson_thumbnails';
 const FIGURE_THUMBNAILS_STORE = 'figure_thumbnails';
+const DELETED_DRIVE_IDS_STORE = 'deleted_drive_ids';
+
 
 const DEVICE_SETTINGS_KEY = 'device-settings';
 const SYNC_SETTINGS_KEY = 'sync-settings';
 
 const LEGACY_VIDEOS_STORE = 'videos';
 
-async function openBachataDB(): Promise<IDBPDatabase> {
+export async function openBachataDB(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
     upgrade: async (db, oldVersion, newVersion, tx) => {
       // Store Creation (Idempotent)
@@ -63,6 +66,9 @@ async function openBachataDB(): Promise<IDBPDatabase> {
       if (!db.objectStoreNames.contains(FIGURE_THUMBNAILS_STORE)) {
         db.createObjectStore(FIGURE_THUMBNAILS_STORE);
       }
+      if (!db.objectStoreNames.contains(DELETED_DRIVE_IDS_STORE)) {
+        db.createObjectStore(DELETED_DRIVE_IDS_STORE);
+      }
 
       // Cleanup Legacy Stores
       if (db.objectStoreNames.contains(LEGACY_VIDEOS_STORE)) {
@@ -74,6 +80,9 @@ async function openBachataDB(): Promise<IDBPDatabase> {
       if (!lessonsStore.indexNames.contains('categoryId')) {
         lessonsStore.createIndex('categoryId', 'categoryId', { unique: false });
       }
+      if (!lessonsStore.indexNames.contains('driveId')) {
+        lessonsStore.createIndex('driveId', 'driveId', { unique: true, multiEntry: false });
+      }
 
       const figuresStore = tx.objectStore(FIGURES_STORE);
       if (!figuresStore.indexNames.contains('lessonId')) {
@@ -81,6 +90,9 @@ async function openBachataDB(): Promise<IDBPDatabase> {
       }
       if (!figuresStore.indexNames.contains('categoryId')) {
         figuresStore.createIndex('categoryId', 'categoryId', { unique: false });
+      }
+       if (!figuresStore.indexNames.contains('driveId')) {
+        figuresStore.createIndex('driveId', 'driveId', { unique: true, multiEntry: false });
       }
 
       // Version-based Migrations
@@ -175,6 +187,39 @@ export class AppDataService implements IDataService {
   private videoUrlCache = new Map<string, string>();
   private thumbUrlCache = new Map<string, string>();
   private figureThumbUrlCache = new Map<string, string>();
+  private listeners = new Set<() => void>();
+
+  // --- Subscription ---
+  public subscribe(callback: () => void): () => void {
+    this.listeners.add(callback);
+    return () => this.listeners.delete(callback);
+  }
+
+  private notify(): void {
+    logger.info("Notifying listeners of data change.");
+    // Use a timeout to batch notifications and prevent rapid-fire updates
+    setTimeout(() => {
+      this.listeners.forEach(cb => cb());
+    }, 100);
+  }
+
+  // --- Tombstone / Deleted IDs ---
+  async addDeletedDriveId(driveId: string): Promise<void> {
+    logger.info(`Adding driveId ${driveId} to tombstone log.`);
+    const db = await openBachataDB();
+    await db.put(DELETED_DRIVE_IDS_STORE, { id: driveId, deletedAt: new Date().toISOString() }, driveId);
+  }
+
+  async getDeletedDriveIds(): Promise<string[]> {
+    const db = await openBachataDB();
+    const keys = await db.getAllKeys(DELETED_DRIVE_IDS_STORE);
+    return keys as string[];
+  }
+
+  async removeDeletedDriveId(driveId: string): Promise<void> {
+    const db = await openBachataDB();
+    await db.delete(DELETED_DRIVE_IDS_STORE, driveId);
+  }
 
   // --- Lessons ---
   async getLessons(): Promise<Lesson[]> { 
@@ -205,6 +250,7 @@ export class AppDataService implements IDataService {
     ]);
     await tx.done;
 
+    this.notify();
     return newLesson;
   }
   
@@ -237,16 +283,29 @@ export class AppDataService implements IDataService {
     await Promise.all(writePromises);
     await tx.done;
 
+    this.notify();
     return updatedLesson;
   }
 
-  async deleteLesson(lessonId: string): Promise<void> {
+  async deleteLesson(lessonId: string, options?: { skipTombstone?: boolean }): Promise<void> {
+    logger.info(`Deleting lesson ${lessonId}, skipTombstone: ${!!options?.skipTombstone}`);
     const db = await openBachataDB();
     const lesson = await db.get(LESSONS_STORE, lessonId);
     if (!lesson) {
+        logger.warn(`Lesson ${lessonId} not found for deletion.`);
         return;
     }
     
+    // Add to tombstone list *before* deleting, if it has a driveId and we are NOT skipping.
+    if (lesson.driveId && !options?.skipTombstone) {
+        logger.info(`Lesson ${lessonId} has driveId ${lesson.driveId}. Adding to tombstone.`);
+        await this.addDeletedDriveId(lesson.driveId);
+        if (lesson.videoDriveId) {
+            logger.info(`Lesson ${lessonId} has videoDriveId ${lesson.videoDriveId}. Adding to tombstone.`);
+            await this.addDeletedDriveId(lesson.videoDriveId);
+        }
+    }
+
     this.revokeAndClearCache(lesson.videoId, 'video');
     this.revokeAndClearCache(lessonId, 'thumbnail');
 
@@ -261,31 +320,51 @@ export class AppDataService implements IDataService {
       tx.objectStore(LESSONS_STORE).delete(lessonId),
       otherLessonsUsingVideo.length === 0 ? tx.objectStore(VIDEO_FILES_STORE).delete(lesson.videoId) : Promise.resolve(),
       tx.objectStore(LESSON_THUMBNAILS_STORE).delete(lessonId),
-      ...figuresToDelete.map(fig => {
+      ...figuresToDelete.map(async (fig) => {
+        if (fig.driveId && !options?.skipTombstone) { // Also respect skipTombstone for child figures
+            logger.info(`Child figure ${fig.id} of lesson ${lessonId} has driveId ${fig.driveId}. Adding to tombstone.`);
+            await this.addDeletedDriveId(fig.driveId);
+        }
         this.revokeAndClearCache(fig.id, 'figure-thumbnail');
-        return tx.objectStore(FIGURE_THUMBNAILS_STORE).delete(fig.id);
-      }),
-      ...figuresToDelete.map(fig => tx.objectStore(FIGURES_STORE).delete(fig.id))
+        await tx.objectStore(FIGURE_THUMBNAILS_STORE).delete(fig.id);
+        await tx.objectStore(FIGURES_STORE).delete(fig.id);
+      })
     ];
     
     await Promise.all(deletePromises);
     await tx.done;
+    logger.info(`Successfully deleted lesson ${lessonId} and ${figuresToDelete.length} associated figures from local DB.`);
+    this.notify();
   }
 
-  async saveDownloadedLesson(lesson: Lesson, videoFile: Blob): Promise<void> {
+  async saveDownloadedLesson(lesson: Lesson, videoFile?: Blob): Promise<void> {
     this.revokeAndClearCache(lesson.videoId, 'video');
     this.revokeAndClearCache(lesson.id, 'thumbnail');
 
     const db = await openBachataDB();
-    const thumbnailBlob = await generateThumbnailBlob(new File([videoFile], `${lesson.videoId}.bin`, { type: videoFile.type }), lesson.thumbTime);
+    
+    // Use the provided video file, or fetch the existing one from the DB if it's not provided.
+    const videoBlobForThumbnail = videoFile ?? await db.get(VIDEO_FILES_STORE, lesson.videoId);
+    if (!videoBlobForThumbnail) {
+        throw new Error(`Video blob for lesson ${lesson.id} could not be found to generate a thumbnail.`);
+    }
+
+    const thumbnailBlob = await generateThumbnailBlob(new File([videoBlobForThumbnail], `${lesson.videoId}.bin`, { type: videoBlobForThumbnail.type }), lesson.thumbTime);
 
     const tx = db.transaction([LESSONS_STORE, VIDEO_FILES_STORE, LESSON_THUMBNAILS_STORE], 'readwrite');
-    await Promise.all([
-      tx.objectStore(LESSONS_STORE).put(lesson),
-      tx.objectStore(VIDEO_FILES_STORE).put(videoFile, lesson.videoId),
-      tx.objectStore(LESSON_THUMBNAILS_STORE).put(thumbnailBlob, lesson.id),
-    ]);
+    const writePromises = [
+        tx.objectStore(LESSONS_STORE).put(lesson),
+        tx.objectStore(LESSON_THUMBNAILS_STORE).put(thumbnailBlob, lesson.id),
+    ];
+    
+    // Only write the video file if a new one was actually downloaded and provided.
+    if (videoFile) {
+        writePromises.push(tx.objectStore(VIDEO_FILES_STORE).put(videoFile, lesson.videoId));
+    }
+
+    await Promise.all(writePromises);
     await tx.done;
+    this.notify();
   }
 
   // --- Figures ---
@@ -315,6 +394,7 @@ export class AppDataService implements IDataService {
     ]);
     await tx.done;
     
+    this.notify();
     return newFigure;
   }
 
@@ -348,18 +428,34 @@ export class AppDataService implements IDataService {
     
     await Promise.all(writePromises);
     await tx.done;
+    
+    this.notify();
     return updatedFigure;
   }
 
-  async deleteFigure(figureId: string): Promise<void> {
-    this.revokeAndClearCache(figureId, 'figure-thumbnail');
+  async deleteFigure(figureId: string, options?: { skipTombstone?: boolean }): Promise<void> {
+    logger.info(`Deleting figure ${figureId}, skipTombstone: ${!!options?.skipTombstone}`);
     const db = await openBachataDB();
+    const figure = await db.get(FIGURES_STORE, figureId);
+    if (!figure) {
+        logger.warn(`Figure ${figureId} not found for deletion.`);
+        return;
+    }
+
+    if (figure.driveId && !options?.skipTombstone) {
+        logger.info(`Figure ${figureId} has driveId ${figure.driveId}. Adding to tombstone.`);
+        await this.addDeletedDriveId(figure.driveId);
+    }
+    this.revokeAndClearCache(figureId, 'figure-thumbnail');
+    
     const tx = db.transaction([FIGURES_STORE, FIGURE_THUMBNAILS_STORE], 'readwrite');
     await Promise.all([
       tx.objectStore(FIGURES_STORE).delete(figureId),
       tx.objectStore(FIGURE_THUMBNAILS_STORE).delete(figureId)
     ]);
     await tx.done;
+    logger.info(`Successfully deleted figure ${figureId} from local DB.`);
+    this.notify();
   }
 
   async saveDownloadedFigure(figure: Figure): Promise<void> {
@@ -379,6 +475,7 @@ export class AppDataService implements IDataService {
       tx.objectStore(FIGURE_THUMBNAILS_STORE).put(thumbnailBlob, figure.id),
     ]);
     await tx.done;
+    this.notify();
   }
   
   // --- Figure Categories ---
@@ -395,6 +492,7 @@ export class AppDataService implements IDataService {
       modifiedTime: new Date().toISOString(),
     };
     await db.put(FIGURE_CATEGORIES_STORE, newCategory);
+    this.notify();
     return newCategory;
   }
 
@@ -405,11 +503,19 @@ export class AppDataService implements IDataService {
 
     const updatedCategory = { ...category, ...categoryUpdateData, modifiedTime: new Date().toISOString() };
     await db.put(FIGURE_CATEGORIES_STORE, updatedCategory);
+    this.notify();
     return updatedCategory;
   }
 
   async deleteFigureCategory(categoryId: string): Promise<void> {
     const db = await openBachataDB();
+    const category = await db.get(FIGURE_CATEGORIES_STORE, categoryId);
+    if (!category) return;
+    
+    if (category.driveId) {
+        await this.addDeletedDriveId(category.driveId);
+    }
+    
     const tx = db.transaction([FIGURE_CATEGORIES_STORE, FIGURES_STORE], 'readwrite');
     
     const figuresToUpdate = await tx.objectStore(FIGURES_STORE).index('categoryId').getAll(categoryId);
@@ -422,6 +528,7 @@ export class AppDataService implements IDataService {
     await Promise.all(updatePromises);
     await tx.objectStore(FIGURE_CATEGORIES_STORE).delete(categoryId);
     await tx.done;
+    this.notify();
   }
 
   // --- Lesson Categories ---
@@ -438,6 +545,7 @@ export class AppDataService implements IDataService {
       modifiedTime: new Date().toISOString(),
     };
     await db.put(LESSON_CATEGORIES_STORE, newCategory);
+    this.notify();
     return newCategory;
   }
 
@@ -448,11 +556,19 @@ export class AppDataService implements IDataService {
 
     const updatedCategory = { ...category, ...categoryUpdateData, modifiedTime: new Date().toISOString() };
     await db.put(LESSON_CATEGORIES_STORE, updatedCategory);
+    this.notify();
     return updatedCategory;
   }
 
   async deleteLessonCategory(categoryId: string): Promise<void> {
     const db = await openBachataDB();
+    const category = await db.get(LESSON_CATEGORIES_STORE, categoryId);
+    if (!category) return;
+    
+    if (category.driveId) {
+        await this.addDeletedDriveId(category.driveId);
+    }
+    
     const tx = db.transaction([LESSON_CATEGORIES_STORE, LESSONS_STORE], 'readwrite');
     
     const lessonsToUpdate = await tx.objectStore(LESSONS_STORE).index('categoryId').getAll(categoryId);
@@ -465,6 +581,7 @@ export class AppDataService implements IDataService {
     await Promise.all(updatePromises);
     await tx.objectStore(LESSON_CATEGORIES_STORE).delete(categoryId);
     await tx.done;
+    this.notify();
   }
 
   // --- Settings ---
@@ -513,7 +630,7 @@ export class AppDataService implements IDataService {
   async saveSettings(settingsData: AppSettings): Promise<void> {
     const db = await openBachataDB();
     const deviceSettings: Partial<AppSettings> = {};
-    const syncSettings: Partial<AppSettings> = {};
+    const syncSettings: Partial<AppSettings> & { modifiedTime?: string } = {};
     const deviceSettingKeys: (keyof AppSettings)[] = [
         'language',
         'autoplayGalleryVideos',
@@ -540,12 +657,16 @@ export class AppDataService implements IDataService {
         }
     }
     
+    // Add a modifiedTime to the syncable settings object for comparison
+    syncSettings.modifiedTime = new Date().toISOString();
+    
     const tx = db.transaction(SETTINGS_STORE, 'readwrite');
     await Promise.all([
         tx.objectStore(SETTINGS_STORE).put(deviceSettings, DEVICE_SETTINGS_KEY),
         tx.objectStore(SETTINGS_STORE).put(syncSettings, SYNC_SETTINGS_KEY)
     ]);
     await tx.done;
+    this.notify();
   }
   
   // --- File/Blob Handling ---
@@ -637,6 +758,7 @@ export class AppDataService implements IDataService {
     // The `deleteDB` function from the `idb` library closes any open connections
     // before deleting the database, so we don't need to manage DB instances here.
     await deleteDB(DB_NAME);
+    this.notify();
   }
 
   // --- Data Management ---
@@ -856,6 +978,7 @@ export class AppDataService implements IDataService {
 
         await tx.done;
         onProgress?.(1);
+        this.notify();
     } catch (err) {
         console.error('Import transaction failed:', err);
         onProgress?.(0); // Reset progress on failure

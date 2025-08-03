@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data/service';
@@ -12,6 +11,8 @@ import { useTranslation } from '../App';
 import MuteToggleButton from './MuteToggleButton';
 import GroupingControl from './GroupingControl';
 import EmptyState from './EmptyState';
+import SyncStatus from './SyncStatus';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 
@@ -79,18 +80,20 @@ const FigureGrid: React.FC<{
     onRefresh: () => void;
     baseRoute: string;
     allFigureIds: string[];
-}> = ({ figures, lessonsMap, figureCategories, onRefresh, baseRoute, allFigureIds }) => {
+    onForceDelete?: (item: Figure) => Promise<void>;
+}> = ({ figures, lessonsMap, figureCategories, onRefresh, baseRoute, allFigureIds, onForceDelete }) => {
     return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
             {figures.map((figure) => (
                 <FigureCard 
-                    key={figure.id} 
+                    key={`${figure.id}-${figure.modifiedTime || ''}`} 
                     figure={figure} 
                     parentLesson={lessonsMap.get(figure.lessonId)} 
                     figureCategories={figureCategories}
                     onRefresh={onRefresh}
                     itemIds={allFigureIds}
                     baseRoute={baseRoute}
+                    onForceDelete={onForceDelete}
                 />
             ))}
         </div>
@@ -100,6 +103,7 @@ const FigureGrid: React.FC<{
 
 const FiguresGallery: React.FC = () => {
   const { t, settings, updateSettings, reloadAllData, locale } = useTranslation();
+  const { isSignedIn, initiateSync, forceDeleteItem } = useGoogleDrive();
   const [figures, setFigures] = useState<Figure[]>([]);
   const [lessonsMap, setLessonsMap] = useState<Map<string, Lesson>>(new Map());
   const [figureCategories, setFigureCategories] = useState<FigureCategory[]>([]);
@@ -218,14 +222,22 @@ const FiguresGallery: React.FC = () => {
     .finally(() => setIsLoading(false));
   }, []);
   
+  // Effect for initial load and sync initiation
   useEffect(() => {
-    // When returning from the category editor, settings might be stale.
-    // The reloadAllData function from useTranslation will refetch them.
     if (location.pathname === '/figures') {
         reloadAllData(); 
         refreshGalleries();
+        if (isSignedIn && !location.state?.skipSync) {
+          initiateSync('figure');
+        }
     }
-  }, [location.pathname, refreshGalleries, reloadAllData]);
+  }, [location.pathname, isSignedIn, location.state]);
+
+  // Effect for live updates from data service
+  useEffect(() => {
+    const unsubscribe = dataService.subscribe(refreshGalleries);
+    return () => unsubscribe();
+  }, [refreshGalleries]);
   
   const intelligentRefresh = refreshGalleries;
 
@@ -345,6 +357,7 @@ const FiguresGallery: React.FC = () => {
         <i className="material-icons">add</i>
       </button>
       <MuteToggleButton />
+      {isSignedIn && <SyncStatus />}
       <GroupingControl
         options={GROUPING_OPTIONS}
         value={settings.figureGrouping}
@@ -363,6 +376,7 @@ const FiguresGallery: React.FC = () => {
   
   const baseRoute = '/figures';
   const allFigureIds = useMemo(() => allSortedFigures.map(f => f.id), [allSortedFigures]);
+  const onForceDelete = isSignedIn ? forceDeleteItem : undefined;
 
   const renderContent = () => {
     if (isLoading) {
@@ -415,6 +429,7 @@ const FiguresGallery: React.FC = () => {
                                     onRefresh={refreshGalleries}
                                     baseRoute={baseRoute}
                                     allFigureIds={allFigureIds}
+                                    onForceDelete={onForceDelete}
                                 />
                             </div>
                         )}
@@ -452,6 +467,7 @@ const FiguresGallery: React.FC = () => {
                                     onRefresh={refreshGalleries}
                                     baseRoute={baseRoute}
                                     allFigureIds={allFigureIds}
+                                    onForceDelete={onForceDelete}
                                 />
                             ) : (
                                 <EmptyCategoryMessage />
@@ -487,6 +503,7 @@ const FiguresGallery: React.FC = () => {
                                   onRefresh={refreshGalleries}
                                   baseRoute={baseRoute}
                                   allFigureIds={allFigureIds}
+                                  onForceDelete={onForceDelete}
                               />
                          ) : (
                               <EmptyCategoryMessage />
@@ -510,6 +527,7 @@ const FiguresGallery: React.FC = () => {
             onRefresh={refreshGalleries}
             baseRoute={baseRoute}
             allFigureIds={allFigureIds}
+            onForceDelete={onForceDelete}
         />
       </div>
     );

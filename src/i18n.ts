@@ -53,6 +53,18 @@ export const en = {
     byCategory: 'Categories',
     customize: 'Customize',
   },
+  sync: {
+    syncStatus: 'Sync Status',
+    syncButton: 'Sync with Google Drive',
+    noPendingTasks: 'Everything is up to date.',
+    statusPending: 'Pending',
+    statusInProgress: 'In Progress',
+    statusError: 'Error',
+    task_sync_settings: 'Syncing Settings ({type})',
+    type_lesson: 'Lessons',
+    type_figure: 'Figures',
+    syncingSettings: 'Syncing settings...',
+  },
   customizeCategories: {
     title: 'Customize Grouping',
     showEmpty: 'Show empty categories in gallery',
@@ -64,6 +76,7 @@ export const en = {
     deleteConfirmBody: "Are you sure you want to delete the category '{name}'? All figures in this category will become uncategorized.",
     errorSave: 'An error occurred while saving your grouping preferences. Please try again.',
     nameRequiredError: 'All category names must be filled in.',
+    errorSync: 'Failed to sync latest settings from Google Drive. Displaying local data.',
   },
   card: {
     lessonFrom: 'Lesson from {date}',
@@ -112,12 +125,6 @@ export const en = {
     importError: 'Import failed. The file may be corrupted or in the wrong format.',
     exportSuccess: 'Data exported successfully!',
     exportError: 'Export failed. An unknown error occurred.',
-    dangerZone: 'Danger Zone',
-    dangerZoneDesc: 'These actions are permanent and cannot be undone.',
-    clearAllData: 'Clear All Data',
-    clearing: 'Clearing...',
-    clearSuccess: 'All application data has been successfully cleared.',
-    clearError: 'Failed to clear data. An unknown error occurred.',
   },
   addLessonModal: {
     title: 'Add New Lesson',
@@ -173,8 +180,6 @@ export const en = {
     bodyLesson: 'This will permanently delete the lesson and all of its associated figures.',
     bodyFigure: 'This will permanently delete the figure.',
     warning: 'This action cannot be undone.',
-    titleClear: 'Clear All Data?',
-    bodyClear: 'This will permanently delete all your lessons, figures, videos, and settings. This is equivalent to a factory reset.',
   },
 };
 
@@ -233,6 +238,18 @@ export const pl = {
     byCategory: 'Kategorie',
     customize: 'Dostosuj',
   },
+  sync: {
+    syncStatus: 'Status synchronizacji',
+    syncButton: 'Synchronizuj z Dyskiem Google',
+    noPendingTasks: 'Wszystko jest aktualne.',
+    statusPending: 'Oczekujące',
+    statusInProgress: 'W toku',
+    statusError: 'Błąd',
+    task_sync_settings: 'Synchronizacja ustawień ({type})',
+    type_lesson: 'Lekcje',
+    type_figure: 'Figury',
+    syncingSettings: 'Synchronizowanie ustawień...',
+  },
   customizeCategories: {
     title: 'Dostosuj grupowanie',
     showEmpty: 'Pokazuj puste kategorie w galerii',
@@ -244,6 +261,7 @@ export const pl = {
     deleteConfirmBody: "Czy na pewno chcesz usunąć kategorię '{name}'? Wszystkie figury w tej kategorii zostaną przeniesione do 'Bez kategorii'.",
     errorSave: 'Wystąpił błąd podczas zapisywania preferencji grupowania. Proszę spróbować ponownie.',
     nameRequiredError: 'Wszystkie nazwy kategorii muszą być wypełnione.',
+    errorSync: 'Nie udało się zsynchronizować najnowszych ustawień z Dysku Google. Wyświetlane są dane lokalne.',
   },
   card: {
     lessonFrom: 'Lekcja z {date}',
@@ -292,12 +310,6 @@ export const pl = {
     importError: 'Import nie powiódł się. Plik może być uszkodzony lub w złym formacie.',
     exportSuccess: 'Dane wyeksportowano pomyślnie!',
     exportError: 'Eksport nie powiódł się. Wystąpił nieznany błąd.',
-    dangerZone: 'Strefa Niebezpieczna',
-    dangerZoneDesc: 'Te działania są trwałe i nie można ich cofnąć.',
-    clearAllData: 'Wyczyść wszystkie dane',
-    clearing: 'Czyszczenie...',
-    clearSuccess: 'Wszystkie dane aplikacji zostały pomyślnie wyczyszczone.',
-    clearError: 'Nie udało się wyczyścić danych. Wystąpił nieznany błąd.',
   },
   addLessonModal: {
     title: 'Dodaj nową lekcję',
@@ -353,8 +365,6 @@ export const pl = {
     bodyLesson: 'Spowoduje to trwałe usunięcie lekcji i wszystkich powiązanych z nią figur.',
     bodyFigure: 'Spowoduje to trwałe usunięcie figury.',
     warning: 'Tej akcji nie można cofnąć.',
-    titleClear: 'Wyczyścić wszystkie dane?',
-    bodyClear: 'Spowoduje to trwałe usunięcie wszystkich Twoich lekcji, figur, filmów i ustawień. Jest to równoznaczne z przywróceniem ustawień fabrycznych.',
   },
 };
 

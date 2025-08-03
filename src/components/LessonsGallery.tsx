@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data/service';
@@ -12,6 +11,8 @@ import { useTranslation } from '../App';
 import EmptyState from './EmptyState';
 import MuteToggleButton from './MuteToggleButton';
 import GroupingControl from './GroupingControl';
+import SyncStatus from './SyncStatus';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 
@@ -78,18 +79,20 @@ const LessonGrid: React.FC<{
     onRefresh: () => void;
     baseRoute: string;
     allLessonIds: string[];
-}> = ({ lessons, lessonCategories, onRefresh, baseRoute, allLessonIds }) => {
+    onForceDelete?: (item: Lesson) => Promise<void>;
+}> = ({ lessons, lessonCategories, onRefresh, baseRoute, allLessonIds, onForceDelete }) => {
     const gridClass = useMediaQuery('(max-width: 768px)') ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]";
     return (
         <div className={`grid ${gridClass} gap-6`}>
             {lessons.map((lesson) => (
                 <LessonCard 
-                    key={lesson.id} 
+                    key={`${lesson.id}-${lesson.modifiedTime || ''}`} 
                     lesson={lesson}
                     lessonCategories={lessonCategories}
                     onRefresh={onRefresh}
                     itemIds={allLessonIds}
                     baseRoute={baseRoute}
+                    onForceDelete={onForceDelete}
                 />
             ))}
         </div>
@@ -99,6 +102,7 @@ const LessonGrid: React.FC<{
 
 const LessonsGallery: React.FC = () => {
   const { t, settings, updateSettings, reloadAllData, locale } = useTranslation();
+  const { isSignedIn, initiateSync, forceDeleteItem } = useGoogleDrive();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonCategories, setLessonCategories] = useState<LessonCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -186,12 +190,22 @@ const LessonsGallery: React.FC = () => {
       .finally(() => setIsLoading(false));
   }, []);
   
+  // Effect for initial load and sync initiation
   useEffect(() => {
     if (location.pathname === '/lessons') {
       reloadAllData();
       refreshGallery();
+      if (isSignedIn && !location.state?.skipSync) {
+        initiateSync('lesson');
+      }
     }
-  }, [location.pathname, refreshGallery, reloadAllData]);
+  }, [location.pathname, isSignedIn, location.state]);
+  
+  // Effect for live updates from data service
+  useEffect(() => {
+    const unsubscribe = dataService.subscribe(refreshGallery);
+    return () => unsubscribe();
+  }, [refreshGallery]);
 
   const allSortedLessons = useMemo(() => {
     return sortLessons(lessons, settings.lessonSortOrder);
@@ -292,6 +306,7 @@ const LessonsGallery: React.FC = () => {
         <i className="material-icons">add</i>
       </button>
       <MuteToggleButton />
+      {isSignedIn && <SyncStatus />}
       <GroupingControl
         options={GROUPING_OPTIONS}
         value={settings.lessonGrouping}
@@ -310,6 +325,7 @@ const LessonsGallery: React.FC = () => {
   
   const baseRoute = '/lessons';
   const allLessonIds = useMemo(() => allSortedLessons.map(l => l.id), [allSortedLessons]);
+  const onForceDelete = isSignedIn ? forceDeleteItem : undefined;
 
   const renderContent = () => {
     if (isLoading) {
@@ -361,6 +377,7 @@ const LessonsGallery: React.FC = () => {
                                     onRefresh={refreshGallery}
                                     baseRoute={baseRoute}
                                     allLessonIds={allLessonIds}
+                                    onForceDelete={onForceDelete}
                                 />
                             </div>
                           )}
@@ -397,6 +414,7 @@ const LessonsGallery: React.FC = () => {
                                     onRefresh={refreshGallery}
                                     baseRoute={baseRoute}
                                     allLessonIds={allLessonIds}
+                                    onForceDelete={onForceDelete}
                                 />
                             ) : (
                                 <EmptyCategoryMessage />
@@ -431,6 +449,7 @@ const LessonsGallery: React.FC = () => {
                                   onRefresh={refreshGallery}
                                   baseRoute={baseRoute}
                                   allLessonIds={allLessonIds}
+                                  onForceDelete={onForceDelete}
                               />
                          ) : (
                               <EmptyCategoryMessage />
@@ -453,6 +472,7 @@ const LessonsGallery: React.FC = () => {
             onRefresh={refreshGallery}
             baseRoute={baseRoute}
             allLessonIds={allLessonIds}
+            onForceDelete={onForceDelete}
         />
       </div>
     );

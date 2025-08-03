@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
         VitePWA({
           registerType: 'autoUpdate',
           devOptions: {
-            enabled: true,
+            enabled: false,
           },
           includeAssets: [
             'icons/favicon.ico',
@@ -52,6 +52,23 @@ export default defineConfig(({ mode }) => {
               },
             ],
           },
+          workbox: {
+            runtimeCaching: [
+              {
+                urlPattern: /^https:\/\/www\.googleapis\.com\/.*/,
+                handler: 'NetworkOnly',
+                options: {
+                  cacheName: 'google-apis',
+                  backgroundSync: {
+                    name: 'google-apis-queue',
+                    options: {
+                      maxRetentionTime: 24 * 60, // 24 hours
+                    },
+                  },
+                },
+              },
+            ]
+          }
         }),
       ],
       base: '/bachata-moves/',

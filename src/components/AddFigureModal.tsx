@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import type { ModalAction, Lesson } from '../types';
 import { dataService } from '../data/service';
 import { useTranslation } from '../App';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 // --- SELECTABLE LESSON CARD ---
 
@@ -67,6 +67,7 @@ const AddFigureModal: React.FC = () => {
     const navigate = useNavigate();
     const { isMobile } = useOutletContext<GalleryContext>();
     const { t } = useTranslation();
+    const { isSignedIn } = useGoogleDrive();
     const [error, setError] = useState<string | null>(null);
     const [lessons, setLessons] = useState<Lesson[]>([]);
     const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
@@ -84,7 +85,9 @@ const AddFigureModal: React.FC = () => {
     
     const handleNext = () => {
         if (selectedLessonId) {
-            navigate(`/figures/create?lessonId=${selectedLessonId}`);
+            // If signed in, we want to treat this as a blocking operation on the next screen.
+            const forceCreateParam = isSignedIn ? '&forceCreate=true' : '';
+            navigate(`/figures/create?lessonId=${selectedLessonId}${forceCreateParam}`);
         }
     };
     

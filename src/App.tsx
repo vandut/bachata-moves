@@ -1,9 +1,6 @@
 
 
-
-
-
-import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
 import { useMediaQuery } from './hooks/useMediaQuery';
@@ -51,34 +48,45 @@ export const useTranslation = (): I18nContextType => {
 const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
-  const reloadAllData = useCallback(() => {
-    dataService.getSettings().then(setSettings);
-  }, []);
+  // Use a ref to hold the latest settings for callbacks, breaking dependency cycles
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
+  const reloadAllData = useCallback(() => {
+    // Fetches fresh settings from DB and updates state, triggering re-renders where needed.
+    dataService.getSettings().then(setSettings);
+  }, []); // This is stable
+
+  // Initial data load on component mount
   useEffect(() => {
     reloadAllData();
   }, [reloadAllData]);
   
   const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
-    if (!settings) return;
+    const currentSettings = settingsRef.current;
+    if (!currentSettings) return;
 
-    const newSettings = { ...settings, ...updates };
-    setSettings(newSettings);
+    const newSettings = { ...currentSettings, ...updates };
+    setSettings(newSettings); // Optimistic UI update
     try {
       await dataService.saveSettings(newSettings);
     } catch (err) {
       console.error("Failed to save settings:", err);
-      // Optionally revert state on failure
-      setSettings(settings);
+      // Revert state on failure
+      setSettings(currentSettings);
     }
-  }, [settings]);
+  }, []); // Stable: relies on ref, not state
 
   const setLanguage = useCallback((lang: Language) => {
     updateSettings({ language: lang });
-  }, [updateSettings]);
+  }, [updateSettings]); // Stable
 
   const t = useCallback((key: string, options?: { [key: string]: string | number }): string => {
-    const lang = settings?.language || 'english';
+    // This is the tricky one. It needs the latest language but should be stable.
+    // Using a ref is the classic way to solve this.
+    const lang = settingsRef.current?.language || 'english';
     let translation = getNestedTranslation(lang, key);
     if (translation === undefined) {
       console.warn(`Translation key not found for language '${lang}': ${key}. Falling back to English.`);
@@ -92,7 +100,24 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       return Object.entries(options).reduce((str, [k, v]) => str.replace(`{${k}}`, String(v)), translation);
     }
     return translation;
-  }, [settings?.language]);
+  }, []); // Stable
+
+  // This logic must run before the early return to ensure hooks are not called conditionally.
+  const language = settings?.language || 'english';
+  const locale: Locale = language === 'polish' ? 'pl-PL' : 'en-US';
+  
+  // Memoize the context value. It's now called on every render, fixing the conditional hook error.
+  const value = useMemo(() => ({ 
+    language, 
+    locale, 
+    setLanguage, 
+    t, 
+    // `settings` can be null here, but the `if (!settings)` check below ensures consumers only render 
+    // when `settings` is not null. We can safely assert the type for the context value.
+    settings: settings!, 
+    updateSettings, 
+    reloadAllData 
+  }), [language, locale, setLanguage, t, settings, updateSettings, reloadAllData]);
 
   if (!settings) {
     return (
@@ -101,10 +126,6 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       </div>
     );
   }
-  
-  const language = settings.language;
-  const locale: Locale = language === 'polish' ? 'pl-PL' : 'en-US';
-  const value = { language, locale, setLanguage, t, settings, updateSettings, reloadAllData };
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 };

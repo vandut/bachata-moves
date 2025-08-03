@@ -93,3 +93,23 @@ export interface ModalAction {
   isLoading?: boolean;
   loadingLabel?: string;
 }
+
+export type SyncTaskType = 
+  | 'sync-gallery'
+  | 'sync-settings'
+  | 'sync-deleted-log'
+  | 'upload-lesson'
+  | 'download-lesson'
+  | 'upload-figure'
+  | 'download-figure'
+  | 'delete-local'
+  | 'delete-remote';
+
+export interface SyncTask {
+  id: string;
+  type: SyncTaskType;
+  payload?: any;
+  status: 'pending' | 'in-progress' | 'error';
+  createdAt: number;
+  error?: string;
+}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import type { NavItem } from '../types';
+import { isDev } from '../utils/logger';
 
 export const DESKTOP_DRAWER_WIDTH = 240;
 
@@ -12,6 +13,7 @@ interface DesktopDrawerProps {
 const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems, hasError }) => {
   const location = useLocation();
   const activePath = location.pathname;
+  const devMode = isDev();
 
   return (
     <div
@@ -22,6 +24,9 @@ const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems, hasError }) => 
       <div className="flex items-center justify-center h-20 border-b border-gray-200 flex-shrink-0">
         <i className="material-icons text-blue-600 text-3xl mr-2">music_note</i>
         <h1 className="text-2xl font-bold text-gray-800">Bachata</h1>
+        {devMode && (
+            <span className="ml-2 bg-yellow-200 text-yellow-800 text-xs font-bold px-2 py-0.5 rounded-full">DEV</span>
+        )}
       </div>
       <nav className="flex-grow p-4 overflow-y-auto">
         <ul>

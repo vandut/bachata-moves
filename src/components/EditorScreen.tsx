@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
@@ -78,9 +75,9 @@ const EditorScreen: React.FC = () => {
     const navigate = useNavigate();
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
     const { t, locale, settings, updateSettings } = useTranslation();
+    const { isSignedIn, fetchLatestItemForEditing, forceAddItem, forceUpdateItem } = useGoogleDrive();
     const { isMuted, volume } = settings;
     const query = useQuery();
-    const { isSignedIn, uploadFigure, updateFigure, updateLesson } = useGoogleDrive();
 
     // --- State ---
     const [item, setItem] = useState<Lesson | Figure | null>(null);
@@ -103,6 +100,7 @@ const EditorScreen: React.FC = () => {
     const isCreatingFigure = !!lessonIdForNewFigure;
     const isEditingFigure = !!figureId;
     const isEditingLesson = !!lessonIdParam && !isEditingFigure;
+    const shouldForceCreate = query.get('forceCreate') === 'true' && isSignedIn;
 
     const baseNavPath = isEditingLesson ? '/lessons' : '/figures';
 
@@ -129,17 +127,26 @@ const EditorScreen: React.FC = () => {
                         lessonId: lesson.id,
                     };
                     thumbPromise = dataService.getLessonThumbnailUrl(lesson.id);
-                } else if (isEditingFigure && figureId) {
-                    const [figures, lessons] = await Promise.all([dataService.getFigures(), dataService.getLessons()]);
-                    loadedItem = figures.find(f => f.id === figureId) || null;
-                    if (loadedItem) videoLessonSource = lessons.find(l => l.id === (loadedItem as Figure).lessonId);
-                    thumbPromise = loadedItem ? dataService.getFigureThumbnailUrl(loadedItem.id) : null;
-                } else if (isEditingLesson && lessonIdParam) {
-                    loadedItem = (await dataService.getLessons()).find(l => l.id === lessonIdParam) || null;
-                    videoLessonSource = loadedItem as Lesson;
-                    thumbPromise = loadedItem ? dataService.getLessonThumbnailUrl(loadedItem.id) : null;
-                }
+                } else { // Editing
+                    const itemId = figureId || lessonIdParam;
+                    const type = figureId ? 'figure' : 'lesson';
+                    if (!itemId) throw new Error("Item ID not specified for editing.");
 
+                    loadedItem = isSignedIn 
+                        ? await fetchLatestItemForEditing<Lesson | Figure>(itemId, type)
+                        : (type === 'figure' ? await dataService.getFigures() : await dataService.getLessons()).find(i => i.id === itemId) || null;
+                    
+                    if (!loadedItem) throw new Error("Item to edit not found.");
+                    
+                    if ('lessonId' in loadedItem) { // Figure
+                        videoLessonSource = (await dataService.getLessons()).find(l => l.id === (loadedItem as Figure).lessonId);
+                        thumbPromise = dataService.getFigureThumbnailUrl(loadedItem.id);
+                    } else { // Lesson
+                        videoLessonSource = loadedItem as Lesson;
+                        thumbPromise = dataService.getLessonThumbnailUrl(loadedItem.id);
+                    }
+                }
+                
                 if (isCancelled) return;
                 if (!loadedItem || !videoLessonSource) throw new Error("Item or its video source could not be found.");
                 
@@ -169,7 +176,7 @@ const EditorScreen: React.FC = () => {
         };
         loadData();
         return () => { isCancelled = true; };
-    }, [lessonIdParam, figureId, lessonIdForNewFigure, isCreatingFigure, isEditingFigure, isEditingLesson]);
+    }, [lessonIdParam, figureId, lessonIdForNewFigure, isCreatingFigure, isEditingFigure, isEditingLesson, isSignedIn, fetchLatestItemForEditing]);
 
     // --- Dynamic Title Effect ---
     useEffect(() => {
@@ -262,11 +269,18 @@ const EditorScreen: React.FC = () => {
     
     const handleSetThumbnail = async () => {
         if (!item || !videoRef.current) return;
-        const lessonIdForVideo = 'lessonId' in item ? (item as Figure).lessonId : item.id;
+        
         const currentTimeSeconds = videoRef.current.currentTime;
         try {
+            let lessonIdForVideo: string;
+            if ('lessonId' in item) { // item is Figure
+                lessonIdForVideo = (item as Figure).lessonId;
+            } else { // item is Lesson
+                lessonIdForVideo = item.id;
+            }
             const videoFile = await dataService.getVideoFile(lessonIdForVideo);
             if (!videoFile) throw new Error("Could not retrieve video file.");
+            
             const dataUrl = await generateThumbnailPreview(videoFile, currentTimeSeconds);
             setNewThumbnailUrl(dataUrl);
             setFormData(prev => ({ ...prev, thumbTime: Math.round(currentTimeSeconds * 1000) }));
@@ -335,20 +349,17 @@ const EditorScreen: React.FC = () => {
         setError(null);
         try {
             if (isCreatingFigure && lessonIdForNewFigure) {
-                const figureData: Omit<Figure, 'id' | 'lessonId' | 'modifiedTime'> = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
-                const newFigure = await dataService.addFigure(lessonIdForNewFigure, figureData);
-                if (isSignedIn) await uploadFigure(newFigure);
+                const figureData = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
+                await forceAddItem(figureData, 'figure', { lessonId: lessonIdForNewFigure });
             } else if (isEditingFigure && figureId) {
-                const updateData: Partial<Omit<Figure, 'id' | 'lessonId'>> = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
-                const updated = await dataService.updateFigure(figureId, updateData);
-                if (isSignedIn) await updateFigure(updated);
+                const updateData = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
+                await forceUpdateItem(figureId, updateData, 'figure');
             } else if (isEditingLesson && lessonIdParam) {
-                const updateData: Partial<Omit<Lesson, 'id'>> = { uploadDate: new Date(formData.uploadDate).toISOString(), description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
-                const updated = await dataService.updateLesson(lessonIdParam, updateData);
-                if (isSignedIn) await updateLesson(updated);
+                const updateData = { uploadDate: new Date(formData.uploadDate).toISOString(), description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
+                await forceUpdateItem(lessonIdParam, updateData, 'lesson');
             }
             if (refresh) refresh();
-            navigate(baseNavPath);
+            navigate(baseNavPath, { state: { skipSync: true } });
         } catch (err) {
             console.error("Failed to save:", err);
             setError(err instanceof Error ? err.message : t('editor.errorSave'));
