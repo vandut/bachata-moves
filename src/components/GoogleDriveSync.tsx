@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import { useTranslation } from '../App';
@@ -13,13 +14,13 @@ const GoogleIcon: React.FC = () => (
 );
 
 const GoogleDriveSync: React.FC = () => {
-    const { isSignedIn, userProfile, error, signIn, signOut } = useGoogleDrive();
+    const { isSignedIn, isSyncing, syncProgress, userProfile, syncError, signIn, signOut, synchronize } = useGoogleDrive();
     const { t } = useTranslation();
     
-    if (error) {
+    if (syncError) {
         return (
             <p className="text-sm text-center p-2 rounded-md bg-red-100 text-red-700">
-                {t('settings.syncError', { error })}
+                {t('settings.syncError', { error: syncError })}
             </p>
         );
     }
@@ -49,18 +50,34 @@ const GoogleDriveSync: React.FC = () => {
             </div>
             <div className="space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
                 <button
-                    disabled // Functionality to be implemented in a future task
-                    className="w-full sm:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={() => synchronize()}
+                    disabled={isSyncing}
+                    className="w-full sm:w-auto bg-blue-600 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                    {t('settings.syncData')}
+                   {isSyncing && <i className="material-icons animate-spin">sync</i>}
+                   {isSyncing ? t('settings.syncing') : t('settings.syncData')}
                 </button>
                 <button
-                    onClick={signOut}
-                    className="w-full sm:w-auto bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors"
+                    onClick={() => signOut()}
+                    disabled={isSyncing}
+                    className="w-full sm:w-auto bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
                 >
                     {t('settings.signOut')}
                 </button>
             </div>
+            {isSyncing && (
+                  <div className="mt-4">
+                      <div className="text-center text-sm text-gray-600 mb-1">
+                          <span>{t('settings.syncInProgress', { progress: Math.round(syncProgress) })}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                          <div
+                              className="bg-blue-600 h-2.5 rounded-full transition-all duration-200 ease-linear"
+                              style={{ width: `${syncProgress}%` }}
+                          ></div>
+                      </div>
+                  </div>
+              )}
         </div>
     );
 };

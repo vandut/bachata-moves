@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Lesson, LessonCategory } from '../types';
@@ -9,6 +12,7 @@ import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 interface LessonCardProps {
   lesson: Lesson;
@@ -20,6 +24,8 @@ interface LessonCardProps {
 
 const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRefresh, itemIds, baseRoute }) => {
   const { t, locale, settings } = useTranslation();
+  const { isSignedIn, deleteLesson: deleteLessonFromDrive } = useGoogleDrive();
+
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,9 +181,16 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
+      // First, attempt to delete from Google Drive if the user is signed in.
+      // This is awaited, so if it fails, the local delete will not proceed.
+      if (isSignedIn) {
+        await deleteLessonFromDrive(lesson);
+      }
+      // If Drive deletion is successful (or not applicable), delete locally.
       await dataService.deleteLesson(lesson.id);
+      
       setShowDeleteConfirm(false);
-      onRefresh();
+      onRefresh(); // Refresh the gallery to reflect the change.
     } catch (err) {
       console.error("Failed to delete lesson:", err);
       // In a real app, you might want to show an error toast to the user

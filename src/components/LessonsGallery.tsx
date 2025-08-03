@@ -136,14 +136,12 @@ const LessonsGallery: React.FC = () => {
   };
 
   const handleToggleCategory = async (categoryId: string) => {
-    const category = lessonCategories.find(c => c.id === categoryId);
-    if (!category) return;
-    try {
-      await dataService.updateLessonCategory(categoryId, { isExpanded: !category.isExpanded });
-      refreshGallery();
-    } catch (err) {
-      console.error("Failed to update lesson category state:", err);
-    }
+    const currentCollapsed = settings.collapsedLessonCategories || [];
+    const isCollapsed = currentCollapsed.includes(categoryId);
+    const newCollapsedKeys = isCollapsed
+      ? currentCollapsed.filter(key => key !== categoryId)
+      : [...currentCollapsed, categoryId];
+    await updateSettings({ collapsedLessonCategories: newCollapsedKeys });
   };
   
   const handleToggleUncategorized = () => {
@@ -414,15 +412,17 @@ const LessonsGallery: React.FC = () => {
               const showGroup = count > 0 || settings.showEmptyLessonCategoriesInGroupedView;
               if (!showGroup) return null;
 
+              const isExpanded = !(settings.collapsedLessonCategories || []).includes(category.id);
+
               return (
                 <div key={category.id}>
                   <CategoryHeader 
                       name={category.name} 
-                      isExpanded={category.isExpanded} 
+                      isExpanded={isExpanded} 
                       onToggle={() => handleToggleCategory(category.id)}
                       count={settings.showLessonCountInGroupHeaders ? count : undefined}
                   />
-                  {category.isExpanded && (
+                  {isExpanded && (
                       <div className="pt-2 pb-6">
                          {count > 0 ? (
                              <LessonGrid

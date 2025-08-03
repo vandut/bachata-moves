@@ -1,10 +1,12 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
 import type { ModalAction, FigureCategory, LessonCategory, AppSettings } from '../types';
 import { dataService } from '../data/service';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 interface GalleryContext {
     isMobile: boolean;
@@ -23,6 +25,7 @@ const CustomizeGroupingScreen: React.FC = () => {
     const location = useLocation();
     const { isMobile } = useOutletContext<GalleryContext>();
     const { t, settings, updateSettings, reloadAllData } = useTranslation();
+    const { isSignedIn, uploadCategories, uploadSettings } = useGoogleDrive();
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);
 
@@ -78,7 +81,6 @@ const CustomizeGroupingScreen: React.FC = () => {
             const uncategorizedItem: GenericCategory = {
                 id: UNCATEGORIZED_ID,
                 name: t('common.uncategorized'),
-                isExpanded: true,
                 isSpecial: true,
             };
 
@@ -157,6 +159,11 @@ const CustomizeGroupingScreen: React.FC = () => {
 
             await updateSettings(newSettings);
             
+            if (isSignedIn) {
+                await uploadCategories(type);
+                await uploadSettings();
+            }
+
             reloadAllData();
             handleClose();
 
@@ -187,7 +194,6 @@ const CustomizeGroupingScreen: React.FC = () => {
         const newCategory: GenericCategory = {
             id: `new-${Date.now()}`,
             name: '',
-            isExpanded: true,
             isNew: true,
         };
         setLocalItems(prev => [...prev, newCategory]);

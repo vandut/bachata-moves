@@ -20,7 +20,7 @@ const getInitialLanguage = (): 'english' | 'polish' => {
 
 // --- IndexedDB Configuration ---
 const DB_NAME = 'bachata-moves-db';
-const DB_VERSION = 8; // Incremented version for settings separation
+const DB_VERSION = 9; // Incremented version for sync properties
 const LESSONS_STORE = 'lessons';
 const FIGURES_STORE = 'figures';
 const FIGURE_CATEGORIES_STORE = 'figure_categories';
@@ -38,129 +38,68 @@ const LEGACY_VIDEOS_STORE = 'videos';
 async function openBachataDB(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
     upgrade: async (db, oldVersion, newVersion, tx) => {
-      if (oldVersion < 2 && !db.objectStoreNames.contains(LESSONS_STORE)) {
+      // Store Creation (Idempotent)
+      if (!db.objectStoreNames.contains(LESSONS_STORE)) {
         db.createObjectStore(LESSONS_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(FIGURES_STORE)) {
         db.createObjectStore(FIGURES_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(FIGURE_CATEGORIES_STORE)) {
+        db.createObjectStore(FIGURE_CATEGORIES_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(LESSON_CATEGORIES_STORE)) {
+        db.createObjectStore(LESSON_CATEGORIES_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE);
-        db.createObjectStore(LEGACY_VIDEOS_STORE);
-        db.createObjectStore('thumbnails'); // Old name
       }
-      if (oldVersion < 3 && !db.objectStoreNames.contains('figure-thumbnails')) {
-          db.createObjectStore('figure-thumbnails'); // Old name
-      }
-      if (oldVersion < 4) {
-        if (!db.objectStoreNames.contains('categories')) { // Old name
-          db.createObjectStore(FIGURE_CATEGORIES_STORE, { keyPath: 'id' });
-        }
-      }
-      if (oldVersion < 5) {
-          if (db.objectStoreNames.contains('categories')) {
-            db.deleteObjectStore('categories');
-          }
-          if (!db.objectStoreNames.contains(FIGURE_CATEGORIES_STORE)) {
-            db.createObjectStore(FIGURE_CATEGORIES_STORE, { keyPath: 'id' });
-          }
-          if (!db.objectStoreNames.contains(LESSON_CATEGORIES_STORE)) {
-            db.createObjectStore(LESSON_CATEGORIES_STORE, { keyPath: 'id' });
-          }
-      }
-      if (oldVersion < 6) {
+      if (!db.objectStoreNames.contains(VIDEO_FILES_STORE)) {
         db.createObjectStore(VIDEO_FILES_STORE);
-        if (db.objectStoreNames.contains(LEGACY_VIDEOS_STORE)) {
-            const lessonsStore = tx.objectStore(LESSONS_STORE);
-            const legacyVideosStore = tx.objectStore(LEGACY_VIDEOS_STORE);
-            const videoFilesStore = tx.objectStore(VIDEO_FILES_STORE);
-
-            let cursor = await legacyVideosStore.openCursor();
-            while (cursor) {
-                const lessonId = cursor.key as string;
-                const videoFile = cursor.value as File;
-                const lesson = await lessonsStore.get(lessonId);
-
-                if (lesson) {
-                    const videoId = generateId();
-                    await videoFilesStore.put(videoFile, videoId);
-                    
-                    const updatedLesson = { ...lesson, videoId };
-                    delete updatedLesson.videoFileName;
-                    await lessonsStore.put(updatedLesson);
-                }
-                cursor = await cursor.continue();
-            }
-            db.deleteObjectStore(LEGACY_VIDEOS_STORE);
-        }
       }
-      if (oldVersion < 7) {
-        // Migration for lesson thumbnails
-        if (db.objectStoreNames.contains('thumbnails')) {
-            const store = tx.objectStore('thumbnails');
-            const newStore = db.createObjectStore(LESSON_THUMBNAILS_STORE);
-            let cursor = await store.openCursor();
-            while (cursor) {
-                newStore.put(cursor.value, cursor.key);
-                cursor = await cursor.continue();
-            }
-            db.deleteObjectStore('thumbnails');
-        } else if (!db.objectStoreNames.contains(LESSON_THUMBNAILS_STORE)) {
-            db.createObjectStore(LESSON_THUMBNAILS_STORE);
-        }
-
-        // Migration for figure thumbnails
-        if (db.objectStoreNames.contains('figure-thumbnails')) {
-            const store = tx.objectStore('figure-thumbnails');
-            const newStore = db.createObjectStore(FIGURE_THUMBNAILS_STORE);
-            let cursor = await store.openCursor();
-            while (cursor) {
-                newStore.put(cursor.value, cursor.key);
-                cursor = await cursor.continue();
-            }
-            db.deleteObjectStore('figure-thumbnails');
-        } else if (!db.objectStoreNames.contains(FIGURE_THUMBNAILS_STORE)) {
-            db.createObjectStore(FIGURE_THUMBNAILS_STORE);
-        }
+      if (!db.objectStoreNames.contains(LESSON_THUMBNAILS_STORE)) {
+        db.createObjectStore(LESSON_THUMBNAILS_STORE);
       }
-      if (oldVersion < 8) {
-        const settingsStore = tx.objectStore(SETTINGS_STORE);
-        const oldSettings = await settingsStore.get('app-settings');
+      if (!db.objectStoreNames.contains(FIGURE_THUMBNAILS_STORE)) {
+        db.createObjectStore(FIGURE_THUMBNAILS_STORE);
+      }
 
-        if (oldSettings) {
-            // Perform one-time migration for old key names
-            if ('categoryOrder' in oldSettings) {
-                oldSettings.figureCategoryOrder = oldSettings.categoryOrder;
-                delete oldSettings.categoryOrder;
-            }
-            if ('uncategorizedCategoryIsExpanded' in oldSettings) {
-                oldSettings.uncategorizedFigureCategoryIsExpanded = oldSettings.uncategorizedCategoryIsExpanded;
-                delete oldSettings.uncategorizedCategoryIsExpanded;
-            }
-            if ('showEmptyCategoriesInGroupedView' in oldSettings) {
-                oldSettings.showEmptyFigureCategoriesInGroupedView = oldSettings.showEmptyCategoriesInGroupedView;
-                delete oldSettings.showEmptyCategoriesInGroupedView;
-            }
-            
-            // Split settings into device and sync objects
-            const deviceSettings: Partial<AppSettings> = {};
-            const syncSettings: Partial<AppSettings> = {};
-            const deviceSettingKeys: (keyof AppSettings)[] = ['language', 'autoplayGalleryVideos', 'isMuted', 'volume'];
+      // Cleanup Legacy Stores
+      if (db.objectStoreNames.contains(LEGACY_VIDEOS_STORE)) {
+        db.deleteObjectStore(LEGACY_VIDEOS_STORE);
+      }
 
-            for (const key in oldSettings) {
-                if (deviceSettingKeys.includes(key as keyof AppSettings)) {
-                    (deviceSettings as any)[key] = oldSettings[key];
-                } else {
-                    (syncSettings as any)[key] = oldSettings[key];
-                }
-            }
-            
-            await Promise.all([
-                settingsStore.put(deviceSettings, DEVICE_SETTINGS_KEY),
-                settingsStore.put(syncSettings, SYNC_SETTINGS_KEY),
-                settingsStore.delete('app-settings')
-            ]);
+      // Index Creation (Idempotent, using the upgrade transaction)
+      const lessonsStore = tx.objectStore(LESSONS_STORE);
+      if (!lessonsStore.indexNames.contains('categoryId')) {
+        lessonsStore.createIndex('categoryId', 'categoryId', { unique: false });
+      }
+
+      const figuresStore = tx.objectStore(FIGURES_STORE);
+      if (!figuresStore.indexNames.contains('lessonId')) {
+        figuresStore.createIndex('lessonId', 'lessonId', { unique: false });
+      }
+      if (!figuresStore.indexNames.contains('categoryId')) {
+        figuresStore.createIndex('categoryId', 'categoryId', { unique: false });
+      }
+
+      // Version-based Migrations
+      if (oldVersion < 9) {
+        const storesWithSync = [LESSONS_STORE, FIGURES_STORE, FIGURE_CATEGORIES_STORE, LESSON_CATEGORIES_STORE];
+        for (const storeName of storesWithSync) {
+          const store = tx.objectStore(storeName as any);
+          if (!store.indexNames.contains('driveId')) {
+            store.createIndex('driveId', 'driveId', { unique: false });
+          }
+          if (!store.indexNames.contains('modifiedTime')) {
+            store.createIndex('modifiedTime', 'modifiedTime', { unique: false });
+          }
         }
       }
     },
   });
 }
+
 
 const generateThumbnailBlob = (file: File, thumbTime: number): Promise<Blob> => {
   return new Promise((resolve, reject) => {
@@ -217,11 +156,18 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
   };
   
 const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
+    if (!dataUrl || !dataUrl.startsWith('data:')) {
+        throw new Error('Invalid data URL provided for blob conversion.');
+    }
     const res = await fetch(dataUrl);
     if (!res.ok) {
         throw new Error(`Failed to fetch data URL: ${res.statusText}`);
     }
-    return res.blob();
+    const blob = await res.blob();
+    if (blob.size === 0) {
+        console.warn('Converted a data URL to an empty blob. The data URL might be corrupt.');
+    }
+    return blob;
 };
 
 
@@ -246,6 +192,7 @@ export class AppDataService implements IDataService {
       id: newId,
       videoId: newVideoId,
       thumbTime: 0, // Default to first frame
+      modifiedTime: new Date().toISOString(),
     };
 
     const thumbnailBlob = await generateThumbnailBlob(videoFile, 0);
@@ -277,7 +224,7 @@ export class AppDataService implements IDataService {
     }
 
     const tx = db.transaction([LESSONS_STORE, LESSON_THUMBNAILS_STORE], 'readwrite');
-    const updatedLesson = { ...lesson, ...lessonUpdateData };
+    const updatedLesson = { ...lesson, ...lessonUpdateData, modifiedTime: new Date().toISOString() };
     
     const writePromises: Promise<any>[] = [
       tx.objectStore(LESSONS_STORE).put(updatedLesson),
@@ -308,8 +255,7 @@ export class AppDataService implements IDataService {
     const allLessons = await tx.objectStore(LESSONS_STORE).getAll();
     const otherLessonsUsingVideo = allLessons.filter(l => l.videoId === lesson.videoId && l.id !== lessonId);
 
-    const figures = await tx.objectStore(FIGURES_STORE).getAll();
-    const figuresToDelete = figures.filter(f => f.lessonId === lessonId);
+    const figuresToDelete = await tx.objectStore(FIGURES_STORE).index('lessonId').getAll(lessonId);
 
     const deletePromises = [
       tx.objectStore(LESSONS_STORE).delete(lessonId),
@@ -323,6 +269,22 @@ export class AppDataService implements IDataService {
     ];
     
     await Promise.all(deletePromises);
+    await tx.done;
+  }
+
+  async saveDownloadedLesson(lesson: Lesson, videoFile: Blob): Promise<void> {
+    this.revokeAndClearCache(lesson.videoId, 'video');
+    this.revokeAndClearCache(lesson.id, 'thumbnail');
+
+    const db = await openBachataDB();
+    const thumbnailBlob = await generateThumbnailBlob(new File([videoFile], `${lesson.videoId}.bin`, { type: videoFile.type }), lesson.thumbTime);
+
+    const tx = db.transaction([LESSONS_STORE, VIDEO_FILES_STORE, LESSON_THUMBNAILS_STORE], 'readwrite');
+    await Promise.all([
+      tx.objectStore(LESSONS_STORE).put(lesson),
+      tx.objectStore(VIDEO_FILES_STORE).put(videoFile, lesson.videoId),
+      tx.objectStore(LESSON_THUMBNAILS_STORE).put(thumbnailBlob, lesson.id),
+    ]);
     await tx.done;
   }
 
@@ -342,7 +304,7 @@ export class AppDataService implements IDataService {
     const videoFile = await db.get(VIDEO_FILES_STORE, lesson.videoId);
     if (!videoFile) throw new Error(`Video for lesson "${lessonId}" not found.`);
 
-    const newFigure: Figure = { ...figureData, id: generateId(), lessonId };
+    const newFigure: Figure = { ...figureData, id: generateId(), lessonId, modifiedTime: new Date().toISOString() };
     const thumbnailBlob = await generateThumbnailBlob(videoFile, newFigure.thumbTime);
 
     // Start a short, focused transaction for writes only.
@@ -374,7 +336,7 @@ export class AppDataService implements IDataService {
     }
 
     const tx = db.transaction([FIGURES_STORE, FIGURE_THUMBNAILS_STORE], 'readwrite');
-    const updatedFigure = { ...figure, ...figureUpdateData };
+    const updatedFigure = { ...figure, ...figureUpdateData, modifiedTime: new Date().toISOString() };
     
     const writePromises = [
       tx.objectStore(FIGURES_STORE).put(updatedFigure),
@@ -399,6 +361,25 @@ export class AppDataService implements IDataService {
     ]);
     await tx.done;
   }
+
+  async saveDownloadedFigure(figure: Figure): Promise<void> {
+    this.revokeAndClearCache(figure.id, 'figure-thumbnail');
+
+    const db = await openBachataDB();
+    const lesson = await db.get(LESSONS_STORE, figure.lessonId);
+    if (!lesson) throw new Error(`Parent lesson ${figure.lessonId} for figure ${figure.id} not found locally.`);
+    const videoFile = await db.get(VIDEO_FILES_STORE, lesson.videoId);
+    if (!videoFile) throw new Error(`Video file ${lesson.videoId} for figure ${figure.id} not found locally.`);
+
+    const thumbnailBlob = await generateThumbnailBlob(videoFile, figure.thumbTime);
+    
+    const tx = db.transaction([FIGURES_STORE, FIGURE_THUMBNAILS_STORE], 'readwrite');
+    await Promise.all([
+      tx.objectStore(FIGURES_STORE).put(figure),
+      tx.objectStore(FIGURE_THUMBNAILS_STORE).put(thumbnailBlob, figure.id),
+    ]);
+    await tx.done;
+  }
   
   // --- Figure Categories ---
   async getFigureCategories(): Promise<FigureCategory[]> {
@@ -411,7 +392,7 @@ export class AppDataService implements IDataService {
     const newCategory: FigureCategory = {
       id: generateId(),
       name: categoryName,
-      isExpanded: true,
+      modifiedTime: new Date().toISOString(),
     };
     await db.put(FIGURE_CATEGORIES_STORE, newCategory);
     return newCategory;
@@ -422,7 +403,7 @@ export class AppDataService implements IDataService {
     const category = await db.get(FIGURE_CATEGORIES_STORE, categoryId);
     if (!category) throw new Error(`Category with id "${categoryId}" not found.`);
 
-    const updatedCategory = { ...category, ...categoryUpdateData };
+    const updatedCategory = { ...category, ...categoryUpdateData, modifiedTime: new Date().toISOString() };
     await db.put(FIGURE_CATEGORIES_STORE, updatedCategory);
     return updatedCategory;
   }
@@ -431,11 +412,10 @@ export class AppDataService implements IDataService {
     const db = await openBachataDB();
     const tx = db.transaction([FIGURE_CATEGORIES_STORE, FIGURES_STORE], 'readwrite');
     
-    const allFigures = await tx.objectStore(FIGURES_STORE).getAll();
-    const figuresToUpdate = allFigures.filter(f => f.categoryId === categoryId);
+    const figuresToUpdate = await tx.objectStore(FIGURES_STORE).index('categoryId').getAll(categoryId);
 
     const updatePromises = figuresToUpdate.map(figure => {
-      const updatedFigure = { ...figure, categoryId: null };
+      const updatedFigure = { ...figure, categoryId: null, modifiedTime: new Date().toISOString() };
       return tx.objectStore(FIGURES_STORE).put(updatedFigure);
     });
 
@@ -455,7 +435,7 @@ export class AppDataService implements IDataService {
     const newCategory: LessonCategory = {
       id: generateId(),
       name: categoryName,
-      isExpanded: true,
+      modifiedTime: new Date().toISOString(),
     };
     await db.put(LESSON_CATEGORIES_STORE, newCategory);
     return newCategory;
@@ -466,7 +446,7 @@ export class AppDataService implements IDataService {
     const category = await db.get(LESSON_CATEGORIES_STORE, categoryId);
     if (!category) throw new Error(`Lesson category with id "${categoryId}" not found.`);
 
-    const updatedCategory = { ...category, ...categoryUpdateData };
+    const updatedCategory = { ...category, ...categoryUpdateData, modifiedTime: new Date().toISOString() };
     await db.put(LESSON_CATEGORIES_STORE, updatedCategory);
     return updatedCategory;
   }
@@ -475,11 +455,10 @@ export class AppDataService implements IDataService {
     const db = await openBachataDB();
     const tx = db.transaction([LESSON_CATEGORIES_STORE, LESSONS_STORE], 'readwrite');
     
-    const allLessons = await tx.objectStore(LESSONS_STORE).getAll();
-    const lessonsToUpdate = allLessons.filter(l => l.categoryId === categoryId);
+    const lessonsToUpdate = await tx.objectStore(LESSONS_STORE).index('categoryId').getAll(categoryId);
 
     const updatePromises = lessonsToUpdate.map(lesson => {
-      const updatedLesson = { ...lesson, categoryId: null };
+      const updatedLesson = { ...lesson, categoryId: null, modifiedTime: new Date().toISOString() };
       return tx.objectStore(LESSONS_STORE).put(updatedLesson);
     });
 
@@ -501,9 +480,6 @@ export class AppDataService implements IDataService {
       autoplayGalleryVideos: false,
       isMuted: false,
       volume: 1,
-    };
-
-    const defaultSyncSettings: Partial<AppSettings> = {
       lessonSortOrder: 'newest',
       figureSortOrder: 'newest',
       lessonGrouping: 'none',
@@ -511,13 +487,19 @@ export class AppDataService implements IDataService {
       collapsedLessonDateGroups: [],
       collapsedFigureDateGroups: [],
       uncategorizedFigureCategoryIsExpanded: true,
+      uncategorizedLessonCategoryIsExpanded: true,
+      collapsedLessonCategories: [],
+      collapsedFigureCategories: [],
+    };
+
+    const defaultSyncSettings: Partial<AppSettings> = {
       figureCategoryOrder: [],
       showEmptyFigureCategoriesInGroupedView: false,
       showFigureCountInGroupHeaders: false,
-      uncategorizedLessonCategoryIsExpanded: true,
       lessonCategoryOrder: [],
       showEmptyLessonCategoriesInGroupedView: false,
       showLessonCountInGroupHeaders: false,
+      lastSyncTimestamp: undefined,
     };
 
     return {
@@ -532,7 +514,22 @@ export class AppDataService implements IDataService {
     const db = await openBachataDB();
     const deviceSettings: Partial<AppSettings> = {};
     const syncSettings: Partial<AppSettings> = {};
-    const deviceSettingKeys: (keyof AppSettings)[] = ['language', 'autoplayGalleryVideos', 'isMuted', 'volume'];
+    const deviceSettingKeys: (keyof AppSettings)[] = [
+        'language',
+        'autoplayGalleryVideos',
+        'isMuted',
+        'volume',
+        'lessonSortOrder',
+        'figureSortOrder',
+        'lessonGrouping',
+        'figureGrouping',
+        'collapsedLessonDateGroups',
+        'collapsedFigureDateGroups',
+        'uncategorizedLessonCategoryIsExpanded',
+        'uncategorizedFigureCategoryIsExpanded',
+        'collapsedLessonCategories',
+        'collapsedFigureCategories',
+    ];
 
     for (const key in settingsData) {
         const typedKey = key as keyof AppSettings;
@@ -712,14 +709,6 @@ export class AppDataService implements IDataService {
     ]);
     onProgress?.(0.90);
     
-    const videoFilesMap = new Map<string, string>(videoFiles as [string, string][]);
-
-    // Reconstruct the old 'videos' format for export: [[lessonId, base64]]
-    const videos = lessons.map(lesson => {
-        const base64Data = videoFilesMap.get(lesson.videoId);
-        return [lesson.id, base64Data || ''];
-    }).filter(([, base64Data]) => base64Data);
-
     // 3. Construct the final export object.
     const exportObject = {
         '__BACHATA_MOVES_EXPORT__': true,
@@ -731,7 +720,7 @@ export class AppDataService implements IDataService {
             figureCategories: figureCategories || [],
             lessonCategories: lessonCategories || [],
             settings: syncSettings || {},
-            videos: videos || [],
+            videos: videoFiles || [], // Use videoFiles directly ([videoId, base64])
             thumbnails: thumbnails || [],
             figureThumbnails: figureThumbnails || [],
         },
@@ -750,8 +739,8 @@ export class AppDataService implements IDataService {
     const importObject = JSON.parse(jsonString);
     onProgress?.(0.02);
 
-    if (!importObject || importObject.__BACHATA_MOVES_EXPORT__ !== true) {
-        throw new Error('Invalid import file format.');
+    if (!importObject || importObject.__BACHATA_MOVES_EXPORT__ !== true || importObject.version !== 3) {
+        throw new Error('Invalid or unsupported import file format.');
     }
     onProgress?.(0.05);
 
@@ -762,10 +751,29 @@ export class AppDataService implements IDataService {
         figureCategories = categories,
         lessonCategories = [],
         settings: importedSyncSettings = {},
-        videos: videoEntries = [],
+        videos: originalVideoEntries = [],
         thumbnails: thumbnailEntries = [],
         figureThumbnails: figureThumbnailEntries = [],
     } = importObject.data;
+    
+    // --- Start: Backward Compatibility Fix ---
+    // Heuristic to detect old export format where videos were keyed by lesson.id instead of lesson.videoId.
+    const lessonIdSet = new Set(lessons.map((l: Lesson) => l.id));
+    const isOldVideoFormat = originalVideoEntries.length > 0 && originalVideoEntries.every(([key]: [string, string]) => lessonIdSet.has(key));
+    
+    let videoEntries = originalVideoEntries;
+
+    if (isOldVideoFormat) {
+      console.log("Old video format detected, remapping video keys from lesson.id to lesson.videoId.");
+      const lessonMap = new Map<string, Lesson>(lessons.map((l: Lesson) => [l.id, l]));
+      videoEntries = originalVideoEntries.map(([lessonId, base64]: [string, string]) => {
+        const lesson = lessonMap.get(lessonId);
+        // If a lesson for this video exists, use its videoId as the new key.
+        // Otherwise, this video is orphaned and will be skipped.
+        return lesson ? [lesson.videoId, base64] : null;
+      }).filter((entry: [string, string] | null): entry is [string, string] => entry !== null);
+    }
+    // --- End: Backward Compatibility Fix ---
 
     const totalBlobsToConvert = videoEntries.length + thumbnailEntries.length + figureThumbnailEntries.length;
     let blobsConverted = 0;
@@ -776,47 +784,37 @@ export class AppDataService implements IDataService {
             onProgress?.(0.05 + (blobsConverted / totalBlobsToConvert) * 0.45); // 5% to 50%
         }
     };
-
-    const videoIdMap = new Map<string, string>(); // lessonId -> new videoId
-    const videoBlobPromises = videoEntries.map(async ([lessonId, base64Value]: [string, string]) => {
-        const videoId = generateId();
-        videoIdMap.set(lessonId, videoId);
-        const blob = await dataUrlToBlob(base64Value);
-        reportBlobProgress();
-        return [videoId, blob] as [IDBValidKey, Blob];
-    });
-
-    const thumbnailBlobPromises = thumbnailEntries.map(async ([key, base64Value]: [string, string]) => {
-        const blob = await dataUrlToBlob(base64Value);
-        reportBlobProgress();
-        return [key, blob] as [IDBValidKey, Blob];
-    });
-
-    const figureThumbnailBlobPromises = figureThumbnailEntries.map(async ([key, base64Value]: [string, string]) => {
-        const blob = await dataUrlToBlob(base64Value);
-        reportBlobProgress();
-        return [key, blob] as [IDBValidKey, Blob];
-    });
+    
+    const convertAndFilter = async (entries: [string, string][], type: string) => {
+        const promises = entries.map(async ([key, base64Value]: [string, string]) => {
+            try {
+                if (!base64Value || typeof base64Value !== 'string' || !base64Value.startsWith('data:')) {
+                    throw new Error('Invalid base64 value');
+                }
+                const blob = await dataUrlToBlob(base64Value);
+                reportBlobProgress();
+                return [key, blob] as [IDBValidKey, Blob];
+            } catch (e: any) {
+                console.warn(`Skipping invalid ${type} data for key: ${key}. Error: ${e.message}`);
+                reportBlobProgress(); // Still report progress even on failure
+                return null;
+            }
+        });
+        const resultsWithNulls = await Promise.all(promises);
+        return resultsWithNulls.filter(entry => entry !== null) as [IDBValidKey, Blob][];
+    };
 
     const [
         videoBlobs,
         thumbnailBlobs,
         figureThumbnailBlobs
     ] = await Promise.all([
-        Promise.all(videoBlobPromises),
-        Promise.all(thumbnailBlobPromises),
-        Promise.all(figureThumbnailBlobPromises),
+        convertAndFilter(videoEntries, 'video'),
+        convertAndFilter(thumbnailEntries, 'thumbnail'),
+        convertAndFilter(figureThumbnailEntries, 'figure thumbnail'),
     ]);
     onProgress?.(0.50);
-    
-    const lessonsWithVideoId = lessons.map((lesson: Lesson) => {
-        const videoId = videoIdMap.get(lesson.id);
-        if (videoId) {
-            return { ...lesson, videoId };
-        }
-        return lesson;
-    });
-    
+
     this.videoUrlCache.forEach(url => URL.revokeObjectURL(url));
     this.videoUrlCache.clear();
     this.thumbUrlCache.forEach(url => URL.revokeObjectURL(url));
@@ -828,22 +826,26 @@ export class AppDataService implements IDataService {
     const tx = db.transaction(db.objectStoreNames, 'readwrite');
 
     try {
-        // Clear all stores except for settings, as we want to preserve device settings.
-        const storesToClear = Array.from(db.objectStoreNames)
-            .filter(name => name !== SETTINGS_STORE);
-        await Promise.all(storesToClear.map(name => tx.objectStore(name as any).clear()));
         onProgress?.(0.55);
         
-        // Write all imported data. Only sync settings are overwritten.
         await tx.objectStore(SETTINGS_STORE).put(importedSyncSettings, SYNC_SETTINGS_KEY);
         onProgress?.(0.56);
-        await Promise.all(lessonsWithVideoId.map((item: Lesson) => tx.objectStore(LESSONS_STORE).put(item)));
+        
+        const cleanCategories = (categoriesToClean: any[]) => {
+            if (!categoriesToClean) return [];
+            return categoriesToClean.map(c => {
+              const { isExpanded, ...rest } = c; // Remove legacy isExpanded property
+              return rest;
+            });
+        };
+
+        await Promise.all(lessons.map((item: Lesson) => tx.objectStore(LESSONS_STORE).put(item)));
         onProgress?.(0.65);
         await Promise.all(figures.map((item: Figure) => tx.objectStore(FIGURES_STORE).put(item)));
         onProgress?.(0.70);
-        await Promise.all(figureCategories.map((item: FigureCategory) => tx.objectStore(FIGURE_CATEGORIES_STORE).put(item)));
+        await Promise.all(cleanCategories(figureCategories).map((item: FigureCategory) => tx.objectStore(FIGURE_CATEGORIES_STORE).put(item)));
         onProgress?.(0.75);
-        await Promise.all(lessonCategories.map((item: LessonCategory) => tx.objectStore(LESSON_CATEGORIES_STORE).put(item)));
+        await Promise.all(cleanCategories(lessonCategories).map((item: LessonCategory) => tx.objectStore(LESSON_CATEGORIES_STORE).put(item)));
         onProgress?.(0.80);
         await Promise.all(videoBlobs.map(([key, blob]) => tx.objectStore(VIDEO_FILES_STORE).put(blob, key)));
         onProgress?.(0.90);

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef } from 'react';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
@@ -7,12 +8,14 @@ import { useTranslation } from '../App';
 import { dataService } from '../data/service';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import GoogleDriveSync from './GoogleDriveSync';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 type Status = { type: 'success' | 'error'; message: string } | null;
 
 const SettingsView: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const { t, settings, setLanguage, updateSettings, reloadAllData } = useTranslation();
+  const { isSignedIn, synchronize } = useGoogleDrive();
   
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -82,6 +85,11 @@ const SettingsView: React.FC = () => {
           await dataService.importData(file, (p) => setProgress(p));
           setDataManagementStatus({ type: 'success', message: t('settings.importSuccess')});
           reloadAllData();
+
+          if (isSignedIn) {
+              await synchronize(true); // Force a full upload after import
+          }
+
       } catch (err) {
           console.error("Import failed", err);
           setDataManagementStatus({ type: 'error', message: t('settings.importError')});

@@ -6,9 +6,10 @@ export const DESKTOP_DRAWER_WIDTH = 240;
 
 interface DesktopDrawerProps {
   navItems: NavItem[];
+  hasError: boolean;
 }
 
-const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems }) => {
+const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems, hasError }) => {
   const location = useLocation();
   const activePath = location.pathname;
 
@@ -24,21 +25,24 @@ const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems }) => {
       </div>
       <nav className="flex-grow p-4 overflow-y-auto">
         <ul>
-          {navItems.map((item) => (
-            <li key={item.path}>
-              <Link
-                to={item.path}
-                className={`flex items-center w-full text-left p-4 my-1 rounded-lg transition-colors duration-200 ${
-                  activePath.startsWith(item.path)
-                    ? 'bg-blue-100 text-blue-600 font-semibold'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <i className="material-icons mr-4">{item.icon}</i>
-                <span>{item.label}</span>
-              </Link>
-            </li>
-          ))}
+          {navItems.map((item) => {
+            const isSettingsWithError = item.path === '/settings' && hasError;
+            return (
+              <li key={item.path}>
+                <Link
+                  to={item.path}
+                  className={`flex items-center w-full text-left p-4 my-1 rounded-lg transition-colors duration-200 ${
+                    activePath.startsWith(item.path)
+                      ? 'bg-blue-100 text-blue-600 font-semibold'
+                      : `text-gray-600 hover:bg-gray-100 ${isSettingsWithError ? 'text-red-600' : ''}`
+                  }`}
+                >
+                  <i className={`material-icons mr-4 ${isSettingsWithError ? 'text-red-500 animate-pulse' : ''}`}>{item.icon}</i>
+                  <span>{item.label}</span>
+                </Link>
+              </li>
+            )
+          })}
         </ul>
       </nav>
     </div>

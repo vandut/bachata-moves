@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Figure, Lesson, FigureCategory } from '../types';
@@ -9,6 +10,7 @@ import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 interface FigureCardProps {
   figure: Figure;
@@ -21,6 +23,7 @@ interface FigureCardProps {
 
 const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, onRefresh, itemIds, baseRoute }) => {
   const { t, settings } = useTranslation();
+  const { isSignedIn, deleteFigure: deleteFigureFromDrive } = useGoogleDrive();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,9 +179,16 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
+      // First, attempt to delete from Google Drive if the user is signed in.
+      // This is awaited, so if it fails, the local delete will not proceed.
+      if (isSignedIn) {
+          await deleteFigureFromDrive(figure);
+      }
+      // If Drive deletion is successful (or not applicable), delete locally.
       await dataService.deleteFigure(figure.id);
+
       setShowDeleteConfirm(false);
-      onRefresh();
+      onRefresh(); // Refresh the gallery to reflect the change.
     } catch (err) {
       console.error("Failed to delete figure:", err);
     } finally {

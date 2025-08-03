@@ -1,6 +1,8 @@
 
 
 
+
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -16,7 +18,7 @@ import EditorScreen from './components/EditorScreen';
 import { dataService } from './data/service';
 import { translations } from './i18n';
 import CustomizeGroupingScreen from './components/CustomizeCategoriesScreen';
-import { GoogleDriveProvider } from './hooks/useGoogleDrive';
+import { GoogleDriveProvider, useGoogleDrive } from './hooks/useGoogleDrive';
 
 // --- I18N Provider and Hook ---
 type Language = 'english' | 'polish';
@@ -110,6 +112,7 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 // --- Main App Component Structure ---
 const AppContent: React.FC<{ isDesktop: boolean }> = ({ isDesktop }) => {
   const { t } = useTranslation();
+  const { syncError } = useGoogleDrive();
   
   const NAV_ITEMS: NavItem[] = [
     { path: '/lessons', label: t('nav.lessons'), icon: 'ondemand_video' },
@@ -117,10 +120,15 @@ const AppContent: React.FC<{ isDesktop: boolean }> = ({ isDesktop }) => {
     { path: '/settings', label: t('nav.settings'), icon: 'settings' },
   ];
 
+  const settingsNavItem = NAV_ITEMS.find(item => item.path === '/settings');
+  if (settingsNavItem && syncError) {
+      settingsNavItem.icon = 'notification_important';
+  }
+
   return (
     <div className="h-screen bg-gray-50 flex flex-col lg:flex-row overflow-hidden">
       {isDesktop ? (
-        <DesktopDrawer navItems={NAV_ITEMS} />
+        <DesktopDrawer navItems={NAV_ITEMS} hasError={!!syncError} />
       ) : null}
 
       <main className="flex-1 overflow-y-auto">
@@ -142,7 +150,7 @@ const AppContent: React.FC<{ isDesktop: boolean }> = ({ isDesktop }) => {
       </main>
 
       {!isDesktop ? (
-        <MobileBottomNav navItems={NAV_ITEMS} />
+        <MobileBottomNav navItems={NAV_ITEMS} hasError={!!syncError} />
       ) : null}
     </div>
   );

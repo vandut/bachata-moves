@@ -144,14 +144,12 @@ const FiguresGallery: React.FC = () => {
   };
 
   const handleToggleCategory = async (categoryId: string) => {
-    const category = figureCategories.find(c => c.id === categoryId);
-    if (!category) return;
-    try {
-      await dataService.updateFigureCategory(categoryId, { isExpanded: !category.isExpanded });
-      refreshGalleries(); // Refresh to get the updated category state
-    } catch (err) {
-      console.error("Failed to update category state:", err);
-    }
+    const currentCollapsed = settings.collapsedFigureCategories || [];
+    const isCollapsed = currentCollapsed.includes(categoryId);
+    const newCollapsedKeys = isCollapsed
+      ? currentCollapsed.filter(key => key !== categoryId)
+      : [...currentCollapsed, categoryId];
+    await updateSettings({ collapsedFigureCategories: newCollapsedKeys });
   };
   
   const handleToggleUncategorized = () => {
@@ -469,15 +467,17 @@ const FiguresGallery: React.FC = () => {
               const showGroup = count > 0 || settings.showEmptyFigureCategoriesInGroupedView;
               if (!showGroup) return null;
 
+              const isExpanded = !(settings.collapsedFigureCategories || []).includes(category.id);
+
               return (
                 <div key={category.id}>
                   <CategoryHeader 
                       name={category.name} 
-                      isExpanded={category.isExpanded} 
+                      isExpanded={isExpanded} 
                       onToggle={() => handleToggleCategory(category.id)}
                       count={settings.showFigureCountInGroupHeaders ? count : undefined}
                   />
-                  {category.isExpanded && (
+                  {isExpanded && (
                       <div className="pt-2 pb-6">
                          {count > 0 ? (
                              <FigureGrid

@@ -10,13 +10,15 @@ export interface NavItem {
 export interface FigureCategory {
   id: string;
   name:string;
-  isExpanded: boolean;
+  driveId?: string;
+  modifiedTime?: string;
 }
 
 export interface LessonCategory {
   id: string;
   name: string;
-  isExpanded: boolean;
+  driveId?: string;
+  modifiedTime?: string;
 }
 
 export interface Figure {
@@ -28,6 +30,8 @@ export interface Figure {
   endTime: number; // Milliseconds
   thumbTime: number; // Milliseconds from the start of the video
   categoryId?: string | null;
+  driveId?: string;
+  modifiedTime?: string;
 }
 
 export interface Lesson {
@@ -39,6 +43,9 @@ export interface Lesson {
   endTime: number; // Milliseconds
   thumbTime: number; // Milliseconds from the start of the video
   categoryId?: string | null;
+  driveId?: string;
+  videoDriveId?: string;
+  modifiedTime?: string;
 }
 
 export type LessonSortOrder = 'newest' | 'oldest';
@@ -58,14 +65,18 @@ export interface AppSettings {
   collapsedFigureDateGroups: string[];
   // Figure Category Settings
   uncategorizedFigureCategoryIsExpanded: boolean;
+  collapsedFigureCategories: string[];
   figureCategoryOrder: string[];
   showEmptyFigureCategoriesInGroupedView: boolean;
   showFigureCountInGroupHeaders: boolean;
   // Lesson Category Settings
   uncategorizedLessonCategoryIsExpanded: boolean;
+  collapsedLessonCategories: string[];
   lessonCategoryOrder: string[];
   showEmptyLessonCategoriesInGroupedView: boolean;
   showLessonCountInGroupHeaders: boolean;
+  // Sync settings
+  lastSyncTimestamp?: string;
 }
 
 export interface AppData {

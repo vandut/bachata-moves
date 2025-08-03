@@ -8,12 +8,14 @@ export interface IDataService {
   addLesson(lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, videoFile: File): Promise<Lesson>;
   updateLesson(lessonId: string, lessonUpdateData: Partial<Omit<Lesson, 'id'>>): Promise<Lesson>;
   deleteLesson(lessonId: string): Promise<void>;
+  saveDownloadedLesson(lesson: Lesson, videoFile: Blob): Promise<void>;
 
   // Figures
   getFigures(): Promise<Figure[]>;
   addFigure(lessonId: string, figureData: Omit<Figure, 'id' | 'lessonId'>): Promise<Figure>;
   updateFigure(figureId: string, figureUpdateData: Partial<Omit<Figure, 'id' | 'lessonId'>>): Promise<Figure>;
   deleteFigure(figureId: string): Promise<void>;
+  saveDownloadedFigure(figure: Figure): Promise<void>;
 
   // Figure Categories
   getFigureCategories(): Promise<FigureCategory[]>;

@@ -1,10 +1,12 @@
 
+
 import React, { useState, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { dataService } from '../data/service';
 import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 interface GalleryContext {
     refresh: () => void;
@@ -15,6 +17,8 @@ const AddLessonModal: React.FC = () => {
   const { refresh, isMobile } = useOutletContext<GalleryContext>();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { isSignedIn, uploadLesson } = useGoogleDrive();
+
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -135,14 +139,19 @@ const AddLessonModal: React.FC = () => {
     setError(null);
 
     try {
-      const lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'> = {
+      const lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime' | 'modifiedTime'> = {
         uploadDate: new Date(date).toISOString(),
         description: description || null,
         startTime: 0,
         endTime: videoDurationMs,
       };
       
-      await dataService.addLesson(lessonData, videoFile);
+      const newLesson = await dataService.addLesson(lessonData, videoFile);
+
+      if (isSignedIn) {
+          await uploadLesson(newLesson, videoFile);
+      }
+
       if (refresh) {
         refresh();
       }

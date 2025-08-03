@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
@@ -7,6 +8,7 @@ import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure } from '../types';
 import { dataService } from '../data/service';
 import { useTranslation } from '../App';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 interface GalleryContext {
     refresh: () => void;
@@ -78,6 +80,7 @@ const EditorScreen: React.FC = () => {
     const { t, locale, settings, updateSettings } = useTranslation();
     const { isMuted, volume } = settings;
     const query = useQuery();
+    const { isSignedIn, uploadFigure, updateFigure, updateLesson } = useGoogleDrive();
 
     // --- State ---
     const [item, setItem] = useState<Lesson | Figure | null>(null);
@@ -332,14 +335,17 @@ const EditorScreen: React.FC = () => {
         setError(null);
         try {
             if (isCreatingFigure && lessonIdForNewFigure) {
-                const figureData: Omit<Figure, 'id' | 'lessonId'> = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
-                await dataService.addFigure(lessonIdForNewFigure, figureData);
+                const figureData: Omit<Figure, 'id' | 'lessonId' | 'modifiedTime'> = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
+                const newFigure = await dataService.addFigure(lessonIdForNewFigure, figureData);
+                if (isSignedIn) await uploadFigure(newFigure);
             } else if (isEditingFigure && figureId) {
                 const updateData: Partial<Omit<Figure, 'id' | 'lessonId'>> = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
-                await dataService.updateFigure(figureId, updateData);
+                const updated = await dataService.updateFigure(figureId, updateData);
+                if (isSignedIn) await updateFigure(updated);
             } else if (isEditingLesson && lessonIdParam) {
                 const updateData: Partial<Omit<Lesson, 'id'>> = { uploadDate: new Date(formData.uploadDate).toISOString(), description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
-                await dataService.updateLesson(lessonIdParam, updateData);
+                const updated = await dataService.updateLesson(lessonIdParam, updateData);
+                if (isSignedIn) await updateLesson(updated);
             }
             if (refresh) refresh();
             navigate(baseNavPath);
