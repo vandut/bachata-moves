@@ -9,8 +9,8 @@ export const FOLDERS = {
 };
 
 export const FILES = {
-    lessonCategories: 'lesson_categories.json',
-    figureCategories: 'figure_categories.json',
+    lessonGroupingConfig: 'lesson_grouping_config.json',
+    figureGroupingConfig: 'figure_grouping_config.json',
     settings: 'settings.json',
     deletedItemsLog: 'deleted_items_log.json',
 };
@@ -48,6 +48,7 @@ export class GoogleDriveApi {
 
         try {
             const response = await fetch(url, {
+                cache: 'no-cache', // Prevent browser from returning stale data
                 ...options,
                 signal: controller.signal,
             });
@@ -136,9 +137,14 @@ export class GoogleDriveApi {
             requestMetadata.parents = ['appDataFolder'];
         }
         
+        const queryParams = new URLSearchParams({
+            uploadType: 'multipart',
+            fields: 'id,name,modifiedTime,parents' // Specify the fields we want in the response.
+        });
+        
         const uploadUrl = fileId 
-            ? `${this.uploadBaseUrl}/files/${fileId}?uploadType=multipart` 
-            : `${this.uploadBaseUrl}/files?uploadType=multipart`;
+            ? `${this.uploadBaseUrl}/files/${fileId}?${queryParams.toString()}` 
+            : `${this.uploadBaseUrl}/files?${queryParams.toString()}`;
         
         const body = content instanceof Blob ? new Blob([
                 delimiter,

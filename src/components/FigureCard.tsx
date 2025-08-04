@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Figure, Lesson, FigureCategory } from '../types';
@@ -28,6 +30,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
   const [error, setError] = useState<string | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isVideoVisible, setIsVideoVisible] = useState(false);
   
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -105,6 +108,12 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
     const video = videoRef.current;
     if (!video) return;
 
+    const onPlaying = () => setIsVideoVisible(true);
+    const onPause = () => setIsVideoVisible(false);
+
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('pause', onPause);
+
     if (isPlaying) {
       const handleTimeUpdate = () => {
         const startTimeSec = (figure.startTime || 0) / 1000;
@@ -113,31 +122,33 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
         // Loop logic
         if (endTimeSec > startTimeSec && video.currentTime >= endTimeSec) {
           video.currentTime = startTimeSec;
-          video.play().catch(e => console.warn("Figure loop playback failed", e));
+          video.play().catch(e => {
+            if (e.name !== 'AbortError') {
+              console.warn("Figure loop playback failed", e);
+            }
+          });
         }
       };
-
-      const playVideo = () => {
-        video.currentTime = (figure.startTime || 0) / 1000;
-        video.play().catch(e => console.warn("Figure autoplay was prevented.", e));
-      };
-
       video.addEventListener('timeupdate', handleTimeUpdate);
 
-      if (video.readyState >= 3) { // HAVE_FUTURE_DATA
-        playVideo();
-      } else {
-        video.addEventListener('loadeddata', playVideo, { once: true });
-      }
-
+      video.currentTime = (figure.startTime || 0) / 1000;
+      video.play().catch(e => {
+        if (e.name !== 'AbortError') {
+          console.warn("Figure autoplay was prevented.", e);
+        }
+      });
+      
       return () => {
         video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('loadeddata', playVideo);
-        video.pause();
-      };
+      }
     } else {
       video.pause();
     }
+    
+    return () => {
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('pause', onPause);
+    };
   }, [isPlaying, figure.startTime, figure.endTime]);
 
   const handleMouseEnter = () => setIsHovering(true);
@@ -219,8 +230,6 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
     { label: t('common.edit'), onClick: handleEdit, icon: 'edit' },
     { label: t('common.remove'), onClick: handleRequestRemove, isDestructive: true, icon: 'delete' },
   ];
-
-  const showVideo = isPlaying && videoUrl;
   
   const getIconName = () => {
     if (error === t('card.videoNotLoaded') || error === t('card.videoNotAvailable')) return 'videocam_off';
@@ -237,22 +246,24 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
           role="button"
           tabIndex={0}
           aria-label={t('card.viewFigure', { name: figure.name })}
-          className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+          className={`block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer ${isHovering ? 'scale-105' : ''}`}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
       >
         <div className="h-full flex flex-col">
           <div className="aspect-[9/16] bg-gray-900 flex items-center justify-center relative text-white">
-            {showVideo ? (
-              <video
-                ref={videoRef}
-                src={videoUrl!}
-                muted
-                playsInline
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <>
+             {/* Video is a layer that appears when playing */}
+            {videoUrl && (
+                <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    muted
+                    playsInline
+                    className={`absolute inset-0 w-full h-full object-cover ${!isVideoVisible ? 'hidden' : ''}`}
+                />
+            )}
+            {/* Thumbnail and error are a layer that is hidden when playing */}
+            <div className={`absolute inset-0 w-full h-full ${isVideoVisible ? 'hidden' : ''}`}>
                 <div 
                   className="w-full h-full bg-cover bg-center"
                   style={{ backgroundImage: thumbnailUrl ? `url(${thumbnailUrl})` : 'none' }}
@@ -268,8 +279,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
                     )}
                   </div>
                 )}
-              </>
-            )}
+            </div>
           </div>
           <div className="p-4 flex items-center justify-center">
             <h3 className="text-lg font-medium text-gray-800 text-center" title={figure.name}>{figure.name}</h3>

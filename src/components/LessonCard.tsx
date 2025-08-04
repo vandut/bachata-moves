@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Lesson, LessonCategory } from '../types';
@@ -28,6 +30,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
   const [error, setError] = useState<string | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isVideoVisible, setIsVideoVisible] = useState(false);
   
   const cardRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -46,9 +49,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
     let isCancelled = false;
     // Reset state for new lesson prop
     setThumbnailUrl(null);
-    // Do not reset videoUrl here, as it might be needed if hover state doesn't change
     setError(null);
-    setIsPlaying(false);
 
     dataService.getLessonThumbnailUrl(lesson.id)
       .then(url => {
@@ -106,6 +107,12 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
     const video = videoRef.current;
     if (!video) return;
 
+    const onPlaying = () => setIsVideoVisible(true);
+    const onPause = () => setIsVideoVisible(false);
+
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('pause', onPause);
+
     if (isPlaying) {
       const handleTimeUpdate = () => {
         const startTimeSec = (lesson.startTime || 0) / 1000;
@@ -114,30 +121,32 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
         // Custom loop logic if endTime is set
         if (endTimeSec > startTimeSec && video.currentTime >= endTimeSec) {
           video.currentTime = startTimeSec;
-          video.play().catch(e => console.warn("Loop playback failed", e));
+          video.play().catch(e => {
+            if (e.name !== 'AbortError') {
+              console.warn("Loop playback failed", e);
+            }
+          });
         }
       };
-
-      const playVideo = () => {
-        video.currentTime = (lesson.startTime || 0) / 1000;
-        video.play().catch(e => console.warn("Autoplay was prevented.", e));
-      };
-
       video.addEventListener('timeupdate', handleTimeUpdate);
 
-      if (video.readyState >= 3) { // HAVE_FUTURE_DATA
-        playVideo();
-      } else {
-        video.addEventListener('loadeddata', playVideo, { once: true });
-      }
-
+      video.currentTime = (lesson.startTime || 0) / 1000;
+      video.play().catch(e => {
+        if (e.name !== 'AbortError') {
+          console.warn("Autoplay was prevented.", e);
+        }
+      });
+      
       return () => {
         video.removeEventListener('timeupdate', handleTimeUpdate);
-        video.removeEventListener('loadeddata', playVideo);
-        video.pause();
-      };
+      }
     } else {
       video.pause();
+    }
+
+    return () => {
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('pause', onPause);
     }
   }, [isPlaying, lesson.startTime, lesson.endTime]);
 
@@ -227,8 +236,6 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
     day: 'numeric',
   });
 
-  const showVideo = isPlaying && videoUrl;
-
   return (
     <>
       <div
@@ -238,29 +245,29 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
           role="button"
           tabIndex={0}
           aria-label={t('card.viewLesson', { date: formattedDate })}
-          className="block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform hover:scale-105 transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
+          className={`block bg-white text-current no-underline rounded-lg shadow-md overflow-hidden transform transition-transform duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer ${isHovering ? 'scale-105' : ''}`}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
       >
         <div className="h-full flex flex-col">
           <div className="aspect-[9/16] bg-gray-900 flex items-center justify-center relative text-white">
-            {showVideo ? (
+            {/* Video is a layer that appears when playing */}
+            {videoUrl && (
               <video
-                ref={videoRef}
-                src={videoUrl!} // We know videoUrl is a string here
-                muted
-                playsInline
-                className="w-full h-full object-cover"
+                  ref={videoRef}
+                  src={videoUrl}
+                  muted
+                  playsInline
+                  className={`absolute inset-0 w-full h-full object-cover ${!isVideoVisible ? 'hidden' : ''}`}
               />
-            ) : (
-              <>
-                {/* Display thumbnail as a background image */}
+            )}
+            {/* Thumbnail and error are a layer that is hidden when playing */}
+            <div className={`absolute inset-0 w-full h-full ${isVideoVisible ? 'hidden' : ''}`}>
                 <div 
                   className="w-full h-full bg-cover bg-center"
                   style={{ backgroundImage: thumbnailUrl ? `url(${thumbnailUrl})` : 'none' }}
                 ></div>
 
-                {/* Overlay for placeholder icon or error message */}
                 {(error || !thumbnailUrl) && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2 bg-gray-900/50 pointer-events-none">
                     <i className="material-icons text-6xl text-gray-400">
@@ -271,8 +278,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
                     )}
                   </div>
                 )}
-              </>
-            )}
+            </div>
           </div>
           <div className="p-4 flex items-center justify-center">
             <h3 className="text-lg font-medium text-gray-800" title={t('card.lessonFrom', { date: formattedDate })}>

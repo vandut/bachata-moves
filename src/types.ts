@@ -96,6 +96,7 @@ export interface ModalAction {
 
 export type SyncTaskType = 
   | 'sync-gallery'
+  | 'sync-grouping-config'
   | 'sync-settings'
   | 'sync-deleted-log'
   | 'upload-lesson'
@@ -112,4 +113,12 @@ export interface SyncTask {
   status: 'pending' | 'in-progress' | 'error';
   createdAt: number;
   error?: string;
+}
+
+export interface GroupingConfig {
+    modifiedTime: string;
+    categories: FigureCategory[] | LessonCategory[];
+    order: string[];
+    showEmpty: boolean;
+    showCount: boolean;
 }

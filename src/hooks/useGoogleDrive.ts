@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, createContext, useContext, Rea
 import { GOOGLE_CLIENT_ID } from '../../config';
 import { GoogleDriveApi, DriveFile, FOLDERS, FILES } from '../data/googledrive';
 import { dataService } from '../data/service';
-import type { AppSettings, Figure, Lesson, SyncTask, SyncTaskType, FigureCategory, LessonCategory } from '../types';
+import type { AppSettings, Figure, Lesson, SyncTask, SyncTaskType, FigureCategory, LessonCategory, GroupingConfig } from '../types';
 import { openBachataDB } from '../data/indexdb';
 import { createLogger } from '../utils/logger';
 import { syncQueueService } from '../data/syncQueueService';
@@ -38,9 +38,7 @@ interface GoogleDriveContextType {
   isSyncActive: boolean;
   initiateSync: (type: 'lesson' | 'figure') => void;
   // Direct, non-queued operations
-  fetchLatestSettingsForEditing: (type: 'lesson' | 'figure') => Promise<void>;
-  forceUploadSettingsAndCategories: (type: 'lesson' | 'figure') => Promise<void>;
-  fetchLatestItemForEditing: <T extends Lesson | Figure>(itemId: string, type: 'lesson' | 'figure') => Promise<T>;
+  forceUploadGroupingConfig: (type: 'lesson' | 'figure') => Promise<void>;
   forceAddItem: (itemData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'> | Omit<Figure, 'id'| 'lessonId'>, type: 'lesson' | 'figure', options?: { videoFile?: File, lessonId?: string }) => Promise<Lesson | Figure>;
   forceUpdateItem: (itemId: string, itemData: Partial<Omit<Lesson, 'id'>> | Partial<Omit<Figure, 'id'>>, type: 'lesson' | 'figure') => Promise<Lesson | Figure>;
   forceDeleteItem: (item: Lesson | Figure) => Promise<void>;
@@ -78,6 +76,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
     }
     logger.info(`Queueing gallery sync for: ${type}`);
     syncQueueService.addTask('sync-gallery', { type });
+    syncQueueService.addTask('sync-grouping-config', { type });
   }, []);
 
   // --- START: Truly Blocking Operations ---
@@ -210,144 +209,17 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
 
 
   // --- Settings and Categories Sync ---
-  const fetchLatestSettingsForEditing = useCallback(async (type: 'lesson' | 'figure') => {
+  const forceUploadGroupingConfig = useCallback(async (type: 'lesson' | 'figure') => {
       if (!apiRef.current) return;
       const api = apiRef.current;
-      const db = await openBachataDB();
-      logger.info(`--- UI-BLOCK: Fetching latest settings for ${type} category editor... ---`);
-  
+      logger.info(`--- UI-BLOCK: Forcing UPLOAD of grouping config for ${type} ---`);
       try {
-          const settingsFileName = FILES.settings;
-          const categoriesFileName = type === 'lesson' ? FILES.lessonCategories : FILES.figureCategories;
-      
-          const [remoteSettingsFile] = await api.listFiles(`name='${settingsFileName}'`);
-          const [remoteCategoriesFile] = await api.listFiles(`name='${categoriesFileName}'`);
-          
-          const localSyncSettings: any = await db.get('settings', 'sync-settings');
-      
-          if (remoteSettingsFile && (!localSyncSettings?.modifiedTime || new Date(remoteSettingsFile.modifiedTime).getTime() > new Date(localSyncSettings.modifiedTime).getTime())) {
-              logger.info('Remote settings are newer. Downloading...');
-              const remoteSettings = await api.downloadJson<any>(remoteSettingsFile.id);
-              if (remoteSettings) {
-                  await db.put('settings', remoteSettings, 'sync-settings');
-                  logger.info('✅ Synced settings from remote.');
-              }
-          } else {
-               logger.info('Local settings are up-to-date.');
-          }
-      
-          if (remoteCategoriesFile) {
-              logger.info(`Remote categories file found for ${type}. Downloading...`);
-              const remoteCategories = await api.downloadJson<(LessonCategory | FigureCategory)[]>(remoteCategoriesFile.id);
-              if (remoteCategories) {
-                  const storeName = type === 'lesson' ? 'lesson_categories' : 'figure_categories';
-                  const tx = db.transaction(storeName, 'readwrite');
-                  await tx.store.clear();
-                  for (const cat of remoteCategories) {
-                      await tx.store.put(cat);
-                  }
-                  await tx.done;
-                  logger.info(`✅ Synced ${remoteCategories.length} categories from remote.`);
-              }
-          }
-      } catch (e) {
-        logger.error('Failed to fetch latest settings for editing', e);
-      }
-  }, []);
-  
-  const forceUploadSettingsAndCategories = useCallback(async (type: 'lesson' | 'figure') => {
-      if (!apiRef.current) return;
-      const api = apiRef.current;
-      const db = await openBachataDB();
-      logger.info(`--- UI-BLOCK: Forcing UPLOAD of settings & categories for ${type} ---`);
-  
-      try {
-          const settingsFileName = FILES.settings;
-          const categoriesFileName = type === 'lesson' ? FILES.lessonCategories : FILES.figureCategories;
-          
-          const localSyncSettings: any = await db.get('settings', 'sync-settings');
-          if (localSyncSettings) {
-              const [existingSettingsFile] = await api.listFiles(`name='${settingsFileName}'`);
-              logger.info('Uploading local settings...');
-              
-              const settingsDriveFile = await api.upload(JSON.stringify(localSyncSettings), { name: settingsFileName, mimeType: 'application/json' }, existingSettingsFile?.id);
-              
-              // Update local settings with the timestamp from the successful upload
-              localSyncSettings.modifiedTime = settingsDriveFile.modifiedTime;
-              await db.put('settings', localSyncSettings, 'sync-settings');
-
-              logger.info('✅ Settings uploaded.');
-          }
-          
-          const getLocalCategories = type === 'lesson' ? dataService.getLessonCategories : dataService.getFigureCategories;
-          const localCategories = await getLocalCategories();
-          const [existingCategoriesFile] = await api.listFiles(`name='${categoriesFileName}'`);
-          logger.info(`Uploading ${localCategories.length} local categories for ${type}...`);
-          await api.upload(JSON.stringify(localCategories), { name: categoriesFileName, mimeType: 'application/json' }, existingCategoriesFile?.id);
-          logger.info('✅ Categories uploaded.');
+          await syncQueueService.syncGroupingConfig(api, type);
+          logger.info('✅ Grouping config sync/upload complete.');
       } catch(e) {
-        logger.error('Failed to force upload settings and categories', e);
+        logger.error('Failed to force upload grouping config', e);
+        throw e; // Re-throw to be caught by the calling component
       }
-  
-  }, []);
-
-  const fetchLatestItemForEditing = useCallback(async <T extends Lesson | Figure>(
-    itemId: string, 
-    type: 'lesson' | 'figure'
-): Promise<T> => {
-    logger.info(`--- UI-BLOCK: Fetching latest item for editing ${type} ${itemId} ---`);
-    try {
-        const db = await openBachataDB();
-        const api = apiRef.current;
-        
-        const localItem = type === 'lesson' 
-            ? await db.get('lessons', itemId) as T | undefined
-            : await db.get('figures', itemId) as T | undefined;
-            
-        if (!localItem) throw new Error("Local item not found for editing.");
-        if (!api || !localItem.driveId) {
-            logger.info(' > No remote to check. Returning local item.');
-            return localItem;
-        }
-        
-        logger.info(' > Checking remote for newer version...');
-        const folderName = type === 'lesson' ? FOLDERS.lessons : FOLDERS.figures;
-        const folderId = await api.findOrCreateFolder(folderName);
-        const [remoteFile] = await api.listFiles(`name='${localItem.id}.json' and '${folderId}' in parents`);
-
-        if (!remoteFile) {
-            logger.warn(' > Remote file not found. Returning local item.');
-            return localItem;
-        }
-
-        const localTime = localItem.modifiedTime ? new Date(localItem.modifiedTime).getTime() : 0;
-        const remoteTime = new Date(remoteFile.modifiedTime).getTime();
-
-        if (remoteTime > localTime + 2000) { // Remote is newer
-            logger.info(' > Remote is newer. Downloading and returning updated item.');
-            if (type === 'lesson') {
-                await syncQueueService.downloadLesson(api, remoteFile.id);
-                return await db.get('lessons', itemId) as T;
-            } else { // type === 'figure'
-                const figureJson = await api.downloadJson<Figure>(remoteFile.id);
-                if (!figureJson) throw new Error("Failed to download remote figure JSON.");
-                await dataService.saveDownloadedFigure(figureJson);
-                return await db.get('figures', itemId) as T;
-            }
-        }
-        
-        logger.info(' > Local item is up-to-date. Returning local item.');
-        return localItem;
-
-    } catch (e) {
-        logger.error(`Failed to fetch latest item for editing ${itemId}`, e);
-        // If it fails, return the local item as a fallback
-        const localItem = type === 'lesson'
-            ? await (await openBachataDB()).get('lessons', itemId) as T | undefined
-            : await (await openBachataDB()).get('figures', itemId) as T | undefined;
-        if (!localItem) throw new Error("Local item not found for editing after remote fetch failed.");
-        return localItem;
-    }
   }, []);
 
   const handleSignOut = useCallback((isExpired: boolean = false) => {
@@ -475,9 +347,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
       signIn, signOut: handleSignOut,
       syncQueue, isSyncActive,
       initiateSync,
-      fetchLatestSettingsForEditing,
-      forceUploadSettingsAndCategories,
-      fetchLatestItemForEditing,
+      forceUploadGroupingConfig,
       forceAddItem,
       forceUpdateItem,
       forceDeleteItem
@@ -486,9 +356,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
       signIn, handleSignOut,
       syncQueue, isSyncActive,
       initiateSync,
-      fetchLatestSettingsForEditing,
-      forceUploadSettingsAndCategories,
-      fetchLatestItemForEditing,
+      forceUploadGroupingConfig,
       forceAddItem,
       forceUpdateItem,
       forceDeleteItem

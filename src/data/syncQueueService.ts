@@ -1,4 +1,4 @@
-import type { SyncTask, SyncTaskType, Lesson, Figure } from '../types';
+import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, LessonCategory, FigureCategory } from '../types';
 import { GoogleDriveApi, FOLDERS, FILES, DriveFile } from './googledrive';
 import { dataService } from './service';
 import { createLogger } from '../utils/logger';
@@ -45,7 +45,7 @@ class SyncQueueService {
     }
 
     public addTask(type: SyncTaskType, payload?: any, isPriority = false): void {
-        const uniquePayloadIdentifier = type === 'sync-gallery' ? payload?.type : (payload?.id || payload?.driveId || payload?.lessonId || payload?.figureId);
+        const uniquePayloadIdentifier = type === 'sync-gallery' || type === 'sync-grouping-config' ? payload?.type : (payload?.id || payload?.driveId || payload?.lessonId || payload?.figureId);
         if (this.isDuplicate(type, uniquePayloadIdentifier)) {
             logger.info(`Skipping duplicate task: ${type}`, payload);
             return;
@@ -109,7 +109,7 @@ class SyncQueueService {
                 } else {
                     const remoteTime = new Date(remoteMatch.modifiedTime).getTime();
                     const localTime = item.modifiedTime ? new Date(item.modifiedTime).getTime() : 0;
-                    if (localTime > remoteTime + 2000) { // Local is newer (with a 2s buffer)
+                    if (localTime > remoteTime) { // Local is newer
                          logger.info(`[STALE] Local item ${item.id} is newer than remote. Queueing for UPLOAD.`);
                          this.addTask(`upload-${type}`, { [`${type}Id`]: item.id });
                     }
@@ -129,7 +129,7 @@ class SyncQueueService {
             } else if (localMatch.driveId) {
                  const remoteTime = new Date(remoteFile.modifiedTime).getTime();
                  const localTime = localMatch.modifiedTime ? new Date(localMatch.modifiedTime).getTime() : 0;
-                 if (remoteTime > localTime + 2000) { // Remote is newer (with a 2s buffer)
+                 if (remoteTime > localTime) { // Remote is newer
                     logger.info(`[STALE] Remote file ${remoteFile.name} is newer than local. Queueing for DOWNLOAD.`);
                     this.addTask(`download-${type}`, { driveId: remoteFile.id });
                  }
@@ -239,8 +239,140 @@ class SyncQueueService {
         logger.info(`🗑️ Deleting remote file (Drive ID: ${driveId})`);
         await api.deleteFile(driveId);
     }
+    
+    public async buildLocalGroupingConfig(type: 'lesson' | 'figure'): Promise<GroupingConfig> {
+        const storeName = type === 'lesson' ? 'lesson_categories' : 'figure_categories';
+        const settingsKeys = type === 'lesson'
+            ? { order: 'lessonCategoryOrder', showEmpty: 'showEmptyLessonCategoriesInGroupedView', showCount: 'showLessonCountInGroupHeaders' }
+            : { order: 'figureCategoryOrder', showEmpty: 'showEmptyFigureCategoriesInGroupedView', showCount: 'showFigureCountInGroupHeaders' };
+    
+        const localCategories = await (type === 'lesson' ? dataService.getLessonCategories() : dataService.getFigureCategories());
+        const localSettings = await dataService.getSettings();
+        
+        const getLatestTime = async () => {
+            const db = await openBachataDB();
+            const syncSettings = await db.get('settings', 'sync-settings') as any;
+
+            let latest = 0;
+            if (syncSettings?.modifiedTime) {
+                latest = new Date(syncSettings.modifiedTime).getTime();
+            }
+            localCategories.forEach(c => {
+                if (c.modifiedTime) {
+                    const t = new Date(c.modifiedTime).getTime();
+                    if (t > latest) latest = t;
+                }
+            });
+            return latest > 0 ? new Date(latest).toISOString() : new Date(0).toISOString();
+        }
+    
+        return {
+            modifiedTime: await getLatestTime(),
+            categories: localCategories,
+            order: (localSettings as any)[settingsKeys.order] || [],
+            showEmpty: (localSettings as any)[settingsKeys.showEmpty] || false,
+            showCount: (localSettings as any)[settingsKeys.showCount] || false,
+        };
+    };
+
+    public async downloadAndApplyGroupingConfig(config: GroupingConfig, type: 'lesson' | 'figure'): Promise<void> {
+        const db = await openBachataDB();
+        const storeName = type === 'lesson' ? 'lesson_categories' : 'figure_categories';
+        const settingsKeys = type === 'lesson'
+            ? { order: 'lessonCategoryOrder', showEmpty: 'showEmptyLessonCategoriesInGroupedView', showCount: 'showLessonCountInGroupHeaders' }
+            : { order: 'figureCategoryOrder', showEmpty: 'showEmptyFigureCategoriesInGroupedView', showCount: 'showFigureCountInGroupHeaders' };
+    
+        // Update categories
+        const catTx = db.transaction(storeName, 'readwrite');
+        await catTx.store.clear();
+        for (const cat of config.categories) {
+            await catTx.store.put(cat as any);
+        }
+        await catTx.done;
+    
+        // Update settings directly in the database to preserve the remote modifiedTime
+        const settingsTx = db.transaction('settings', 'readwrite');
+        const syncSettings: any = await settingsTx.store.get('sync-settings') || {};
+        
+        syncSettings[settingsKeys.order] = config.order || [];
+        syncSettings[settingsKeys.showEmpty] = !!config.showEmpty;
+        syncSettings[settingsKeys.showCount] = !!config.showCount;
+        
+        // This is the crucial part: set the modifiedTime to match the remote source.
+        syncSettings.modifiedTime = config.modifiedTime;
+        syncSettings.lastSyncTimestamp = config.modifiedTime;
+
+        await settingsTx.store.put(syncSettings, 'sync-settings');
+        await settingsTx.done;
+
+        logger.info(`✅ Applied grouping config for ${type} from remote. Local timestamp updated to match remote: ${config.modifiedTime}.`);
+    };
+
+    public async syncGroupingConfig(api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<void> {
+        logger.info(`--- Syncing Grouping Config: ${type.toUpperCase()} ---`);
+
+        const configFileName = type === 'lesson' ? FILES.lessonGroupingConfig : FILES.figureGroupingConfig;
+
+        const [remoteFile] = await api.listFiles(`name='${configFileName}'`);
+
+        if (!remoteFile) {
+            logger.info(`No remote config found for ${type}. Uploading local config.`);
+            await this.uploadGroupingConfig(api, type);
+            return;
+        }
+
+        const remoteConfig = await api.downloadJson<GroupingConfig>(remoteFile.id);
+        if (!remoteConfig) {
+            logger.warn(`Remote config file ${remoteFile.id} for ${type} was found but could not be downloaded or parsed. Assuming it's corrupted and uploading local version.`);
+            await this.uploadGroupingConfig(api, type);
+            return;
+        }
+
+        const localConfig = await this.buildLocalGroupingConfig(type);
+
+        // Use the Drive file's metadata timestamp as the single source of truth for remote time.
+        const remoteTimestamp = new Date(remoteFile.modifiedTime).getTime();
+        const localTimestamp = new Date(localConfig.modifiedTime).getTime();
+        
+        const remoteISO = new Date(remoteTimestamp).toISOString();
+        const localISO = new Date(localTimestamp).toISOString();
+
+        if (remoteTimestamp > localTimestamp) {
+            logger.info(`Remote config for ${type} is newer. Downloading.`, { remote: remoteISO, local: localISO });
+            // Pass the server's modifiedTime to the download function so it can be preserved.
+            await this.downloadAndApplyGroupingConfig({ ...remoteConfig, modifiedTime: remoteFile.modifiedTime }, type);
+        } else if (localTimestamp > remoteTimestamp) {
+            logger.info(`Local config for ${type} is newer. Uploading.`, { local: localISO, remote: remoteISO });
+            await this.uploadGroupingConfig(api, type);
+        } else {
+            logger.info(`Grouping config for ${type} is up to date.`, { timestamp: localISO });
+        }
+    }
 
     // --- Private Methods ---
+    
+    private async uploadGroupingConfig(api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<DriveFile> {
+        const configToUpload = await this.buildLocalGroupingConfig(type);
+        // The modifiedTime is set by the server on upload, so we don't need to set it here.
+    
+        const configFileName = type === 'lesson' ? FILES.lessonGroupingConfig : FILES.figureGroupingConfig;
+        const [existingFile] = await api.listFiles(`name='${configFileName}'`);
+        const uploadedFile = await api.upload(JSON.stringify(configToUpload), { name: configFileName, mimeType: 'application/json' }, existingFile?.id);
+    
+        // After uploading, update the local 'sync-settings' object with the server's timestamp.
+        // This prevents a loop where the local config (with its fresh but pre-upload timestamp)
+        // is always considered newer than the remote one on the next check.
+        const db = await openBachataDB();
+        const syncSettings: any = await db.get('settings', 'sync-settings') || {};
+        syncSettings.modifiedTime = uploadedFile.modifiedTime;
+        // We also update lastSyncTimestamp for good measure, though the logic mainly relies on modifiedTime for comparison.
+        syncSettings.lastSyncTimestamp = uploadedFile.modifiedTime;
+        
+        await db.put('settings', syncSettings, 'sync-settings');
+        logger.info(`Updated local 'sync-settings' modifiedTime to ${uploadedFile.modifiedTime}`);
+    
+        return uploadedFile;
+    };
 
     private notify(): void {
         this.listeners.forEach(listener => listener());
@@ -252,12 +384,11 @@ class SyncQueueService {
         }
 
         return this.queue.some(task => {
-            // Check against both pending and in-progress tasks
             if ((task.status !== 'pending' && task.status !== 'in-progress') || task.type !== type) {
                 return false;
             }
             
-            if (type === 'sync-gallery') {
+            if (type === 'sync-gallery' || type === 'sync-grouping-config') {
                 return task.payload?.type === uniqueIdentifier;
             }
             
@@ -290,6 +421,9 @@ class SyncQueueService {
             switch (type) {
                 case 'sync-gallery':
                     await this.syncGallery(api, payload.type);
+                    break;
+                case 'sync-grouping-config':
+                    await this.syncGroupingConfig(api, payload.type);
                     break;
                 case 'upload-lesson':
                     await this.uploadLesson(api, payload.lessonId);

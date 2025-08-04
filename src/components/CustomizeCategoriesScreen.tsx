@@ -23,7 +23,7 @@ const CustomizeGroupingScreen: React.FC = () => {
     const location = useLocation();
     const { isMobile } = useOutletContext<GalleryContext>();
     const { t, updateSettings, reloadAllData } = useTranslation();
-    const { isSignedIn, fetchLatestSettingsForEditing, forceUploadSettingsAndCategories } = useGoogleDrive();
+    const { isSignedIn, forceUploadGroupingConfig } = useGoogleDrive();
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);
 
@@ -32,7 +32,6 @@ const CustomizeGroupingScreen: React.FC = () => {
     const [showEmpty, setShowEmpty] = useState(false);
     const [showCount, setShowCount] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [isSyncing, setIsSyncing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -63,27 +62,12 @@ const CustomizeGroupingScreen: React.FC = () => {
     }, [type]);
 
     useEffect(() => {
-        const loadAndSyncData = async () => {
+        const loadData = async () => {
             setIsLoading(true);
             setError(null);
 
             try {
-                // Step 1: If signed in, check if remote data is newer and download if so.
-                // This function does NOT upload.
-                if (isSignedIn) {
-                    setIsSyncing(true);
-                    try {
-                        await fetchLatestSettingsForEditing(type);
-                    } catch (e: any) {
-                        console.error("Sync check failed on screen open:", e);
-                        setError(t('customizeCategories.errorSync'));
-                    } finally {
-                        setIsSyncing(false);
-                    }
-                }
-
-                // Step 2: After potential download, fetch data *directly* from the service to build the UI.
-                // This data is now the definitive version to be used as a snapshot for editing.
+                // Load local data directly without a pre-sync check.
                 const [localDBSettings, fetchedCategories] = await Promise.all([
                     dataService.getSettings(),
                     config.getCategories()
@@ -132,8 +116,8 @@ const CustomizeGroupingScreen: React.FC = () => {
             }
         };
         
-        loadAndSyncData();
-    }, [isSignedIn, type, fetchLatestSettingsForEditing, t, config]);
+        loadData();
+    }, [type, t, config]);
 
 
     const handleClose = () => navigate(type === 'lesson' ? '/lessons' : '/figures');
@@ -148,7 +132,6 @@ const CustomizeGroupingScreen: React.FC = () => {
         setIsSaving(true);
 
         try {
-            // --- Step 1: Apply changes to local DB first ---
             const initialIds = new Set(initialCategories.map(c => c.id));
             const finalRealItems = localItems.filter(item => !item.isSpecial);
             const finalIds = new Set(finalRealItems.map(item => item.id));
@@ -180,13 +163,10 @@ const CustomizeGroupingScreen: React.FC = () => {
             };
             await updateSettings(newSettings);
             
-            // --- Step 2: If signed in, perform a blocking UPLOAD to Drive ---
-            // This treats the user's save action as the source of truth.
             if (isSignedIn) {
-                await forceUploadSettingsAndCategories(type);
+                await forceUploadGroupingConfig(type);
             }
             
-            // Reload global app state to reflect changes on the next screen.
             reloadAllData();
             handleClose();
 
@@ -227,8 +207,8 @@ const CustomizeGroupingScreen: React.FC = () => {
     };
     
     const isSaveDisabled = useMemo(() => {
-      return isSaving || isLoading || isSyncing || localItems.some(item => !item.isSpecial && item.name.trim() === '');
-    }, [isSaving, isLoading, isSyncing, localItems]);
+      return isSaving || isLoading || localItems.some(item => !item.isSpecial && item.name.trim() === '');
+    }, [isSaving, isLoading, localItems]);
 
     const primaryAction: ModalAction = {
         label: t('common.save'),
@@ -238,13 +218,11 @@ const CustomizeGroupingScreen: React.FC = () => {
     };
 
     const renderContent = () => {
-        if (isLoading || isSyncing) {
+        if (isLoading) {
             return (
                 <div className="flex flex-col items-center justify-center h-48">
                     <i className="material-icons text-4xl text-gray-400 animate-spin">sync</i>
-                    <p className="mt-4 text-gray-600">
-                        {isSyncing ? t('sync.syncingSettings') : t('common.loading')}
-                    </p>
+                    <p className="mt-4 text-gray-600">{t('common.loading')}</p>
                 </div>
             );
         }

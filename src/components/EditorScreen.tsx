@@ -75,7 +75,7 @@ const EditorScreen: React.FC = () => {
     const navigate = useNavigate();
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
     const { t, locale, settings, updateSettings } = useTranslation();
-    const { isSignedIn, fetchLatestItemForEditing, forceAddItem, forceUpdateItem } = useGoogleDrive();
+    const { isSignedIn, forceAddItem, forceUpdateItem } = useGoogleDrive();
     const { isMuted, volume } = settings;
     const query = useQuery();
 
@@ -132,9 +132,8 @@ const EditorScreen: React.FC = () => {
                     const type = figureId ? 'figure' : 'lesson';
                     if (!itemId) throw new Error("Item ID not specified for editing.");
 
-                    loadedItem = isSignedIn 
-                        ? await fetchLatestItemForEditing<Lesson | Figure>(itemId, type)
-                        : (type === 'figure' ? await dataService.getFigures() : await dataService.getLessons()).find(i => i.id === itemId) || null;
+                    const items = type === 'figure' ? await dataService.getFigures() : await dataService.getLessons();
+                    loadedItem = items.find(i => i.id === itemId) || null;
                     
                     if (!loadedItem) throw new Error("Item to edit not found.");
                     
@@ -176,7 +175,7 @@ const EditorScreen: React.FC = () => {
         };
         loadData();
         return () => { isCancelled = true; };
-    }, [lessonIdParam, figureId, lessonIdForNewFigure, isCreatingFigure, isEditingFigure, isEditingLesson, isSignedIn, fetchLatestItemForEditing]);
+    }, [lessonIdParam, figureId, lessonIdForNewFigure, isCreatingFigure, isEditingFigure, isEditingLesson]);
 
     // --- Dynamic Title Effect ---
     useEffect(() => {
