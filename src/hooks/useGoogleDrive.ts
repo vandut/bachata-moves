@@ -19,6 +19,7 @@ declare global {
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
 const LOCAL_STORAGE_TOKEN_KEY = 'google_access_token';
 const LOCAL_STORAGE_PROFILE_KEY = 'google_user_profile';
+const SESSION_STORAGE_ERROR_KEY = 'google_sync_error';
 
 export interface UserProfile {
   email: string;
@@ -50,7 +51,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [isGisReady, setIsGisReady] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(() => sessionStorage.getItem(SESSION_STORAGE_ERROR_KEY));
   const [tokenClient, setTokenClient] = useState<any>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   
@@ -233,7 +234,10 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
       setIsSignedIn(false);
       setUserProfile(null);
       syncQueueService.stopProcessing();
-      if (!isExpired) setSyncError(null);
+      if (!isExpired) {
+        setSyncError(null);
+        sessionStorage.removeItem(SESSION_STORAGE_ERROR_KEY);
+      }
       logger.info('User signed out.');
   }, [accessToken]);
 
@@ -263,7 +267,9 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
       } catch (e) {
         logger.warn('Stored token is expired or invalid. Signing out.');
         handleSignOut(true);
-        setSyncError('Your session has expired. Please sign in again.');
+        const expiredError = 'Your session has expired. Please sign in again.';
+        setSyncError(expiredError);
+        sessionStorage.setItem(SESSION_STORAGE_ERROR_KEY, expiredError);
       }
     };
 
@@ -310,6 +316,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
                     apiRef.current = new GoogleDriveApi(token);
                     setIsSignedIn(true);
                     setSyncError(null);
+                    sessionStorage.removeItem(SESSION_STORAGE_ERROR_KEY);
                     await fetchUserProfile(token);
                     syncQueueService.startProcessing(apiRef.current);
                 },
@@ -337,6 +344,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
         return;
     }
     setSyncError(null);
+    sessionStorage.removeItem(SESSION_STORAGE_ERROR_KEY);
     logger.info('Requesting access token...');
     tokenClient.requestAccessToken({ prompt: '' });
   }, [tokenClient]);

@@ -384,7 +384,7 @@ const EditorScreen: React.FC = () => {
     
     const renderContent = () => {
         if (isLoading) {
-            return <div className="flex items-center justify-center h-[60vh]"><i className="material-icons text-5xl text-gray-400 animate-spin">sync</i><span className="ml-4 text-xl text-gray-600">{t('editor.loading')}</span></div>;
+            return <div className="flex items-center justify-center h-[60vh]"><i className="material-icons text-5xl text-gray-400 animate-spin-reverse">sync</i><span className="ml-4 text-xl text-gray-600">{t('editor.loading')}</span></div>;
         }
 
         if (!item) {

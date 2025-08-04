@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data/service';
@@ -319,7 +318,7 @@ const LessonsGallery: React.FC = () => {
         <i className="material-icons">add</i>
       </button>
       <MuteToggleButton />
-      {isSignedIn && <SyncStatus />}
+      <SyncStatus />
       <GroupingControl
         options={GROUPING_OPTIONS}
         value={settings.lessonGrouping}
@@ -344,7 +343,7 @@ const LessonsGallery: React.FC = () => {
     if (isLoading) {
       return (
         <div className="flex-1 flex items-center justify-center">
-          <i className="material-icons text-5xl text-gray-400 animate-spin">sync</i>
+          <i className="material-icons text-5xl text-gray-400 animate-spin-reverse">sync</i>
           <span className="ml-4 text-xl text-gray-600">{t('gallery.loading', { item: t('gallery.lessons') })}</span>
         </div>
       );

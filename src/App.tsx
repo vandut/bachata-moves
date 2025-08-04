@@ -1,7 +1,3 @@
-
-
-
-
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -133,7 +129,7 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   if (!settings) {
     return (
       <div className="h-screen bg-gray-50 flex items-center justify-center">
-        <i className="material-icons text-5xl text-gray-400 animate-spin">sync</i>
+        <i className="material-icons text-5xl text-gray-400 animate-spin-reverse">sync</i>
       </div>
     );
   }

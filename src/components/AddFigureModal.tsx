@@ -110,7 +110,7 @@ const AddFigureModal: React.FC = () => {
                 <p className="text-gray-600">{t('addFigureModal.selectLesson')}</p>
                 {isLoadingLessons ? (
                     <div className="flex items-center justify-center h-48">
-                        <i className="material-icons text-4xl text-gray-400 animate-spin">sync</i>
+                        <i className="material-icons text-4xl text-gray-400 animate-spin-reverse">sync</i>
                         <span className="ml-3 text-gray-600">{t('gallery.loading', { item: t('nav.lessons') })}</span>
                     </div>
                 ) : lessons.length === 0 ? (

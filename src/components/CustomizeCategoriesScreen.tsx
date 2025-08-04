@@ -221,7 +221,7 @@ const CustomizeGroupingScreen: React.FC = () => {
         if (isLoading) {
             return (
                 <div className="flex flex-col items-center justify-center h-48">
-                    <i className="material-icons text-4xl text-gray-400 animate-spin">sync</i>
+                    <i className="material-icons text-4xl text-gray-400 animate-spin-reverse">sync</i>
                     <p className="mt-4 text-gray-600">{t('common.loading')}</p>
                 </div>
             );

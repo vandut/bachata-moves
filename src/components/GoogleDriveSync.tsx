@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import { useTranslation } from '../App';
@@ -16,47 +17,45 @@ const GoogleIcon: React.FC = () => (
 const GoogleDriveSync: React.FC = () => {
     const { isSignedIn, isSyncActive, userProfile, syncError, signIn, signOut } = useGoogleDrive();
     const { t } = useTranslation();
-    
-    if (syncError) {
-        return (
-            <p className="text-sm text-center p-2 rounded-md bg-red-100 text-red-700">
-                {t('settings.syncError', { error: syncError })}
-            </p>
-        );
-    }
-
-    if (!isSignedIn) {
-        return (
-            <div className="sm:flex sm:justify-start">
-                <button
-                    onClick={signIn}
-                    className="w-full sm:w-auto inline-flex items-center justify-center bg-white border border-gray-300 text-gray-700 font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 gap-2"
-                >
-                    <GoogleIcon />
-                    {t('settings.signInWithGoogle')}
-                </button>
-            </div>
-        );
-    }
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center space-x-3 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
-                <img src={userProfile?.imageUrl} alt="User profile" className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
-                <div className="text-sm overflow-hidden">
-                    <p className="font-semibold text-gray-800 truncate">{userProfile?.name}</p>
-                    <p className="text-gray-500 truncate">{userProfile?.email}</p>
+            {syncError && (
+                 <p className="text-sm text-center p-2 rounded-md bg-red-100 text-red-700">
+                    {t('settings.syncError', { error: syncError })}
+                </p>
+            )}
+
+            {!isSignedIn ? (
+                <div className="sm:flex sm:justify-start">
+                    <button
+                        onClick={signIn}
+                        className="w-full sm:w-auto inline-flex items-center justify-center bg-white border border-gray-300 text-gray-700 font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 gap-2"
+                    >
+                        <GoogleIcon />
+                        {t('settings.signInWithGoogle')}
+                    </button>
                 </div>
-            </div>
-            <div className="space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
-                <button
-                    onClick={() => signOut()}
-                    disabled={isSyncActive}
-                    className="w-full sm:w-auto bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
-                >
-                    {t('settings.signOut')}
-                </button>
-            </div>
+            ) : (
+                <>
+                    <div className="flex items-center space-x-3 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                        <img src={userProfile?.imageUrl} alt="User profile" className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
+                        <div className="text-sm overflow-hidden">
+                            <p className="font-semibold text-gray-800 truncate">{userProfile?.name}</p>
+                            <p className="text-gray-500 truncate">{userProfile?.email}</p>
+                        </div>
+                    </div>
+                    <div className="space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
+                        <button
+                            onClick={() => signOut()}
+                            disabled={isSyncActive}
+                            className="w-full sm:w-auto bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
+                        >
+                            {t('settings.signOut')}
+                        </button>
+                    </div>
+                </>
+            )}
         </div>
     );
 };

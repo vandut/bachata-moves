@@ -306,7 +306,7 @@ const PlayerScreen: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <i className={`material-icons text-7xl text-gray-600 ${isLoading ? 'animate-spin' : ''}`}>
+              <i className={`material-icons text-7xl text-gray-600 ${isLoading ? 'animate-spin-reverse' : ''}`}>
                 {isLoading ? 'sync' : 'ondemand_video'}
               </i>
             )}

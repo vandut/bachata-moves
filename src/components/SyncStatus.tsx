@@ -5,7 +5,7 @@ import { SyncTask } from '../types';
 
 const SyncStatus: React.FC = () => {
     const { t } = useTranslation();
-    const { syncQueue, isSyncActive } = useGoogleDrive();
+    const { syncQueue, isSyncActive, isSignedIn } = useGoogleDrive();
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -35,19 +35,35 @@ const SyncStatus: React.FC = () => {
         }
     };
     
+    const hasError = syncQueue.some(task => task.status === 'error');
+    
+    let iconName = 'sync';
+    let iconClass = '';
+
+    if (!isSignedIn) {
+        iconName = 'sync_disabled';
+    } else if (hasError) {
+        iconName = 'sync_problem';
+        iconClass = 'text-red-600';
+    } else if (isSyncActive) {
+        iconName = 'sync';
+        iconClass = 'animate-spin-reverse';
+    }
+
     return (
         <div className="relative inline-block text-left" ref={wrapperRef}>
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-300 shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                disabled={!isSignedIn}
+                className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-300 shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label={t('sync.syncButton')}
                 aria-haspopup="true"
                 aria-expanded={isOpen}
             >
-                <i className={`material-icons ${isSyncActive ? 'animate-spin' : ''}`}>sync</i>
+                <i className={`material-icons ${iconClass}`}>{iconName}</i>
             </button>
-            {isOpen && (
+            {isOpen && isSignedIn && (
                 <div
                     className="origin-top-right absolute right-0 mt-2 w-72 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
                     role="menu"
@@ -70,7 +86,7 @@ const SyncStatus: React.FC = () => {
                                         )}
                                     </div>
                                     <div className="ml-2 flex-shrink-0">
-                                        {task.status === 'in-progress' && <i className="material-icons text-blue-500 animate-spin text-base">sync</i>}
+                                        {task.status === 'in-progress' && <i className="material-icons text-blue-500 animate-spin-reverse text-base">sync</i>}
                                         {task.status === 'pending' && <i className="material-icons text-gray-400 text-base">hourglass_empty</i>}
                                         {task.status === 'error' && <i className="material-icons text-red-500 text-base">error_outline</i>}
                                     </div>
