@@ -1,5 +1,8 @@
 
-import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, LessonCategory, FigureCategory } from '../types';
+
+
+
+import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, LessonCategory, FigureCategory, School, Instructor, AppSettings } from '../types';
 import { GoogleDriveApi, FOLDERS, FILES, DriveFile } from './googledrive';
 import { dataService } from './service';
 import { createLogger } from '../utils/logger';
@@ -243,11 +246,27 @@ class SyncQueueService {
     
     public buildLocalGroupingConfig = async (type: 'lesson' | 'figure'): Promise<GroupingConfig> => {
         const settingsKeys = type === 'lesson'
-            ? { order: 'lessonCategoryOrder', showEmpty: 'showEmptyLessonCategoriesInGroupedView', showCount: 'showLessonCountInGroupHeaders' }
-            : { order: 'figureCategoryOrder', showEmpty: 'showEmptyFigureCategoriesInGroupedView', showCount: 'showFigureCountInGroupHeaders' };
+            ? {
+                order: 'lessonCategoryOrder' as keyof AppSettings,
+                schoolOrder: 'lessonSchoolOrder' as keyof AppSettings,
+                instructorOrder: 'lessonInstructorOrder' as keyof AppSettings,
+                showEmpty: 'showEmptyLessonCategoriesInGroupedView' as keyof AppSettings,
+                showCount: 'showLessonCountInGroupHeaders' as keyof AppSettings,
+            }
+            : {
+                order: 'figureCategoryOrder' as keyof AppSettings,
+                schoolOrder: 'figureSchoolOrder' as keyof AppSettings,
+                instructorOrder: 'figureInstructorOrder' as keyof AppSettings,
+                showEmpty: 'showEmptyFigureCategoriesInGroupedView' as keyof AppSettings,
+                showCount: 'showFigureCountInGroupHeaders' as keyof AppSettings,
+            };
     
-        const localCategories = await (type === 'lesson' ? dataService.getLessonCategories() : dataService.getFigureCategories());
-        const localSettings = await dataService.getSettings();
+        const [localCategories, localSchools, localInstructors, localSettings] = await Promise.all([
+            type === 'lesson' ? dataService.getLessonCategories() : dataService.getFigureCategories(),
+            dataService.getSchools(),
+            dataService.getInstructors(),
+            dataService.getSettings()
+        ]);
         
         const getLatestTime = async () => {
             const db = await openBachataDB();
@@ -257,7 +276,9 @@ class SyncQueueService {
             if (syncSettings?.modifiedTime) {
                 latest = new Date(syncSettings.modifiedTime).getTime();
             }
-            localCategories.forEach(c => {
+            
+            const allItems = [...localCategories, ...localSchools, ...localInstructors];
+            allItems.forEach(c => {
                 if (c.modifiedTime) {
                     const t = new Date(c.modifiedTime).getTime();
                     if (t > latest) latest = t;
@@ -266,19 +287,26 @@ class SyncQueueService {
             return latest > 0 ? new Date(latest).toISOString() : new Date(0).toISOString();
         };
 
-        const allKnownIds = new Set(['__uncategorized__', ...localCategories.map(c => c.id)]);
-        let order = (localSettings as any)[settingsKeys.order] || [];
-        const orderSet = new Set(order);
+        const createOrder = (items: any[], orderKey: keyof AppSettings, specialId: string) => {
+            const allItemIds = new Set([specialId, ...items.map(i => i.id)]);
+            let order = (localSettings as any)[orderKey] || [];
+            const orderSet = new Set(order);
 
-        if (order.length < allKnownIds.size) {
-            const missingIds = [...allKnownIds].filter(id => !orderSet.has(id));
-            order = [...order, ...missingIds];
+            if (order.length < allItemIds.size) {
+                const missingIds = [...allItemIds].filter(id => !orderSet.has(id));
+                order = [...order, ...missingIds];
+            }
+            return order;
         }
-    
+
         return {
             modifiedTime: await getLatestTime(),
             categories: localCategories,
-            order: order,
+            schools: localSchools,
+            instructors: localInstructors,
+            categoryOrder: createOrder(localCategories, settingsKeys.order, '__uncategorized__'),
+            schoolOrder: createOrder(localSchools, settingsKeys.schoolOrder, '__unassigned__'),
+            instructorOrder: createOrder(localInstructors, settingsKeys.instructorOrder, '__unassigned__'),
             showEmpty: (localSettings as any)[settingsKeys.showEmpty] || false,
             showCount: (localSettings as any)[settingsKeys.showCount] || false,
         };
@@ -286,33 +314,60 @@ class SyncQueueService {
 
     public downloadAndApplyGroupingConfig = async (config: GroupingConfig, type: 'lesson' | 'figure'): Promise<void> => {
         const db = await openBachataDB();
-        const storeName = type === 'lesson' ? 'lesson_categories' : 'figure_categories';
+        const catStoreName = type === 'lesson' ? 'lesson_categories' : 'figure_categories';
         const settingsKeys = type === 'lesson'
-            ? { order: 'lessonCategoryOrder', showEmpty: 'showEmptyLessonCategoriesInGroupedView', showCount: 'showLessonCountInGroupHeaders' }
-            : { order: 'figureCategoryOrder', showEmpty: 'showEmptyFigureCategoriesInGroupedView', showCount: 'showFigureCountInGroupHeaders' };
+            ? {
+                order: 'lessonCategoryOrder' as keyof AppSettings,
+                schoolOrder: 'lessonSchoolOrder' as keyof AppSettings,
+                instructorOrder: 'lessonInstructorOrder' as keyof AppSettings,
+                showEmpty: 'showEmptyLessonCategoriesInGroupedView' as keyof AppSettings,
+                showCount: 'showLessonCountInGroupHeaders' as keyof AppSettings,
+              }
+            : {
+                order: 'figureCategoryOrder' as keyof AppSettings,
+                schoolOrder: 'figureSchoolOrder' as keyof AppSettings,
+                instructorOrder: 'figureInstructorOrder' as keyof AppSettings,
+                showEmpty: 'showEmptyFigureCategoriesInGroupedView' as keyof AppSettings,
+                showCount: 'showFigureCountInGroupHeaders' as keyof AppSettings,
+              };
     
-        // Update categories
-        const catTx = db.transaction(storeName, 'readwrite');
-        await catTx.store.clear();
-        for (const cat of config.categories) {
-            await catTx.store.put(cat as any);
-        }
-        await catTx.done;
+        const tx = db.transaction([catStoreName, 'schools', 'instructors', 'settings'], 'readwrite');
+        const stores = {
+            categories: tx.objectStore(catStoreName),
+            schools: tx.objectStore('schools'),
+            instructors: tx.objectStore('instructors'),
+            settings: tx.objectStore('settings'),
+        };
     
-        // Update settings directly in the database to preserve the remote modifiedTime
-        const settingsTx = db.transaction('settings', 'readwrite');
-        const syncSettings: any = await settingsTx.store.get('sync-settings') || {};
+        await Promise.all([
+            stores.categories.clear(),
+            stores.schools.clear(),
+            stores.instructors.clear()
+        ]);
+
+        // Defensively handle old formats from Drive where properties might be missing.
+        const categoriesToPut = config.categories || [];
+        const schoolsToPut = config.schools || [];
+        const instructorsToPut = config.instructors || [];
+
+        await Promise.all([
+            ...categoriesToPut.map(cat => stores.categories.put(cat as any)),
+            ...schoolsToPut.map(sch => stores.schools.put(sch)),
+            ...instructorsToPut.map(ins => stores.instructors.put(ins)),
+        ]);
+    
+        const syncSettings: any = await stores.settings.get('sync-settings') || {};
         
-        syncSettings[settingsKeys.order] = config.order || [];
+        syncSettings[settingsKeys.order] = config.categoryOrder || [];
+        syncSettings[settingsKeys.schoolOrder] = config.schoolOrder || [];
+        syncSettings[settingsKeys.instructorOrder] = config.instructorOrder || [];
         syncSettings[settingsKeys.showEmpty] = !!config.showEmpty;
         syncSettings[settingsKeys.showCount] = !!config.showCount;
-        
-        // This is the crucial part: set the modifiedTime to match the remote source.
         syncSettings.modifiedTime = config.modifiedTime;
         syncSettings.lastSyncTimestamp = config.modifiedTime;
 
-        await settingsTx.store.put(syncSettings, 'sync-settings');
-        await settingsTx.done;
+        await stores.settings.put(syncSettings, 'sync-settings');
+        await tx.done;
 
         logger.info(`✅ Applied grouping config for ${type} from remote. Local timestamp updated to match remote: ${config.modifiedTime}.`);
     };
@@ -339,7 +394,6 @@ class SyncQueueService {
 
         const localConfig = await this.buildLocalGroupingConfig(type);
 
-        // Use the Drive file's metadata timestamp as the single source of truth for remote time.
         const remoteTimestamp = new Date(remoteFile.modifiedTime).getTime();
         const localTimestamp = new Date(localConfig.modifiedTime).getTime();
         
@@ -348,7 +402,6 @@ class SyncQueueService {
 
         if (remoteTimestamp > localTimestamp) {
             logger.info(`Remote config for ${type} is newer. Downloading.`, { remote: remoteISO, local: localISO });
-            // Pass the server's modifiedTime to the download function so it can be preserved.
             await this.downloadAndApplyGroupingConfig({ ...remoteConfig, modifiedTime: remoteFile.modifiedTime }, type);
         } else if (localTimestamp > remoteTimestamp) {
             logger.info(`Local config for ${type} is newer. Uploading.`, { local: localISO, remote: remoteISO });
@@ -361,20 +414,28 @@ class SyncQueueService {
     // --- Private Methods ---
     
     private uploadGroupingConfig = async (api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<DriveFile> => {
-        const configToUpload = await this.buildLocalGroupingConfig(type);
-        // The modifiedTime is set by the server on upload, so we don't need to set it here.
+        const localConfig = await this.buildLocalGroupingConfig(type);
+        
+        const stripTime = (item: any) => { const { modifiedTime, ...rest } = item; return rest; };
+
+        const configToUpload = {
+            categories: localConfig.categories.map(stripTime),
+            schools: localConfig.schools.map(stripTime),
+            instructors: localConfig.instructors.map(stripTime),
+            categoryOrder: localConfig.categoryOrder,
+            schoolOrder: localConfig.schoolOrder,
+            instructorOrder: localConfig.instructorOrder,
+            showEmpty: localConfig.showEmpty,
+            showCount: localConfig.showCount,
+        };
     
         const configFileName = type === 'lesson' ? FILES.lessonGroupingConfig : FILES.figureGroupingConfig;
         const [existingFile] = await api.listFiles(`name='${configFileName}'`);
         const uploadedFile = await api.upload(JSON.stringify(configToUpload), { name: configFileName, mimeType: 'application/json' }, existingFile?.id);
     
-        // After uploading, update the local 'sync-settings' object with the server's timestamp.
-        // This prevents a loop where the local config (with its fresh but pre-upload timestamp)
-        // is always considered newer than the remote one on the next check.
         const db = await openBachataDB();
         const syncSettings: any = await db.get('settings', 'sync-settings') || {};
         syncSettings.modifiedTime = uploadedFile.modifiedTime;
-        // We also update lastSyncTimestamp for good measure, though the logic mainly relies on modifiedTime for comparison.
         syncSettings.lastSyncTimestamp = uploadedFile.modifiedTime;
         
         await db.put('settings', syncSettings, 'sync-settings');

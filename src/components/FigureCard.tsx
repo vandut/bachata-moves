@@ -1,10 +1,7 @@
 
-
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Figure, Lesson, FigureCategory } from '../types';
+import type { Figure, Lesson, FigureCategory, School, Instructor } from '../types';
 import { dataService } from '../data/service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
@@ -12,19 +9,24 @@ import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { syncQueueService } from '../data/syncQueueService';
 
 interface FigureCardProps {
   figure: Figure;
   parentLesson?: Lesson;
   figureCategories: FigureCategory[];
+  schools: School[];
+  instructors: Instructor[];
   onRefresh: () => void;
   itemIds: string[];
   baseRoute: string;
   onForceDelete?: (item: Figure) => Promise<void>;
 }
 
-const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, onRefresh, itemIds, baseRoute, onForceDelete }) => {
+const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t, settings } = useTranslation();
+  const { isSignedIn } = useGoogleDrive();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -176,13 +178,15 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
     setShowDeleteConfirm(true);
   };
 
-  const handleChangeCategory = async (newCategoryId: string | null) => {
+  const handleChange = async (key: 'categoryId' | 'schoolId' | 'instructorId', value: string | null) => {
     try {
-      await dataService.updateFigure(figure.id, { categoryId: newCategoryId });
-      onRefresh();
+        await dataService.updateFigure(figure.id, { [key]: value });
+        if (isSignedIn) {
+            syncQueueService.addTask('upload-figure', { figureId: figure.id });
+        }
+        onRefresh();
     } catch (err) {
-      console.error("Failed to update figure category:", err);
-      // Optionally show an error to the user
+        console.error(`Failed to update figure ${key}:`, err);
     }
   };
 
@@ -212,21 +216,25 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
   const closeContextMenu = useCallback(() => setMenuState(prev => ({ ...prev, isOpen: false })), []);
   
   const categorySubMenu: ContextMenuAction[] = [
-    {
-      label: t('common.uncategorized'),
-      onClick: () => handleChangeCategory(null),
-      isChecked: !figure.categoryId,
-    },
-    ...figureCategories.map(cat => ({
-      label: cat.name,
-      onClick: () => handleChangeCategory(cat.id),
-      isChecked: figure.categoryId === cat.id,
-    })),
+    { label: t('common.uncategorized'), onClick: () => handleChange('categoryId', null), isChecked: !figure.categoryId },
+    ...figureCategories.map(cat => ({ label: cat.name, onClick: () => handleChange('categoryId', cat.id), isChecked: figure.categoryId === cat.id })),
+  ];
+
+  const schoolSubMenu: ContextMenuAction[] = [
+    { label: t('common.unassigned'), onClick: () => handleChange('schoolId', null), isChecked: !figure.schoolId },
+    ...schools.map(item => ({ label: item.name, onClick: () => handleChange('schoolId', item.id), isChecked: figure.schoolId === item.id })),
+  ];
+  
+  const instructorSubMenu: ContextMenuAction[] = [
+    { label: t('common.unassigned'), onClick: () => handleChange('instructorId', null), isChecked: !figure.instructorId },
+    ...instructors.map(item => ({ label: item.name, onClick: () => handleChange('instructorId', item.id), isChecked: figure.instructorId === item.id })),
   ];
 
   const menuActions: ContextMenuAction[] = [
     { label: t('common.open'), onClick: handleOpen, icon: 'open_in_full' },
     { label: t('common.category'), icon: 'folder', submenu: categorySubMenu },
+    { label: t('common.school'), icon: 'school', submenu: schoolSubMenu },
+    { label: t('common.instructor'), icon: 'person', submenu: instructorSubMenu },
     { label: t('common.edit'), onClick: handleEdit, icon: 'edit' },
     { label: t('common.remove'), onClick: handleRequestRemove, isDestructive: true, icon: 'delete' },
   ];

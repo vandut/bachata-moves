@@ -1,10 +1,7 @@
 
-
-
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Lesson, LessonCategory } from '../types';
+import type { Lesson, LessonCategory, School, Instructor } from '../types';
 import { dataService } from '../data/service';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
@@ -12,18 +9,23 @@ import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { syncQueueService } from '../data/syncQueueService';
 
 interface LessonCardProps {
   lesson: Lesson;
   lessonCategories: LessonCategory[];
+  schools: School[];
+  instructors: Instructor[];
   onRefresh: () => void;
   itemIds: string[];
   baseRoute: string;
   onForceDelete?: (item: Lesson) => Promise<void>;
 }
 
-const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRefresh, itemIds, baseRoute, onForceDelete }) => {
+const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t, locale, settings } = useTranslation();
+  const { isSignedIn } = useGoogleDrive();
 
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -175,12 +177,15 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
     setShowDeleteConfirm(true);
   };
 
-  const handleChangeCategory = async (newCategoryId: string | null) => {
+  const handleChange = async (key: 'categoryId' | 'schoolId' | 'instructorId', value: string | null) => {
     try {
-      await dataService.updateLesson(lesson.id, { categoryId: newCategoryId });
-      onRefresh();
+        await dataService.updateLesson(lesson.id, { [key]: value });
+        if (isSignedIn) {
+            syncQueueService.addTask('upload-lesson', { lessonId: lesson.id });
+        }
+        onRefresh();
     } catch (err) {
-      console.error("Failed to update lesson category:", err);
+        console.error(`Failed to update lesson ${key}:`, err);
     }
   };
 
@@ -211,21 +216,25 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, onRef
   const closeContextMenu = useCallback(() => setMenuState(prev => ({ ...prev, isOpen: false })), []);
   
   const categorySubMenu: ContextMenuAction[] = [
-    {
-      label: t('common.uncategorized'),
-      onClick: () => handleChangeCategory(null),
-      isChecked: !lesson.categoryId,
-    },
-    ...lessonCategories.map(cat => ({
-      label: cat.name,
-      onClick: () => handleChangeCategory(cat.id),
-      isChecked: lesson.categoryId === cat.id,
-    })),
+    { label: t('common.uncategorized'), onClick: () => handleChange('categoryId', null), isChecked: !lesson.categoryId },
+    ...lessonCategories.map(cat => ({ label: cat.name, onClick: () => handleChange('categoryId', cat.id), isChecked: lesson.categoryId === cat.id })),
+  ];
+
+  const schoolSubMenu: ContextMenuAction[] = [
+    { label: t('common.unassigned'), onClick: () => handleChange('schoolId', null), isChecked: !lesson.schoolId },
+    ...schools.map(item => ({ label: item.name, onClick: () => handleChange('schoolId', item.id), isChecked: lesson.schoolId === item.id })),
+  ];
+  
+  const instructorSubMenu: ContextMenuAction[] = [
+    { label: t('common.unassigned'), onClick: () => handleChange('instructorId', null), isChecked: !lesson.instructorId },
+    ...instructors.map(item => ({ label: item.name, onClick: () => handleChange('instructorId', item.id), isChecked: lesson.instructorId === item.id })),
   ];
 
   const menuActions: ContextMenuAction[] = [
     { label: t('common.open'), onClick: handleOpen, icon: 'open_in_full' },
     { label: t('common.category'), icon: 'folder', submenu: categorySubMenu },
+    { label: t('common.school'), icon: 'school', submenu: schoolSubMenu },
+    { label: t('common.instructor'), icon: 'person', submenu: instructorSubMenu },
     { label: t('common.edit'), onClick: handleEdit, icon: 'edit' },
     { label: t('common.remove'), onClick: handleRequestRemove, isDestructive: true, icon: 'delete' },
   ];

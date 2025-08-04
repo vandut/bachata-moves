@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import BaseEditor from './BaseEditor';
-import type { ModalAction, Lesson, Figure } from '../types';
+import type { ModalAction, Lesson, Figure, School, Instructor } from '../types';
 import { dataService } from '../data/service';
 import { useTranslation } from '../App';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
@@ -83,10 +83,12 @@ const EditorScreen: React.FC = () => {
     const [item, setItem] = useState<Lesson | Figure | null>(null);
     const [title, setTitle] = useState('Editor');
     const [videoUrl, setVideoUrl] = useState<string | null>(null);
+    const [schools, setSchools] = useState<School[]>([]);
+    const [instructors, setInstructors] = useState<Instructor[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [formData, setFormData] = useState({ name: '', description: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0 });
+    const [formData, setFormData] = useState({ name: '', description: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
     const [newThumbnailUrl, setNewThumbnailUrl] = useState<string | null>(null);
     const [originalThumbnailUrl, setOriginalThumbnailUrl] = useState<string | null>(null);
     const [videoDurationMs, setVideoDurationMs] = useState(0);
@@ -115,6 +117,14 @@ const EditorScreen: React.FC = () => {
                 let videoLessonSource: Lesson | undefined;
                 let thumbPromise: Promise<string | null> | null = null;
                 
+                const [fetchedSchools, fetchedInstructors] = await Promise.all([
+                    dataService.getSchools(),
+                    dataService.getInstructors(),
+                ]);
+                if (isCancelled) return;
+                setSchools(fetchedSchools);
+                setInstructors(fetchedInstructors);
+
                 if (isCreatingFigure && lessonIdForNewFigure) {
                     const lesson = (await dataService.getLessons()).find(l => l.id === lessonIdForNewFigure);
                     if (!lesson) throw new Error("Source lesson for new figure not found.");
@@ -157,6 +167,8 @@ const EditorScreen: React.FC = () => {
                     startTime: loadedItem.startTime || 0,
                     endTime: loadedItem.endTime,
                     thumbTime: loadedItem.thumbTime,
+                    schoolId: loadedItem.schoolId || '',
+                    instructorId: loadedItem.instructorId || '',
                 });
                 setCurrentTimeMs(loadedItem.startTime || 0);
 
@@ -245,7 +257,7 @@ const EditorScreen: React.FC = () => {
         }
     };
 
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
         if (id === 'startTime' || id === 'endTime') {
             const newTimeMs = secondsStringToMs(value);
@@ -346,15 +358,25 @@ const EditorScreen: React.FC = () => {
         }
         setIsSaving(true);
         setError(null);
+
+        const commonData = {
+            description: formData.description,
+            startTime: formData.startTime,
+            endTime: formData.endTime,
+            thumbTime: formData.thumbTime,
+            schoolId: formData.schoolId || null,
+            instructorId: formData.instructorId || null,
+        };
+
         try {
             if (isCreatingFigure && lessonIdForNewFigure) {
-                const figureData = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
+                const figureData = { ...commonData, name: formData.name };
                 await forceAddItem(figureData, 'figure', { lessonId: lessonIdForNewFigure });
             } else if (isEditingFigure && figureId) {
-                const updateData = { name: formData.name, description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
+                const updateData = { ...commonData, name: formData.name };
                 await forceUpdateItem(figureId, updateData, 'figure');
             } else if (isEditingLesson && lessonIdParam) {
-                const updateData = { uploadDate: new Date(formData.uploadDate).toISOString(), description: formData.description, startTime: formData.startTime, endTime: formData.endTime, thumbTime: formData.thumbTime };
+                const updateData = { ...commonData, uploadDate: new Date(formData.uploadDate).toISOString() };
                 await forceUpdateItem(lessonIdParam, updateData, 'lesson');
             }
             if (refresh) refresh();
@@ -423,6 +445,8 @@ const EditorScreen: React.FC = () => {
                     thumbnailPreviewUrl={newThumbnailUrl || originalThumbnailUrl}
                     headerContent={renderHeaderContent()}
                     msToSecondsString={msToSecondsString}
+                    schools={schools}
+                    instructors={instructors}
                 />
             </>
         );

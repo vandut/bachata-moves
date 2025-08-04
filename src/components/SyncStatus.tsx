@@ -43,9 +43,17 @@ const SyncStatus: React.FC = () => {
     if (!isSignedIn) {
         iconName = 'sync_disabled';
     } else if (hasError) {
-        iconName = 'sync_problem';
-        iconClass = 'text-red-600';
+        if (isSyncActive) {
+            // Errors exist, but other tasks are still running. Show a spinning red icon.
+            iconName = 'sync';
+            iconClass = 'animate-spin-reverse text-red-600';
+        } else {
+            // Only error tasks are left in the queue. Show a static error icon.
+            iconName = 'sync_problem';
+            iconClass = 'text-red-600';
+        }
     } else if (isSyncActive) {
+        // No errors, just syncing normally.
         iconName = 'sync';
         iconClass = 'animate-spin-reverse';
     }

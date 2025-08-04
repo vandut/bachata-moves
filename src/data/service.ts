@@ -1,4 +1,4 @@
-import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory } from '../types';
+import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, School, Instructor } from '../types';
 import { AppDataService } from './indexdb';
 
 export interface IDataService {
@@ -27,6 +27,18 @@ export interface IDataService {
   addLessonCategory(categoryName: string): Promise<LessonCategory>;
   updateLessonCategory(categoryId: string, categoryUpdateData: Partial<Omit<LessonCategory, 'id'>>): Promise<LessonCategory>;
   deleteLessonCategory(categoryId: string): Promise<void>;
+
+  // Schools
+  getSchools(): Promise<School[]>;
+  addSchool(name: string): Promise<School>;
+  updateSchool(id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School>;
+  deleteSchool(id: string): Promise<void>;
+  
+  // Instructors
+  getInstructors(): Promise<Instructor[]>;
+  addInstructor(name: string): Promise<Instructor>;
+  updateInstructor(id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor>;
+  deleteInstructor(id: string): Promise<void>;
 
   // Settings
   getSettings(): Promise<AppSettings>;

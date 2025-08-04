@@ -1,5 +1,6 @@
 
-import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, SyncTask } from '../types';
+
+import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, SyncTask, School, Instructor } from '../types';
 import type { IDataService } from './service';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
 import { createLogger } from '../utils/logger';
@@ -22,11 +23,13 @@ const getInitialLanguage = (): 'english' | 'polish' => {
 
 // --- IndexedDB Configuration ---
 const DB_NAME = 'bachata-moves-db';
-const DB_VERSION = 11; // Incremented version for deleted IDs store
+const DB_VERSION = 12; // Incremented for schools and instructors
 const LESSONS_STORE = 'lessons';
 const FIGURES_STORE = 'figures';
 const FIGURE_CATEGORIES_STORE = 'figure_categories';
 const LESSON_CATEGORIES_STORE = 'lesson_categories';
+const SCHOOLS_STORE = 'schools';
+const INSTRUCTORS_STORE = 'instructors';
 const SETTINGS_STORE = 'settings';
 const VIDEO_FILES_STORE = 'video_files';
 const LESSON_THUMBNAILS_STORE = 'lesson_thumbnails';
@@ -55,6 +58,12 @@ export async function openBachataDB(): Promise<IDBPDatabase> {
       if (!db.objectStoreNames.contains(LESSON_CATEGORIES_STORE)) {
         db.createObjectStore(LESSON_CATEGORIES_STORE, { keyPath: 'id' });
       }
+       if (!db.objectStoreNames.contains(SCHOOLS_STORE)) {
+        db.createObjectStore(SCHOOLS_STORE, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(INSTRUCTORS_STORE)) {
+        db.createObjectStore(INSTRUCTORS_STORE, { keyPath: 'id' });
+      }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE);
       }
@@ -78,36 +87,30 @@ export async function openBachataDB(): Promise<IDBPDatabase> {
 
       // Index Creation (Idempotent, using the upgrade transaction)
       const lessonsStore = tx.objectStore(LESSONS_STORE);
-      if (!lessonsStore.indexNames.contains('categoryId')) {
-        lessonsStore.createIndex('categoryId', 'categoryId', { unique: false });
-      }
-      if (!lessonsStore.indexNames.contains('driveId')) {
-        lessonsStore.createIndex('driveId', 'driveId', { unique: true, multiEntry: false });
-      }
-
+      if (!lessonsStore.indexNames.contains('categoryId')) lessonsStore.createIndex('categoryId', 'categoryId');
+      if (!lessonsStore.indexNames.contains('schoolId')) lessonsStore.createIndex('schoolId', 'schoolId');
+      if (!lessonsStore.indexNames.contains('instructorId')) lessonsStore.createIndex('instructorId', 'instructorId');
+      if (!lessonsStore.indexNames.contains('driveId')) lessonsStore.createIndex('driveId', 'driveId', { unique: true, multiEntry: false });
+      
       const figuresStore = tx.objectStore(FIGURES_STORE);
-      if (!figuresStore.indexNames.contains('lessonId')) {
-        figuresStore.createIndex('lessonId', 'lessonId', { unique: false });
-      }
-      if (!figuresStore.indexNames.contains('categoryId')) {
-        figuresStore.createIndex('categoryId', 'categoryId', { unique: false });
-      }
-       if (!figuresStore.indexNames.contains('driveId')) {
-        figuresStore.createIndex('driveId', 'driveId', { unique: true, multiEntry: false });
-      }
+      if (!figuresStore.indexNames.contains('lessonId')) figuresStore.createIndex('lessonId', 'lessonId');
+      if (!figuresStore.indexNames.contains('categoryId')) figuresStore.createIndex('categoryId', 'categoryId');
+      if (!figuresStore.indexNames.contains('schoolId')) figuresStore.createIndex('schoolId', 'schoolId');
+      if (!figuresStore.indexNames.contains('instructorId')) figuresStore.createIndex('instructorId', 'instructorId');
+      if (!figuresStore.indexNames.contains('driveId')) figuresStore.createIndex('driveId', 'driveId', { unique: true, multiEntry: false });
 
       // Version-based Migrations
-      if (oldVersion < 9) {
-        const storesWithSync = [LESSONS_STORE, FIGURES_STORE, FIGURE_CATEGORIES_STORE, LESSON_CATEGORIES_STORE];
-        for (const storeName of storesWithSync) {
-          const store = tx.objectStore(storeName as any);
-          if (!store.indexNames.contains('driveId')) {
-            store.createIndex('driveId', 'driveId', { unique: false });
+      if (oldVersion < 12) {
+          const storesWithSync = [SCHOOLS_STORE, INSTRUCTORS_STORE];
+          for (const storeName of storesWithSync) {
+              const store = tx.objectStore(storeName as any);
+              if (!store.indexNames.contains('driveId')) {
+                  store.createIndex('driveId', 'driveId', { unique: false });
+              }
+               if (!store.indexNames.contains('modifiedTime')) {
+                  store.createIndex('modifiedTime', 'modifiedTime', { unique: false });
+              }
           }
-          if (!store.indexNames.contains('modifiedTime')) {
-            store.createIndex('modifiedTime', 'modifiedTime', { unique: false });
-          }
-        }
       }
     },
   });
@@ -585,6 +588,96 @@ export class AppDataService implements IDataService {
     this.notify();
   }
 
+  // --- Schools ---
+  public getSchools = async (): Promise<School[]> => {
+    const db = await openBachataDB();
+    return await db.getAll(SCHOOLS_STORE);
+  }
+
+  public addSchool = async (name: string): Promise<School> => {
+    const db = await openBachataDB();
+    const newSchool: School = { id: generateId(), name, modifiedTime: new Date().toISOString() };
+    await db.put(SCHOOLS_STORE, newSchool);
+    this.notify();
+    return newSchool;
+  }
+
+  public updateSchool = async (id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School> => {
+    const db = await openBachataDB();
+    const school = await db.get(SCHOOLS_STORE, id);
+    if (!school) throw new Error(`School with id "${id}" not found.`);
+    const updatedSchool = { ...school, ...updateData, modifiedTime: new Date().toISOString() };
+    await db.put(SCHOOLS_STORE, updatedSchool);
+    this.notify();
+    return updatedSchool;
+  }
+
+  public deleteSchool = async (id: string): Promise<void> => {
+    const db = await openBachataDB();
+    const school = await db.get(SCHOOLS_STORE, id);
+    if (!school) return;
+    if (school.driveId) await this.addDeletedDriveId(school.driveId);
+    
+    const tx = db.transaction([SCHOOLS_STORE, LESSONS_STORE, FIGURES_STORE], 'readwrite');
+    const lessonsToUpdate = await tx.objectStore(LESSONS_STORE).index('schoolId').getAll(id);
+    const figuresToUpdate = await tx.objectStore(FIGURES_STORE).index('schoolId').getAll(id);
+    
+    const updatePromises = [
+        ...lessonsToUpdate.map(item => tx.objectStore(LESSONS_STORE).put({ ...item, schoolId: null, modifiedTime: new Date().toISOString() })),
+        ...figuresToUpdate.map(item => tx.objectStore(FIGURES_STORE).put({ ...item, schoolId: null, modifiedTime: new Date().toISOString() }))
+    ];
+
+    await Promise.all(updatePromises);
+    await tx.objectStore(SCHOOLS_STORE).delete(id);
+    await tx.done;
+    this.notify();
+  }
+
+  // --- Instructors ---
+  public getInstructors = async (): Promise<Instructor[]> => {
+    const db = await openBachataDB();
+    return await db.getAll(INSTRUCTORS_STORE);
+  }
+
+  public addInstructor = async (name: string): Promise<Instructor> => {
+    const db = await openBachataDB();
+    const newInstructor: Instructor = { id: generateId(), name, modifiedTime: new Date().toISOString() };
+    await db.put(INSTRUCTORS_STORE, newInstructor);
+    this.notify();
+    return newInstructor;
+  }
+
+  public updateInstructor = async (id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor> => {
+    const db = await openBachataDB();
+    const instructor = await db.get(INSTRUCTORS_STORE, id);
+    if (!instructor) throw new Error(`Instructor with id "${id}" not found.`);
+    const updatedInstructor = { ...instructor, ...updateData, modifiedTime: new Date().toISOString() };
+    await db.put(INSTRUCTORS_STORE, updatedInstructor);
+    this.notify();
+    return updatedInstructor;
+  }
+
+  public deleteInstructor = async (id: string): Promise<void> => {
+    const db = await openBachataDB();
+    const instructor = await db.get(INSTRUCTORS_STORE, id);
+    if (!instructor) return;
+    if (instructor.driveId) await this.addDeletedDriveId(instructor.driveId);
+    
+    const tx = db.transaction([INSTRUCTORS_STORE, LESSONS_STORE, FIGURES_STORE], 'readwrite');
+    const lessonsToUpdate = await tx.objectStore(LESSONS_STORE).index('instructorId').getAll(id);
+    const figuresToUpdate = await tx.objectStore(FIGURES_STORE).index('instructorId').getAll(id);
+    
+    const updatePromises = [
+        ...lessonsToUpdate.map(item => tx.objectStore(LESSONS_STORE).put({ ...item, instructorId: null, modifiedTime: new Date().toISOString() })),
+        ...figuresToUpdate.map(item => tx.objectStore(FIGURES_STORE).put({ ...item, instructorId: null, modifiedTime: new Date().toISOString() }))
+    ];
+
+    await Promise.all(updatePromises);
+    await tx.objectStore(INSTRUCTORS_STORE).delete(id);
+    await tx.done;
+    this.notify();
+  }
+
   // --- Settings ---
   public getSettings = async (): Promise<AppSettings> => { 
     const db = await openBachataDB();
@@ -608,6 +701,16 @@ export class AppDataService implements IDataService {
       uncategorizedLessonCategoryIsExpanded: true,
       collapsedLessonCategories: [],
       collapsedFigureCategories: [],
+      // School Grouping Settings
+      collapsedLessonSchools: [],
+      collapsedFigureSchools: [],
+      uncategorizedLessonSchoolIsExpanded: true,
+      uncategorizedFigureSchoolIsExpanded: true,
+      // Instructor Grouping Settings
+      collapsedLessonInstructors: [],
+      collapsedFigureInstructors: [],
+      uncategorizedLessonInstructorIsExpanded: true,
+      uncategorizedFigureInstructorIsExpanded: true,
     };
 
     const defaultSyncSettings: Partial<AppSettings> = {
@@ -617,6 +720,10 @@ export class AppDataService implements IDataService {
       lessonCategoryOrder: [],
       showEmptyLessonCategoriesInGroupedView: false,
       showLessonCountInGroupHeaders: false,
+      lessonSchoolOrder: [],
+      figureSchoolOrder: [],
+      lessonInstructorOrder: [],
+      figureInstructorOrder: [],
       lastSyncTimestamp: undefined,
     };
 
@@ -647,6 +754,14 @@ export class AppDataService implements IDataService {
         'uncategorizedFigureCategoryIsExpanded',
         'collapsedLessonCategories',
         'collapsedFigureCategories',
+        'collapsedLessonSchools',
+        'collapsedFigureSchools',
+        'uncategorizedLessonSchoolIsExpanded',
+        'uncategorizedFigureSchoolIsExpanded',
+        'collapsedLessonInstructors',
+        'collapsedFigureInstructors',
+        'uncategorizedLessonInstructorIsExpanded',
+        'uncategorizedFigureInstructorIsExpanded',
     ];
 
     for (const key in settingsData) {
@@ -789,6 +904,8 @@ export class AppDataService implements IDataService {
       figures,
       figureCategories,
       lessonCategories,
+      schools,
+      instructors,
       syncSettings,
       videoFileEntries,
       thumbnailEntries,
@@ -798,6 +915,8 @@ export class AppDataService implements IDataService {
       tx.objectStore(FIGURES_STORE).getAll(),
       tx.objectStore(FIGURE_CATEGORIES_STORE).getAll(),
       tx.objectStore(LESSON_CATEGORIES_STORE).getAll(),
+      tx.objectStore(SCHOOLS_STORE).getAll(),
+      tx.objectStore(INSTRUCTORS_STORE).getAll(),
       tx.objectStore(SETTINGS_STORE).get(SYNC_SETTINGS_KEY),
       getAllEntries<Blob>(VIDEO_FILES_STORE),
       getAllEntries<Blob>(LESSON_THUMBNAILS_STORE),
@@ -845,6 +964,8 @@ export class AppDataService implements IDataService {
             figures: figures || [],
             figureCategories: figureCategories || [],
             lessonCategories: lessonCategories || [],
+            schools: schools || [],
+            instructors: instructors || [],
             settings: syncSettings || {},
             videos: videoFiles || [], // Use videoFiles directly ([videoId, base64])
             thumbnails: thumbnails || [],
@@ -876,6 +997,8 @@ export class AppDataService implements IDataService {
         categories = [], // Legacy support for old imports
         figureCategories = categories,
         lessonCategories = [],
+        schools = [],
+        instructors = [],
         settings: importedSyncSettings = {},
         videos: originalVideoEntries = [],
         thumbnails: thumbnailEntries = [],
@@ -957,22 +1080,30 @@ export class AppDataService implements IDataService {
         await tx.objectStore(SETTINGS_STORE).put(importedSyncSettings, SYNC_SETTINGS_KEY);
         onProgress?.(0.56);
         
-        const cleanCategories = (categoriesToClean: any[]) => {
-            if (!categoriesToClean) return [];
-            return categoriesToClean.map(c => {
-              const { isExpanded, ...rest } = c; // Remove legacy isExpanded property
-              return rest;
+        const cleanAndPut = async (storeName: string, items: any[]) => {
+            if (!items) return;
+            const store = tx.objectStore(storeName as any);
+            await store.clear();
+            const cleanedItems = items.map(item => {
+                const { isExpanded, ...rest } = item; // Remove legacy isExpanded property
+                return rest;
             });
+            await Promise.all(cleanedItems.map(item => store.put(item)));
         };
 
-        await Promise.all(lessons.map((item: Lesson) => tx.objectStore(LESSONS_STORE).put(item)));
+        await cleanAndPut(LESSONS_STORE, lessons);
         onProgress?.(0.65);
-        await Promise.all(figures.map((item: Figure) => tx.objectStore(FIGURES_STORE).put(item)));
+        await cleanAndPut(FIGURES_STORE, figures);
         onProgress?.(0.70);
-        await Promise.all(cleanCategories(figureCategories).map((item: FigureCategory) => tx.objectStore(FIGURE_CATEGORIES_STORE).put(item)));
+        await cleanAndPut(FIGURE_CATEGORIES_STORE, figureCategories);
         onProgress?.(0.75);
-        await Promise.all(cleanCategories(lessonCategories).map((item: LessonCategory) => tx.objectStore(LESSON_CATEGORIES_STORE).put(item)));
+        await cleanAndPut(LESSON_CATEGORIES_STORE, lessonCategories);
         onProgress?.(0.80);
+        await cleanAndPut(SCHOOLS_STORE, schools);
+        onProgress?.(0.82);
+        await cleanAndPut(INSTRUCTORS_STORE, instructors);
+        onProgress?.(0.85);
+
         await Promise.all(videoBlobs.map(([key, blob]) => tx.objectStore(VIDEO_FILES_STORE).put(blob, key)));
         onProgress?.(0.90);
         await Promise.all(thumbnailBlobs.map(([key, blob]) => tx.objectStore(LESSON_THUMBNAILS_STORE).put(blob, key)));

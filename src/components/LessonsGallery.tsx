@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data/service';
-import type { Lesson, LessonSortOrder, LessonCategory, AppSettings } from '../types';
+import type { Lesson, LessonSortOrder, LessonCategory, AppSettings, School, Instructor } from '../types';
 import LessonCard from './LessonCard';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
@@ -15,6 +15,7 @@ import SyncStatus from './SyncStatus';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
+const UNASSIGNED_ID = '__unassigned__';
 
 const EmptyCategoryMessage: React.FC = () => {
     const { t } = useTranslation();
@@ -76,11 +77,13 @@ const CategoryHeader: React.FC<{ name: string; isExpanded?: boolean; onToggle?: 
 const LessonGrid: React.FC<{
     lessons: Lesson[];
     lessonCategories: LessonCategory[];
+    schools: School[];
+    instructors: Instructor[];
     onRefresh: () => void;
     baseRoute: string;
     allLessonIds: string[];
     onForceDelete?: (item: Lesson) => Promise<void>;
-}> = ({ lessons, lessonCategories, onRefresh, baseRoute, allLessonIds, onForceDelete }) => {
+}> = ({ lessons, lessonCategories, schools, instructors, onRefresh, baseRoute, allLessonIds, onForceDelete }) => {
     const gridClass = useMediaQuery('(max-width: 768px)') ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]";
     return (
         <div className={`grid ${gridClass} gap-6`}>
@@ -89,6 +92,8 @@ const LessonGrid: React.FC<{
                     key={`${lesson.id}-${lesson.modifiedTime || ''}`} 
                     lesson={lesson}
                     lessonCategories={lessonCategories}
+                    schools={schools}
+                    instructors={instructors}
                     onRefresh={onRefresh}
                     itemIds={allLessonIds}
                     baseRoute={baseRoute}
@@ -105,10 +110,16 @@ const LessonsGallery: React.FC = () => {
   const { isSignedIn, initiateSync, forceDeleteItem } = useGoogleDrive();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonCategories, setLessonCategories] = useState<LessonCategory[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [collapsedCategories, setCollapsedCategories] = useState(settings.collapsedLessonCategories || []);
   const [isUncategorizedExpanded, setIsUncategorizedExpanded] = useState(settings.uncategorizedLessonCategoryIsExpanded);
   const [collapsedDateGroups, setCollapsedDateGroups] = useState(settings.collapsedLessonDateGroups || []);
+  const [collapsedSchools, setCollapsedSchools] = useState(settings.collapsedLessonSchools || []);
+  const [isUnassignedSchoolExpanded, setIsUnassignedSchoolExpanded] = useState(settings.uncategorizedLessonSchoolIsExpanded);
+  const [collapsedInstructors, setCollapsedInstructors] = useState(settings.collapsedLessonInstructors || []);
+  const [isUnassignedInstructorExpanded, setIsUnassignedInstructorExpanded] = useState(settings.uncategorizedLessonInstructorIsExpanded);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const navigate = useNavigate();
@@ -118,7 +129,15 @@ const LessonsGallery: React.FC = () => {
     setCollapsedCategories(settings.collapsedLessonCategories || []);
     setIsUncategorizedExpanded(settings.uncategorizedLessonCategoryIsExpanded);
     setCollapsedDateGroups(settings.collapsedLessonDateGroups || []);
-  }, [settings.collapsedLessonCategories, settings.uncategorizedLessonCategoryIsExpanded, settings.collapsedLessonDateGroups]);
+    setCollapsedSchools(settings.collapsedLessonSchools || []);
+    setIsUnassignedSchoolExpanded(settings.uncategorizedLessonSchoolIsExpanded);
+    setCollapsedInstructors(settings.collapsedLessonInstructors || []);
+    setIsUnassignedInstructorExpanded(settings.uncategorizedLessonInstructorIsExpanded);
+  }, [
+      settings.collapsedLessonCategories, settings.uncategorizedLessonCategoryIsExpanded, settings.collapsedLessonDateGroups,
+      settings.collapsedLessonSchools, settings.uncategorizedLessonSchoolIsExpanded,
+      settings.collapsedLessonInstructors, settings.uncategorizedLessonInstructorIsExpanded
+    ]);
 
   const SORT_OPTIONS = [
     { value: 'newest', label: t('sort.newest') },
@@ -130,6 +149,8 @@ const LessonsGallery: React.FC = () => {
     { value: 'byMonth', label: t('grouping.byMonth') },
     { value: 'byYear', label: t('grouping.byYear') },
     { value: 'byCategory', label: t('grouping.byCategory') },
+    { value: 'bySchool', label: t('grouping.bySchool') },
+    { value: 'byInstructor', label: t('grouping.byInstructor') },
     { value: 'divider', label: '-', isDivider: true },
     { value: 'customize', label: t('grouping.customize'), isAction: true },
   ];
@@ -175,6 +196,37 @@ const LessonsGallery: React.FC = () => {
     updateSettings({ collapsedLessonDateGroups: newCollapsedKeys }, { silent: true });
   };
 
+  const handleToggleSchool = useCallback((schoolId: string) => {
+    const isCollapsed = collapsedSchools.includes(schoolId);
+    const newCollapsedKeys = isCollapsed
+      ? collapsedSchools.filter(key => key !== schoolId)
+      : [...collapsedSchools, schoolId];
+    setCollapsedSchools(newCollapsedKeys);
+    updateSettings({ collapsedLessonSchools: newCollapsedKeys }, { silent: true });
+  }, [collapsedSchools, updateSettings]);
+  
+  const handleToggleUnassignedSchool = useCallback(() => {
+    const newExpandedState = !isUnassignedSchoolExpanded;
+    setIsUnassignedSchoolExpanded(newExpandedState);
+    updateSettings({ uncategorizedLessonSchoolIsExpanded: newExpandedState }, { silent: true });
+  }, [isUnassignedSchoolExpanded, updateSettings]);
+  
+  const handleToggleInstructor = useCallback((instructorId: string) => {
+    const isCollapsed = collapsedInstructors.includes(instructorId);
+    const newCollapsedKeys = isCollapsed
+      ? collapsedInstructors.filter(key => key !== instructorId)
+      : [...collapsedInstructors, instructorId];
+    setCollapsedInstructors(newCollapsedKeys);
+    updateSettings({ collapsedLessonInstructors: newCollapsedKeys }, { silent: true });
+  }, [collapsedInstructors, updateSettings]);
+
+  const handleToggleUnassignedInstructor = useCallback(() => {
+    const newExpandedState = !isUnassignedInstructorExpanded;
+    setIsUnassignedInstructorExpanded(newExpandedState);
+    updateSettings({ uncategorizedLessonInstructorIsExpanded: newExpandedState }, { silent: true });
+  }, [isUnassignedInstructorExpanded, updateSettings]);
+
+
   const sortLessons = (lessonsToSort: Lesson[], sortOrder: LessonSortOrder): Lesson[] => {
       return [...lessonsToSort].sort((a, b) => {
         const dateA = new Date(a.uploadDate).getTime();
@@ -195,9 +247,13 @@ const LessonsGallery: React.FC = () => {
     Promise.all([
         dataService.getLessons(),
         dataService.getLessonCategories(),
-    ]).then(([fetchedLessons, fetchedCategories]) => {
+        dataService.getSchools(),
+        dataService.getInstructors(),
+    ]).then(([fetchedLessons, fetchedCategories, fetchedSchools, fetchedInstructors]) => {
         setLessons(fetchedLessons);
         setLessonCategories(fetchedCategories);
+        setSchools(fetchedSchools);
+        setInstructors(fetchedInstructors);
     }).catch(console.error)
       .finally(() => setIsLoading(false));
   }, []);
@@ -223,14 +279,10 @@ const LessonsGallery: React.FC = () => {
     return sortLessons(lessons, settings.lessonSortOrder);
   }, [lessons, settings.lessonSortOrder]);
 
-  const { categorized: categorizedLessons, new: uncategorizedLessons } = useMemo(() => {
+  const { categorized, new: uncategorizedLessons } = useMemo(() => {
     const grouped: { [key: string]: Lesson[] } = {};
-    lessonCategories.forEach(c => {
-        grouped[c.id] = [];
-    });
-    
+    lessonCategories.forEach(c => { grouped[c.id] = []; });
     const uncategorized: Lesson[] = [];
-
     for (const lesson of lessons) {
       if (lesson.categoryId && grouped.hasOwnProperty(lesson.categoryId)) {
         grouped[lesson.categoryId].push(lesson);
@@ -238,17 +290,49 @@ const LessonsGallery: React.FC = () => {
         uncategorized.push(lesson);
       }
     }
-
     const sortedCategorized: { [key: string]: Lesson[] } = {};
     for (const categoryId in grouped) {
         sortedCategorized[categoryId] = sortLessons(grouped[categoryId], settings.lessonSortOrder);
     }
-    
     const sortedNew = sortLessons(uncategorized, settings.lessonSortOrder);
-    
     return { categorized: sortedCategorized, new: sortedNew };
-
   }, [lessons, lessonCategories, settings.lessonSortOrder]);
+  
+  const groupedBySchool = useMemo(() => {
+    const grouped: { [key: string]: Lesson[] } = {};
+    schools.forEach(c => { grouped[c.id] = []; });
+    const unassigned: Lesson[] = [];
+    for (const lesson of lessons) {
+      if (lesson.schoolId && grouped.hasOwnProperty(lesson.schoolId)) {
+        grouped[lesson.schoolId].push(lesson);
+      } else {
+        unassigned.push(lesson);
+      }
+    }
+    const sortedGrouped: { [key: string]: Lesson[] } = {};
+    for (const id in grouped) {
+        sortedGrouped[id] = sortLessons(grouped[id], settings.lessonSortOrder);
+    }
+    return { grouped: sortedGrouped, unassigned: sortLessons(unassigned, settings.lessonSortOrder) };
+  }, [lessons, schools, settings.lessonSortOrder]);
+
+  const groupedByInstructor = useMemo(() => {
+    const grouped: { [key: string]: Lesson[] } = {};
+    instructors.forEach(c => { grouped[c.id] = []; });
+    const unassigned: Lesson[] = [];
+    for (const lesson of lessons) {
+      if (lesson.instructorId && grouped.hasOwnProperty(lesson.instructorId)) {
+        grouped[lesson.instructorId].push(lesson);
+      } else {
+        unassigned.push(lesson);
+      }
+    }
+    const sortedGrouped: { [key: string]: Lesson[] } = {};
+    for (const id in grouped) {
+        sortedGrouped[id] = sortLessons(grouped[id], settings.lessonSortOrder);
+    }
+    return { grouped: sortedGrouped, unassigned: sortLessons(unassigned, settings.lessonSortOrder) };
+  }, [lessons, instructors, settings.lessonSortOrder]);
 
   const dateBasedGroupedLessons = useMemo(() => {
     if (settings.lessonGrouping !== 'byMonth' && settings.lessonGrouping !== 'byYear') {
@@ -273,7 +357,7 @@ const LessonsGallery: React.FC = () => {
   }, [allSortedLessons, settings.lessonGrouping, settings.lessonSortOrder, locale]);
 
 
-  const displayItems = useMemo(() => {
+  const displayCategories = useMemo(() => {
     const categoryMap = new Map(lessonCategories.map(c => [c.id, c]));
     const orderedItems: ({ id: string; isUncategorized: true } | LessonCategory)[] = [];
     
@@ -301,6 +385,40 @@ const LessonsGallery: React.FC = () => {
     }
     return orderedItems;
   }, [lessonCategories, settings.lessonCategoryOrder]);
+
+  const createOrderedList = useCallback((
+    items: (School[] | Instructor[]), 
+    orderSetting: string[],
+    unassignedId: string
+  ) => {
+    const itemMap = new Map(items.map(item => [item.id, item]));
+    const orderedItems: ({ id: string; isUnassigned: true } | School | Instructor)[] = [];
+
+    let order = orderSetting && orderSetting.length > 0
+        ? orderSetting
+        : [unassignedId, ...items.map(i => i.id).sort((a, b) => a.localeCompare(b))];
+        
+    const allKnownIds = new Set([unassignedId, ...items.map(i => i.id)]);
+    const orderSet = new Set(order);
+
+    if (order.length < allKnownIds.size) {
+        const missingIds = [...allKnownIds].filter(id => !orderSet.has(id));
+        order.push(...missingIds);
+    }
+    
+    for (const id of order) {
+        if (id === unassignedId) {
+            orderedItems.push({ id: unassignedId, isUnassigned: true });
+        } else {
+            const item = itemMap.get(id);
+            if (item) orderedItems.push(item);
+        }
+    }
+    return orderedItems;
+  }, []);
+
+  const displaySchools = useMemo(() => createOrderedList(schools, settings.lessonSchoolOrder, UNASSIGNED_ID), [schools, settings.lessonSchoolOrder, createOrderedList]);
+  const displayInstructors = useMemo(() => createOrderedList(instructors, settings.lessonInstructorOrder, UNASSIGNED_ID), [instructors, settings.lessonInstructorOrder, createOrderedList]);
 
 
   const handleAddClick = () => navigate('/lessons/add');
@@ -338,6 +456,68 @@ const LessonsGallery: React.FC = () => {
   const baseRoute = '/lessons';
   const allLessonIds = useMemo(() => allSortedLessons.map(l => l.id), [allSortedLessons]);
   const onForceDelete = isSignedIn ? forceDeleteItem : undefined;
+  
+  const renderGroupedBy = useCallback((
+    orderedItems: ({ id: string; name?: string; isUnassigned?: boolean; } | School | Instructor)[],
+    groupedData: { [key: string]: Lesson[] },
+    unassignedData: Lesson[],
+    unassignedLabel: string,
+    groupingType: 'school' | 'instructor'
+  ) => {
+    const groupRenderConfig = (groupingType === 'school')
+        ? {
+            collapsedGroups: collapsedSchools,
+            isUnassignedExpanded: isUnassignedSchoolExpanded,
+            handleToggle: handleToggleSchool,
+            handleToggleUnassigned: handleToggleUnassignedSchool,
+        }
+        : {
+            collapsedGroups: collapsedInstructors,
+            isUnassignedExpanded: isUnassignedInstructorExpanded,
+            handleToggle: handleToggleInstructor,
+            handleToggleUnassigned: handleToggleUnassignedInstructor,
+        };
+
+    const { collapsedGroups, isUnassignedExpanded, handleToggle, handleToggleUnassigned } = groupRenderConfig;
+
+    return (
+        <div>
+            {orderedItems.map(item => {
+                const isUnassigned = 'isUnassigned' in item && item.isUnassigned;
+                const lessons = isUnassigned ? unassignedData : groupedData[item.id] || [];
+                const count = lessons.length;
+                if (count === 0 && !settings.showEmptyLessonCategoriesInGroupedView) return null;
+
+                const { isExpanded, onToggle } = isUnassigned
+                    ? { isExpanded: isUnassignedExpanded, onToggle: handleToggleUnassigned }
+                    : { isExpanded: !collapsedGroups.includes(item.id), onToggle: () => handleToggle(item.id) };
+
+                return (
+                    <div key={item.id}>
+                        <CategoryHeader 
+                            name={isUnassigned ? unassignedLabel : (item.name || '')}
+                            count={settings.showLessonCountInGroupHeaders ? count : undefined}
+                            isExpanded={isExpanded}
+                            onToggle={onToggle}
+                        />
+                        {isExpanded && (
+                            <div className="pt-2 pb-6">
+                                {count > 0 ? (
+                                    <LessonGrid lessons={lessons} lessonCategories={lessonCategories} schools={schools} instructors={instructors} onRefresh={refreshGallery} baseRoute={baseRoute} allLessonIds={allLessonIds} onForceDelete={onForceDelete} />
+                                ) : <EmptyCategoryMessage />}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+  }, [
+      settings.showEmptyLessonCategoriesInGroupedView, settings.showLessonCountInGroupHeaders,
+      lessonCategories, schools, instructors, refreshGallery, baseRoute, allLessonIds, onForceDelete,
+      collapsedSchools, isUnassignedSchoolExpanded, handleToggleSchool, handleToggleUnassignedSchool,
+      collapsedInstructors, isUnassignedInstructorExpanded, handleToggleInstructor, handleToggleUnassignedInstructor
+  ]);
 
   const renderContent = () => {
     if (isLoading) {
@@ -363,6 +543,13 @@ const LessonsGallery: React.FC = () => {
       );
     }
 
+    if (settings.lessonGrouping === 'bySchool') {
+        return renderGroupedBy(displaySchools, groupedBySchool.grouped, groupedBySchool.unassigned, t('common.unassigned'), 'school');
+    }
+    if (settings.lessonGrouping === 'byInstructor') {
+        return renderGroupedBy(displayInstructors, groupedByInstructor.grouped, groupedByInstructor.unassigned, t('common.unassigned'), 'instructor');
+    }
+
     if (settings.lessonGrouping === 'byMonth' || settings.lessonGrouping === 'byYear') {
       const { groups, groupOrder } = dateBasedGroupedLessons;
       return (
@@ -383,14 +570,7 @@ const LessonsGallery: React.FC = () => {
                           />
                           {isExpanded && (
                             <div className="pt-2 pb-6">
-                                <LessonGrid
-                                    lessons={group.lessons}
-                                    lessonCategories={lessonCategories}
-                                    onRefresh={refreshGallery}
-                                    baseRoute={baseRoute}
-                                    allLessonIds={allLessonIds}
-                                    onForceDelete={onForceDelete}
-                                />
+                                <LessonGrid lessons={group.lessons} lessonCategories={lessonCategories} schools={schools} instructors={instructors} onRefresh={refreshGallery} baseRoute={baseRoute} allLessonIds={allLessonIds} onForceDelete={onForceDelete} />
                             </div>
                           )}
                       </div>
@@ -403,7 +583,7 @@ const LessonsGallery: React.FC = () => {
     if (settings.lessonGrouping === 'byCategory') {
       return (
         <div>
-          {displayItems.map(item => {
+          {displayCategories.map(item => {
             if ('isUncategorized' in item) {
               const count = uncategorizedLessons.length;
               const showGroup = count > 0 || settings.showEmptyLessonCategoriesInGroupedView;
@@ -420,14 +600,7 @@ const LessonsGallery: React.FC = () => {
                     {isUncategorizedExpanded && (
                         <div className="pt-2 pb-6">
                             {count > 0 ? (
-                                <LessonGrid
-                                    lessons={uncategorizedLessons}
-                                    lessonCategories={lessonCategories}
-                                    onRefresh={refreshGallery}
-                                    baseRoute={baseRoute}
-                                    allLessonIds={allLessonIds}
-                                    onForceDelete={onForceDelete}
-                                />
+                                <LessonGrid lessons={uncategorizedLessons} lessonCategories={lessonCategories} schools={schools} instructors={instructors} onRefresh={refreshGallery} baseRoute={baseRoute} allLessonIds={allLessonIds} onForceDelete={onForceDelete} />
                             ) : (
                                 <EmptyCategoryMessage />
                             )}
@@ -437,7 +610,7 @@ const LessonsGallery: React.FC = () => {
               );
             } else {
               const category = item;
-              const categoryLessons = categorizedLessons[category.id] || [];
+              const categoryLessons = categorized[category.id] || [];
               const count = categoryLessons.length;
               const showGroup = count > 0 || settings.showEmptyLessonCategoriesInGroupedView;
               if (!showGroup) return null;
@@ -455,14 +628,7 @@ const LessonsGallery: React.FC = () => {
                   {isExpanded && (
                       <div className="pt-2 pb-6">
                          {count > 0 ? (
-                             <LessonGrid
-                                  lessons={categoryLessons}
-                                  lessonCategories={lessonCategories}
-                                  onRefresh={refreshGallery}
-                                  baseRoute={baseRoute}
-                                  allLessonIds={allLessonIds}
-                                  onForceDelete={onForceDelete}
-                              />
+                             <LessonGrid lessons={categoryLessons} lessonCategories={lessonCategories} schools={schools} instructors={instructors} onRefresh={refreshGallery} baseRoute={baseRoute} allLessonIds={allLessonIds} onForceDelete={onForceDelete} />
                          ) : (
                               <EmptyCategoryMessage />
                          )}
@@ -478,14 +644,7 @@ const LessonsGallery: React.FC = () => {
 
     return (
       <div className="pt-2 pb-6">
-        <LessonGrid
-            lessons={allSortedLessons}
-            lessonCategories={lessonCategories}
-            onRefresh={refreshGallery}
-            baseRoute={baseRoute}
-            allLessonIds={allLessonIds}
-            onForceDelete={onForceDelete}
-        />
+        <LessonGrid lessons={allSortedLessons} lessonCategories={lessonCategories} schools={schools} instructors={instructors} onRefresh={refreshGallery} baseRoute={baseRoute} allLessonIds={allLessonIds} onForceDelete={onForceDelete} />
       </div>
     );
   };

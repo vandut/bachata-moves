@@ -21,6 +21,20 @@ export interface LessonCategory {
   modifiedTime?: string;
 }
 
+export interface School {
+  id: string;
+  name:string;
+  driveId?: string;
+  modifiedTime?: string;
+}
+
+export interface Instructor {
+  id: string;
+  name:string;
+  driveId?: string;
+  modifiedTime?: string;
+}
+
 export interface Figure {
   id: string;
   lessonId: string;
@@ -30,6 +44,8 @@ export interface Figure {
   endTime: number; // Milliseconds
   thumbTime: number; // Milliseconds from the start of the video
   categoryId?: string | null;
+  schoolId?: string | null;
+  instructorId?: string | null;
   driveId?: string;
   modifiedTime?: string;
 }
@@ -43,6 +59,8 @@ export interface Lesson {
   endTime: number; // Milliseconds
   thumbTime: number; // Milliseconds from the start of the video
   categoryId?: string | null;
+  schoolId?: string | null;
+  instructorId?: string | null;
   driveId?: string;
   videoDriveId?: string;
   modifiedTime?: string;
@@ -55,8 +73,8 @@ export interface AppSettings {
   language: 'english' | 'polish';
   lessonSortOrder: LessonSortOrder;
   figureSortOrder: FigureSortOrder;
-  lessonGrouping: 'none' | 'byMonth' | 'byYear' | 'byCategory';
-  figureGrouping: 'none' | 'byMonth' | 'byYear' | 'byCategory';
+  lessonGrouping: 'none' | 'byMonth' | 'byYear' | 'byCategory' | 'bySchool' | 'byInstructor';
+  figureGrouping: 'none' | 'byMonth' | 'byYear' | 'byCategory' | 'bySchool' | 'byInstructor';
   autoplayGalleryVideos: boolean;
   isMuted: boolean;
   volume: number;
@@ -75,6 +93,20 @@ export interface AppSettings {
   lessonCategoryOrder: string[];
   showEmptyLessonCategoriesInGroupedView: boolean;
   showLessonCountInGroupHeaders: boolean;
+  // School Grouping Settings
+  collapsedLessonSchools: string[];
+  collapsedFigureSchools: string[];
+  uncategorizedLessonSchoolIsExpanded: boolean;
+  uncategorizedFigureSchoolIsExpanded: boolean;
+  lessonSchoolOrder: string[];
+  figureSchoolOrder: string[];
+  // Instructor Grouping Settings
+  collapsedLessonInstructors: string[];
+  collapsedFigureInstructors: string[];
+  uncategorizedLessonInstructorIsExpanded: boolean;
+  uncategorizedFigureInstructorIsExpanded: boolean;
+  lessonInstructorOrder: string[];
+  figureInstructorOrder: string[];
   // Sync settings
   lastSyncTimestamp?: string;
 }
@@ -118,7 +150,11 @@ export interface SyncTask {
 export interface GroupingConfig {
     modifiedTime: string;
     categories: FigureCategory[] | LessonCategory[];
-    order: string[];
+    schools: School[];
+    instructors: Instructor[];
+    categoryOrder: string[];
+    schoolOrder: string[];
+    instructorOrder: string[];
     showEmpty: boolean;
     showCount: boolean;
 }

@@ -1,22 +1,24 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
-import type { ModalAction, FigureCategory, LessonCategory, AppSettings } from '../types';
+import type { ModalAction, FigureCategory, LessonCategory, AppSettings, School, Instructor } from '../types';
 import { dataService } from '../data/service';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 interface GalleryContext {
     isMobile: boolean;
 }
 
-type GenericCategory = (FigureCategory | LessonCategory) & {
+type GenericCategory = (FigureCategory | LessonCategory | School | Instructor) & {
   isNew?: boolean;
   isDirty?: boolean;
   isSpecial?: boolean; // For the "Uncategorized" group
 };
 
 const UNCATEGORIZED_ID = '__uncategorized__';
+const UNASSIGNED_ID = '__unassigned__';
 
 const CustomizeGroupingScreen: React.FC = () => {
     const navigate = useNavigate();
@@ -27,34 +29,39 @@ const CustomizeGroupingScreen: React.FC = () => {
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);
 
-    const [localItems, setLocalItems] = useState<GenericCategory[]>([]);
-    const [initialCategories, setInitialCategories] = useState<GenericCategory[]>([]);
+    const [categories, setCategories] = useState<GenericCategory[]>([]);
+    const [schools, setSchools] = useState<GenericCategory[]>([]);
+    const [instructors, setInstructors] = useState<GenericCategory[]>([]);
+
     const [showEmpty, setShowEmpty] = useState(false);
     const [showCount, setShowCount] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'category' | 'school' | 'instructor'} | null>(null);
 
     const config = useMemo(() => {
         return type === 'lesson'
             ? {
-                getCategories: dataService.getLessonCategories,
-                addCategory: dataService.addLessonCategory,
-                updateCategory: dataService.updateLessonCategory,
-                deleteCategory: dataService.deleteLessonCategory,
+                getCategories: dataService.getLessonCategories, addCategory: dataService.addLessonCategory, updateCategory: dataService.updateLessonCategory, deleteCategory: dataService.deleteLessonCategory,
+                getSchools: dataService.getSchools, addSchool: dataService.addSchool, updateSchool: dataService.updateSchool, deleteSchool: dataService.deleteSchool,
+                getInstructors: dataService.getInstructors, addInstructor: dataService.addInstructor, updateInstructor: dataService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
                 updateSettingsKeys: {
                     order: 'lessonCategoryOrder' as keyof AppSettings,
+                    schoolOrder: 'lessonSchoolOrder' as keyof AppSettings,
+                    instructorOrder: 'lessonInstructorOrder' as keyof AppSettings,
                     showEmpty: 'showEmptyLessonCategoriesInGroupedView' as keyof AppSettings,
                     showCount: 'showLessonCountInGroupHeaders' as keyof AppSettings,
                 }
             }
             : {
-                getCategories: dataService.getFigureCategories,
-                addCategory: dataService.addFigureCategory,
-                updateCategory: dataService.updateFigureCategory,
-                deleteCategory: dataService.deleteFigureCategory,
+                getCategories: dataService.getFigureCategories, addCategory: dataService.addFigureCategory, updateCategory: dataService.updateFigureCategory, deleteCategory: dataService.deleteFigureCategory,
+                getSchools: dataService.getSchools, addSchool: dataService.addSchool, updateSchool: dataService.updateSchool, deleteSchool: dataService.deleteSchool,
+                getInstructors: dataService.getInstructors, addInstructor: dataService.addInstructor, updateInstructor: dataService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
                 updateSettingsKeys: {
                     order: 'figureCategoryOrder' as keyof AppSettings,
+                    schoolOrder: 'figureSchoolOrder' as keyof AppSettings,
+                    instructorOrder: 'figureInstructorOrder' as keyof AppSettings,
                     showEmpty: 'showEmptyFigureCategoriesInGroupedView' as keyof AppSettings,
                     showCount: 'showFigureCountInGroupHeaders' as keyof AppSettings,
                 }
@@ -62,60 +69,60 @@ const CustomizeGroupingScreen: React.FC = () => {
     }, [type]);
 
     useEffect(() => {
+        const buildOrderedList = (
+            items: (School | Instructor | LessonCategory | FigureCategory)[],
+            order: string[],
+            specialId: string,
+            specialName: string
+        ): GenericCategory[] => {
+            const specialItem: GenericCategory = { id: specialId, name: specialName, isSpecial: true };
+            const allItemsMap = new Map<string, GenericCategory>([...items, specialItem].map(c => [c.id, c]));
+            const currentOrder = order || [];
+            const orderedItems: GenericCategory[] = [];
+            const processedIds = new Set<string>();
+        
+            for (const id of currentOrder) {
+                if (allItemsMap.has(id)) {
+                    orderedItems.push(allItemsMap.get(id)!);
+                    processedIds.add(id);
+                }
+            }
+            for (const id of allItemsMap.keys()) {
+                if (!processedIds.has(id)) {
+                    orderedItems.push(allItemsMap.get(id)!);
+                }
+            }
+            return orderedItems;
+        };
+
         const loadData = async () => {
             setIsLoading(true);
             setError(null);
-
             try {
-                // Load local data directly without a pre-sync check.
-                const [localDBSettings, fetchedCategories] = await Promise.all([
+                const [dbSettings, fetchedCategories, fetchedSchools, fetchedInstructors] = await Promise.all([
                     dataService.getSettings(),
-                    config.getCategories()
+                    config.getCategories(),
+                    config.getSchools(),
+                    config.getInstructors(),
                 ]);
-
-                setInitialCategories(fetchedCategories);
-
-                const uncategorizedItem: GenericCategory = {
-                    id: UNCATEGORIZED_ID,
-                    name: t('common.uncategorized'),
-                    isSpecial: true,
-                };
-
-                const allItemsMap = new Map<string, GenericCategory>();
-                fetchedCategories.forEach(cat => allItemsMap.set(cat.id, cat));
-                allItemsMap.set(uncategorizedItem.id, uncategorizedItem);
                 
-                const currentOrder = (type === 'lesson' ? localDBSettings.lessonCategoryOrder : localDBSettings.figureCategoryOrder) || [];
-                const currentShowEmpty = type === 'lesson' ? localDBSettings.showEmptyLessonCategoriesInGroupedView : localDBSettings.showEmptyFigureCategoriesInGroupedView;
-                const currentShowCount = type === 'lesson' ? localDBSettings.showLessonCountInGroupHeaders : localDBSettings.showFigureCountInGroupHeaders;
-                
-                const orderedItems: GenericCategory[] = [];
-                const processedIds = new Set<string>();
+                const { lessonCategoryOrder, lessonSchoolOrder, lessonInstructorOrder, figureCategoryOrder, figureSchoolOrder, figureInstructorOrder } = dbSettings;
+                const categoryOrder = type === 'lesson' ? lessonCategoryOrder : figureCategoryOrder;
+                const schoolOrder = type === 'lesson' ? lessonSchoolOrder : figureSchoolOrder;
+                const instructorOrder = type === 'lesson' ? lessonInstructorOrder : figureInstructorOrder;
 
-                for (const id of currentOrder) {
-                    if (allItemsMap.has(id)) {
-                        orderedItems.push(allItemsMap.get(id)!);
-                        processedIds.add(id);
-                    }
-                }
+                setCategories(buildOrderedList(fetchedCategories, categoryOrder, UNCATEGORIZED_ID, t('common.uncategorized')));
+                setSchools(buildOrderedList(fetchedSchools, schoolOrder, UNASSIGNED_ID, t('common.unassigned')));
+                setInstructors(buildOrderedList(fetchedInstructors, instructorOrder, UNASSIGNED_ID, t('common.unassigned')));
 
-                for (const id of allItemsMap.keys()) {
-                    if (!processedIds.has(id)) {
-                        orderedItems.push(allItemsMap.get(id)!);
-                    }
-                }
-                
-                setLocalItems(orderedItems);
-                setShowEmpty(!!currentShowEmpty);
-                setShowCount(!!currentShowCount);
-
+                setShowEmpty(!!(type === 'lesson' ? dbSettings.showEmptyLessonCategoriesInGroupedView : dbSettings.showEmptyFigureCategoriesInGroupedView));
+                setShowCount(!!(type === 'lesson' ? dbSettings.showLessonCountInGroupHeaders : dbSettings.showFigureCountInGroupHeaders));
             } catch (err: any) {
                 setError(err.message);
             } finally {
                 setIsLoading(false);
             }
         };
-        
         loadData();
     }, [type, t, config]);
 
@@ -124,40 +131,47 @@ const CustomizeGroupingScreen: React.FC = () => {
     
     const handleSave = async () => {
         setError(null);
-        if (localItems.some(item => !item.isSpecial && item.name.trim() === '')) {
+        if ([...categories, ...schools, ...instructors].some(item => !item.isSpecial && item.name.trim() === '')) {
             setError(t('customizeCategories.nameRequiredError'));
             return;
         }
-
         setIsSaving(true);
-
         try {
-            const initialIds = new Set(initialCategories.map(c => c.id));
-            const finalRealItems = localItems.filter(item => !item.isSpecial);
-            const finalIds = new Set(finalRealItems.map(item => item.id));
+            const initialCategories = await config.getCategories();
+            const initialSchools = await config.getSchools();
+            const initialInstructors = await config.getInstructors();
 
-            const idsToDelete = [...initialIds].filter(id => !finalIds.has(id));
+            const createUpdateDelete = async (initialItems: any[], localItems: any[], addFn: any, updateFn: any, deleteFn: any) => {
+                const initialIds = new Set(initialItems.map(i => i.id));
+                const localIds = new Set(localItems.map(i => i.id));
+                const toDelete = initialItems.filter(i => !localIds.has(i.id)).map(i => deleteFn(i.id));
+                const toAdd = localItems.filter(i => i.isNew).map(i => addFn(i.name.trim()));
+                const toUpdate = localItems.filter(i => !i.isNew && i.isDirty).map(i => updateFn(i.id, { name: i.name.trim() }));
+                const newItems = await Promise.all(toAdd);
+                await Promise.all([...toDelete, ...toUpdate]);
+                return newItems;
+            };
             
-            const deletePromises = idsToDelete.map(id => config.deleteCategory(id));
-            const updatePromises = finalRealItems
-                .filter(item => !item.isNew && item.isDirty)
-                .map(item => config.updateCategory(item.id, { name: item.name.trim() }));
-            const addPromises = finalRealItems
-                .filter(item => item.isNew)
-                .map(item => config.addCategory(item.name.trim()));
+            const newCats = await createUpdateDelete(initialCategories, categories.filter(c => !c.isSpecial), config.addCategory, config.updateCategory, config.deleteCategory);
+            const newSchools = await createUpdateDelete(initialSchools, schools.filter(s => !s.isSpecial), config.addSchool, config.updateSchool, config.deleteSchool);
+            const newInstructors = await createUpdateDelete(initialInstructors, instructors.filter(i => !i.isSpecial), config.addInstructor, config.updateInstructor, config.deleteInstructor);
             
-            const newCategories = await Promise.all(addPromises);
-            await Promise.all([...deletePromises, ...updatePromises]);
+            const newCatIdMap = new Map<string, string>();
+            categories.filter(c => c.isNew).forEach((c, index) => { newCatIdMap.set(c.id, newCats[index].id); });
+            const finalCategoryOrder = categories.map(item => newCatIdMap.get(item.id) || item.id);
 
-            const newIdMap = new Map<string, string>();
-            localItems.filter(c => c.isNew).forEach((c, index) => {
-                newIdMap.set(c.id, newCategories[index].id);
-            });
-            
-            const finalCategoryOrder = localItems.map(item => newIdMap.get(item.id) || item.id);
+            const newSchoolIdMap = new Map<string, string>();
+            schools.filter(s => s.isNew).forEach((s, index) => { newSchoolIdMap.set(s.id, newSchools[index].id); });
+            const finalSchoolOrder = schools.map(item => newSchoolIdMap.get(item.id) || item.id);
+
+            const newInstructorIdMap = new Map<string, string>();
+            instructors.filter(i => i.isNew).forEach((i, index) => { newInstructorIdMap.set(i.id, newInstructors[index].id); });
+            const finalInstructorOrder = instructors.map(item => newInstructorIdMap.get(item.id) || item.id);
             
             const newSettings: Partial<AppSettings> = {
                 [config.updateSettingsKeys.order]: finalCategoryOrder,
+                [config.updateSettingsKeys.schoolOrder]: finalSchoolOrder,
+                [config.updateSettingsKeys.instructorOrder]: finalInstructorOrder,
                 [config.updateSettingsKeys.showEmpty]: showEmpty,
                 [config.updateSettingsKeys.showCount]: showCount,
             };
@@ -166,10 +180,8 @@ const CustomizeGroupingScreen: React.FC = () => {
             if (isSignedIn) {
                 await forceUploadGroupingConfig(type);
             }
-            
             reloadAllData();
             handleClose();
-
         } catch (err) {
             console.error(err);
             setError(t('customizeCategories.errorSave'));
@@ -178,126 +190,85 @@ const CustomizeGroupingScreen: React.FC = () => {
         }
     };
     
-    const handleMove = (index: number, direction: 'up' | 'down') => {
-        const newIndex = direction === 'up' ? index - 1 : index + 1;
-        if (newIndex < 0 || newIndex >= localItems.length) return;
+    const isSaveDisabled = useMemo(() => {
+      return isSaving || isLoading || [...categories, ...schools, ...instructors].some(item => !item.isSpecial && !item.name.trim());
+    }, [isSaving, isLoading, categories, schools, instructors]);
 
-        const updatedItems = [...localItems];
-        [updatedItems[index], updatedItems[newIndex]] = [updatedItems[newIndex], updatedItems[index]];
-        setLocalItems(updatedItems);
-    };
+    const primaryAction: ModalAction = { label: t('common.save'), onClick: handleSave, isLoading: isSaving, disabled: isSaveDisabled };
 
-    const handleNameChange = (id: string, newName: string) => {
-        setLocalItems(prev => prev.map(cat => 
-            cat.id === id ? { ...cat, name: newName, isDirty: true } : cat
-        ));
-    };
-
-    const handleAddNew = () => {
-        const newCategory: GenericCategory = {
-            id: `new-${Date.now()}`,
-            name: '',
-            isNew: true,
+    const renderEditableList = (title: string, items: GenericCategory[], setItems: React.Dispatch<React.SetStateAction<GenericCategory[]>>, options: { reorderable: boolean; addText: string; deleteText: string; type: 'category' | 'school' | 'instructor' }) => {
+        const handleMove = (index: number, direction: 'up' | 'down') => {
+            const newIndex = direction === 'up' ? index - 1 : index + 1;
+            if (newIndex < 0 || newIndex >= items.length) return;
+            const updatedItems = [...items];
+            [updatedItems[index], updatedItems[newIndex]] = [updatedItems[newIndex], updatedItems[index]];
+            setItems(updatedItems);
         };
-        setLocalItems(prev => [...prev, newCategory]);
-    };
-
-    const handleDeleteItem = (id: string) => {
-        setLocalItems(prev => prev.filter(item => item.id !== id));
+        const handleNameChange = (id: string, newName: string) => setItems(prev => prev.map(i => i.id === id ? { ...i, name: newName, isDirty: true } : i));
+        const handleAddNew = () => setItems(prev => [...prev, { id: `new-${Date.now()}`, name: '', isNew: true }]);
+        const handleDelete = (id: string, name: string) => setItemToDelete({ id, name, type: options.type });
+        
+        return (
+            <div>
+                <h3 className="text-xl font-semibold text-gray-800 mb-3">{title}</h3>
+                <div className="space-y-2">
+                    {items.map((item, index) => (
+                        <div key={item.id} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-md">
+                            {item.isSpecial ? (
+                                <span className="flex-grow px-2 py-1 text-gray-700 font-medium select-none">{item.name}</span>
+                            ) : (
+                                <input type="text" value={item.name} onChange={(e) => handleNameChange(item.id, e.target.value)} placeholder={t('common.category')} className="flex-grow px-2 py-1 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"/>
+                            )}
+                            {options.reorderable && <>
+                                <button onClick={() => handleMove(index, 'up')} disabled={index === 0} className="p-1 text-gray-500 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"><i className="material-icons">keyboard_arrow_up</i></button>
+                                <button onClick={() => handleMove(index, 'down')} disabled={index === items.length - 1} className="p-1 text-gray-500 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"><i className="material-icons">keyboard_arrow_down</i></button>
+                            </>}
+                            <button onClick={() => handleDelete(item.id, item.name)} disabled={item.isSpecial} className={`p-1 text-red-500 hover:text-red-700 ${item.isSpecial ? 'invisible' : ''}`} aria-hidden={item.isSpecial}>
+                                <i className="material-icons">delete</i>
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                <button onClick={handleAddNew} className="mt-3 w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-400 text-gray-600 rounded-md hover:bg-gray-100 hover:border-gray-500">
+                    <i className="material-icons mr-2">add</i>
+                    {options.addText}
+                </button>
+            </div>
+        );
     };
     
-    const isSaveDisabled = useMemo(() => {
-      return isSaving || isLoading || localItems.some(item => !item.isSpecial && item.name.trim() === '');
-    }, [isSaving, isLoading, localItems]);
-
-    const primaryAction: ModalAction = {
-        label: t('common.save'),
-        onClick: handleSave,
-        isLoading: isSaving,
-        disabled: isSaveDisabled,
+    const handleConfirmDelete = () => {
+        if (!itemToDelete) return;
+        const { id, type } = itemToDelete;
+        if (type === 'category') setCategories(prev => prev.filter(item => item.id !== id));
+        else if (type === 'school') setSchools(prev => prev.filter(item => item.id !== id));
+        else if (type === 'instructor') setInstructors(prev => prev.filter(item => item.id !== id));
+        setItemToDelete(null);
     };
 
     const renderContent = () => {
         if (isLoading) {
-            return (
-                <div className="flex flex-col items-center justify-center h-48">
-                    <i className="material-icons text-4xl text-gray-400 animate-spin-reverse">sync</i>
-                    <p className="mt-4 text-gray-600">{t('common.loading')}</p>
-                </div>
-            );
+            return <div className="flex flex-col items-center justify-center h-48"><i className="material-icons text-4xl text-gray-400 animate-spin-reverse">sync</i><p className="mt-4 text-gray-600">{t('common.loading')}</p></div>;
         }
 
         return (
           <>
-            <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2">
-                {localItems.map((item, index) => (
-                    <div key={item.id} className="flex items-center space-x-2 bg-gray-50 p-2 rounded-md">
-                        {item.isSpecial ? (
-                             <span className="flex-grow px-2 py-1 text-gray-700 font-medium select-none">{item.name}</span>
-                        ) : (
-                             <input
-                                type="text"
-                                value={item.name}
-                                onChange={(e) => handleNameChange(item.id, e.target.value)}
-                                placeholder={t('common.category')}
-                                className="flex-grow px-2 py-1 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                            />
-                        )}
-                        <button onClick={() => handleMove(index, 'up')} disabled={index === 0} className="p-1 text-gray-500 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"><i className="material-icons">keyboard_arrow_up</i></button>
-                        <button onClick={() => handleMove(index, 'down')} disabled={index === localItems.length - 1} className="p-1 text-gray-500 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"><i className="material-icons">keyboard_arrow_down</i></button>
-                        <button
-                            onClick={() => handleDeleteItem(item.id)}
-                            disabled={item.isSpecial}
-                            className={`p-1 text-red-500 hover:text-red-700 ${item.isSpecial ? 'invisible' : ''}`}
-                            aria-hidden={item.isSpecial}
-                        >
-                            <i className="material-icons">delete</i>
-                        </button>
-                    </div>
-                ))}
+            <div className="space-y-6 max-h-[60vh] overflow-y-auto p-1 pr-3">
+                {renderEditableList(t('customizeCategories.sectionCategories'), categories, setCategories, { reorderable: true, addText: t('customizeCategories.add'), deleteText: '', type: 'category' })}
+                <hr className="my-6 border-gray-300" />
+                {renderEditableList(t('customizeCategories.sectionSchools'), schools, setSchools, { reorderable: true, addText: t('customizeCategories.addSchool'), deleteText: '', type: 'school' })}
+                 <hr className="my-6 border-gray-300" />
+                {renderEditableList(t('customizeCategories.sectionInstructors'), instructors, setInstructors, { reorderable: true, addText: t('customizeCategories.addInstructor'), deleteText: '', type: 'instructor' })}
             </div>
-            <button onClick={handleAddNew} className="mt-4 w-full flex items-center justify-center py-2 px-4 border border-dashed border-gray-400 text-gray-600 rounded-md hover:bg-gray-100 hover:border-gray-500">
-                <i className="material-icons mr-2">add</i>
-                {t('customizeCategories.add')}
-            </button>
+            
             <div className="border-t border-gray-200 mt-6 pt-5 space-y-4">
-                 <div
-                    onClick={() => setShowEmpty(!showEmpty)}
-                    role="switch"
-                    aria-checked={showEmpty}
-                    className="flex items-center justify-between cursor-pointer"
-                >
-                    <div>
-                        <span className="text-gray-700">{t('customizeCategories.showEmpty')}</span>
-                        <p className="text-sm text-gray-500">{t('customizeCategories.showEmptyDesc')}</p>
-                    </div>
-                    {/* Toggle switch */}
-                    <div className={`relative w-11 h-6 flex-shrink-0 rounded-full transition-colors duration-300 ease-in-out ${showEmpty ? 'bg-blue-500' : 'bg-gray-300'}`}>
-                        <div
-                            className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ease-in-out ${
-                                showEmpty ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                        ></div>
-                    </div>
+                 <div onClick={() => setShowEmpty(!showEmpty)} role="switch" aria-checked={showEmpty} className="flex items-center justify-between cursor-pointer">
+                    <div><span className="text-gray-700">{t('customizeCategories.showEmpty')}</span><p className="text-sm text-gray-500">{t('customizeCategories.showEmptyDesc')}</p></div>
+                    <div className={`relative w-11 h-6 flex-shrink-0 rounded-full transition-colors duration-300 ease-in-out ${showEmpty ? 'bg-blue-500' : 'bg-gray-300'}`}><div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ease-in-out ${showEmpty ? 'translate-x-5' : 'translate-x-0'}`}></div></div>
                 </div>
-                <div
-                    onClick={() => setShowCount(!showCount)}
-                    role="switch"
-                    aria-checked={showCount}
-                    className="flex items-center justify-between cursor-pointer"
-                >
-                    <div>
-                        <span className="text-gray-700">{t('customizeCategories.showCount')}</span>
-                        <p className="text-sm text-gray-500">{t('customizeCategories.showCountDesc')}</p>
-                    </div>
-                    {/* Toggle switch */}
-                    <div className={`relative w-11 h-6 flex-shrink-0 rounded-full transition-colors duration-300 ease-in-out ${showCount ? 'bg-blue-500' : 'bg-gray-300'}`}>
-                        <div
-                            className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ease-in-out ${
-                                showCount ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                        ></div>
-                    </div>
+                <div onClick={() => setShowCount(!showCount)} role="switch" aria-checked={showCount} className="flex items-center justify-between cursor-pointer">
+                    <div><span className="text-gray-700">{t('customizeCategories.showCount')}</span><p className="text-sm text-gray-500">{t('customizeCategories.showCountDesc')}</p></div>
+                    <div className={`relative w-11 h-6 flex-shrink-0 rounded-full transition-colors duration-300 ease-in-out ${showCount ? 'bg-blue-500' : 'bg-gray-300'}`}><div className={`absolute top-1 left-1 bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ease-in-out ${showCount ? 'translate-x-5' : 'translate-x-0'}`}></div></div>
                 </div>
             </div>
           </>
@@ -305,16 +276,27 @@ const CustomizeGroupingScreen: React.FC = () => {
     };
 
     return (
+      <>
         <BaseModal
             onClose={handleClose}
             primaryAction={primaryAction}
             title={t('customizeCategories.title')}
             isMobile={isMobile}
-            desktopWidth="max-w-lg"
+            desktopWidth="max-w-xl"
             error={error}
         >
             {renderContent()}
         </BaseModal>
+        <ConfirmDeleteModal
+            isOpen={!!itemToDelete}
+            onClose={() => setItemToDelete(null)}
+            onConfirm={handleConfirmDelete}
+            isDeleting={false}
+            title={itemToDelete?.type === 'category' ? t('customizeCategories.deleteConfirmTitle') : itemToDelete?.type === 'school' ? t('customizeCategories.deleteSchoolConfirmTitle') : t('customizeCategories.deleteInstructorConfirmTitle')}
+        >
+            {itemToDelete && <p>{itemToDelete?.type === 'category' ? t('customizeCategories.deleteConfirmBody', { name: itemToDelete.name }) : itemToDelete?.type === 'school' ? t('customizeCategories.deleteSchoolConfirmBody', { name: itemToDelete.name }) : t('customizeCategories.deleteInstructorConfirmBody', { name: itemToDelete.name })}</p>}
+        </ConfirmDeleteModal>
+      </>
     );
 };
 

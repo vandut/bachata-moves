@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from '../App';
+import type { School, Instructor } from '../types';
 
 interface BaseEditorProps {
     videoUrl: string | null;
@@ -13,8 +14,10 @@ interface BaseEditorProps {
         startTime: number;
         endTime: number;
         thumbTime: number;
+        schoolId?: string | null;
+        instructorId?: string | null;
     };
-    onFormChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+    onFormChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
     videoDurationMs: number;
     currentTimeMs: number;
     draggingElement: 'start' | 'end' | 'scrub' | null;
@@ -25,6 +28,8 @@ interface BaseEditorProps {
     thumbnailPreviewUrl: string | null;
     headerContent: React.ReactNode;
     msToSecondsString: (ms: number) => string;
+    schools: School[];
+    instructors: Instructor[];
 }
 
 const BaseEditor: React.FC<BaseEditorProps> = ({
@@ -46,6 +51,8 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     thumbnailPreviewUrl,
     headerContent,
     msToSecondsString,
+    schools,
+    instructors
 }) => {
     const { t } = useTranslation();
     
@@ -54,6 +61,8 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     const startPercent = videoDurationMs > 0 ? (startTime / videoDurationMs) * 100 : 0;
     const endPercent = videoDurationMs > 0 ? (endTime / videoDurationMs) * 100 : 100;
     const currentPercent = videoDurationMs > 0 ? (currentTimeMs / videoDurationMs) * 100 : 0;
+    
+    const commonSelectClasses = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm";
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8 gap-y-6">
@@ -115,6 +124,20 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
                 <div className="space-y-4">
                     <h4 className="text-lg font-medium text-gray-800">{t('editor.metadata')}</h4>
                     {headerContent}
+                    <div>
+                        <label htmlFor="schoolId" className="block text-sm font-medium text-gray-700">{t('common.school')}</label>
+                        <select id="schoolId" name="schoolId" value={formData.schoolId || ''} onChange={onFormChange} className={commonSelectClasses}>
+                            <option value="">{t('common.unassigned')}</option>
+                            {schools.map(school => <option key={school.id} value={school.id}>{school.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="instructorId" className="block text-sm font-medium text-gray-700">{t('common.instructor')}</label>
+                        <select id="instructorId" name="instructorId" value={formData.instructorId || ''} onChange={onFormChange} className={commonSelectClasses}>
+                            <option value="">{t('common.unassigned')}</option>
+                            {instructors.map(instructor => <option key={instructor.id} value={instructor.id}>{instructor.name}</option>)}
+                        </select>
+                    </div>
                     <div><label htmlFor="description" className="block text-sm font-medium text-gray-700">{t('common.description')}</label><textarea id="description" rows={4} value={formData.description} onChange={onFormChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
                 </div>
                 <div className="mt-4">
