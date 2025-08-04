@@ -30,7 +30,7 @@ export interface IDataService {
 
   // Settings
   getSettings(): Promise<AppSettings>;
-  saveSettings(settingsData: AppSettings): Promise<void>;
+  saveSettings(settingsData: AppSettings, options?: { silent?: boolean }): Promise<void>;
   
   // File Handling
   getVideoObjectUrl(lesson: Lesson): Promise<string>;

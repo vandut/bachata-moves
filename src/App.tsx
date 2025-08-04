@@ -1,6 +1,7 @@
 
 
 
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -78,7 +79,7 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
     
     try {
-      await dataService.saveSettings(newSettings);
+      await dataService.saveSettings(newSettings, options);
     } catch (err) {
       console.error("Failed to save settings:", err);
       settingsRef.current = currentSettings; // Revert ref on failure

@@ -628,7 +628,7 @@ export class AppDataService implements IDataService {
     } as AppSettings;
   }
 
-  public saveSettings = async (settingsData: AppSettings): Promise<void> => {
+  public saveSettings = async (settingsData: AppSettings, options?: { silent?: boolean }): Promise<void> => {
     const db = await openBachataDB();
     const deviceSettings: Partial<AppSettings> = {};
     const syncSettings: Partial<AppSettings> & { modifiedTime?: string } = {};
@@ -667,7 +667,10 @@ export class AppDataService implements IDataService {
         tx.objectStore(SETTINGS_STORE).put(syncSettings, SYNC_SETTINGS_KEY)
     ]);
     await tx.done;
-    this.notify();
+
+    if (!options?.silent) {
+      this.notify();
+    }
   }
   
   // --- File/Blob Handling ---
