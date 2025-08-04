@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data/service';
@@ -108,9 +109,19 @@ const FiguresGallery: React.FC = () => {
   const [lessonsMap, setLessonsMap] = useState<Map<string, Lesson>>(new Map());
   const [figureCategories, setFigureCategories] = useState<FigureCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [collapsedCategories, setCollapsedCategories] = useState(settings.collapsedFigureCategories || []);
+  const [isUncategorizedExpanded, setIsUncategorizedExpanded] = useState(settings.uncategorizedFigureCategoryIsExpanded);
+  const [collapsedDateGroups, setCollapsedDateGroups] = useState(settings.collapsedFigureDateGroups || []);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Sync with global settings
+  useEffect(() => {
+    setCollapsedCategories(settings.collapsedFigureCategories || []);
+    setIsUncategorizedExpanded(settings.uncategorizedFigureCategoryIsExpanded);
+    setCollapsedDateGroups(settings.collapsedFigureDateGroups || []);
+  }, [settings.collapsedFigureCategories, settings.uncategorizedFigureCategoryIsExpanded, settings.collapsedFigureDateGroups]);
 
   const SORT_OPTIONS = [
     { value: 'newest', label: t('sort.newest') },
@@ -147,28 +158,30 @@ const FiguresGallery: React.FC = () => {
       }
   };
 
-  const handleToggleCategory = async (categoryId: string) => {
-    const currentCollapsed = settings.collapsedFigureCategories || [];
-    const isCollapsed = currentCollapsed.includes(categoryId);
+  const handleToggleCategory = (categoryId: string) => {
+    const isCollapsed = collapsedCategories.includes(categoryId);
     const newCollapsedKeys = isCollapsed
-      ? currentCollapsed.filter(key => key !== categoryId)
-      : [...currentCollapsed, categoryId];
-    await updateSettings({ collapsedFigureCategories: newCollapsedKeys });
+      ? collapsedCategories.filter(key => key !== categoryId)
+      : [...collapsedCategories, categoryId];
+    setCollapsedCategories(newCollapsedKeys);
+    updateSettings({ collapsedFigureCategories: newCollapsedKeys }, { silent: true });
   };
   
   const handleToggleUncategorized = () => {
-    updateSettings({ uncategorizedFigureCategoryIsExpanded: !settings.uncategorizedFigureCategoryIsExpanded });
+    const newExpandedState = !isUncategorizedExpanded;
+    setIsUncategorizedExpanded(newExpandedState);
+    updateSettings({ uncategorizedFigureCategoryIsExpanded: newExpandedState }, { silent: true });
   };
 
   const handleToggleDateGroup = (groupKey: string) => {
-    const currentCollapsed = settings.collapsedFigureDateGroups || [];
-    const isCurrentlyCollapsed = currentCollapsed.includes(groupKey);
+    const isCurrentlyCollapsed = collapsedDateGroups.includes(groupKey);
 
     const newCollapsedKeys = isCurrentlyCollapsed
-      ? currentCollapsed.filter(key => key !== groupKey)
-      : [...currentCollapsed, groupKey];
+      ? collapsedDateGroups.filter(key => key !== groupKey)
+      : [...collapsedDateGroups, groupKey];
 
-    updateSettings({ collapsedFigureDateGroups: newCollapsedKeys });
+    setCollapsedDateGroups(newCollapsedKeys);
+    updateSettings({ collapsedFigureDateGroups: newCollapsedKeys }, { silent: true });
   };
 
   const sortFigures = (figuresToSort: Figure[], lessonDataMap: Map<string, Lesson>, currentSortOrder: FigureSortOrder): Figure[] => {
@@ -410,7 +423,7 @@ const FiguresGallery: React.FC = () => {
                 const group = groups.get(groupKey)!;
                 if (!group || group.figures.length === 0) return null;
 
-                const isExpanded = !(settings.collapsedFigureDateGroups || []).includes(groupKey);
+                const isExpanded = !collapsedDateGroups.includes(groupKey);
 
                 return (
                     <div key={groupKey}>
@@ -453,11 +466,11 @@ const FiguresGallery: React.FC = () => {
                 <div key={item.id}>
                     <CategoryHeader 
                         name={t('common.uncategorized')} 
-                        isExpanded={settings.uncategorizedFigureCategoryIsExpanded} 
+                        isExpanded={isUncategorizedExpanded} 
                         onToggle={handleToggleUncategorized} 
                         count={settings.showFigureCountInGroupHeaders ? count : undefined}
                     />
-                    {settings.uncategorizedFigureCategoryIsExpanded && (
+                    {isUncategorizedExpanded && (
                         <div className="pt-2 pb-6">
                             {count > 0 ? (
                                 <FigureGrid
@@ -483,7 +496,7 @@ const FiguresGallery: React.FC = () => {
               const showGroup = count > 0 || settings.showEmptyFigureCategoriesInGroupedView;
               if (!showGroup) return null;
 
-              const isExpanded = !(settings.collapsedFigureCategories || []).includes(category.id);
+              const isExpanded = !collapsedCategories.includes(category.id);
 
               return (
                 <div key={category.id}>

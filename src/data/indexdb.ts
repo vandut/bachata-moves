@@ -1,3 +1,4 @@
+
 import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, SyncTask } from '../types';
 import type { IDataService } from './service';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
@@ -190,12 +191,12 @@ export class AppDataService implements IDataService {
   private listeners = new Set<() => void>();
 
   // --- Subscription ---
-  public subscribe(callback: () => void): () => void {
+  public subscribe = (callback: () => void): () => void => {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
   }
 
-  private notify(): void {
+  private notify = (): void => {
     logger.info("Notifying listeners of data change.");
     // Use a timeout to batch notifications and prevent rapid-fire updates
     setTimeout(() => {
@@ -204,30 +205,30 @@ export class AppDataService implements IDataService {
   }
 
   // --- Tombstone / Deleted IDs ---
-  async addDeletedDriveId(driveId: string): Promise<void> {
+  public addDeletedDriveId = async (driveId: string): Promise<void> => {
     logger.info(`Adding driveId ${driveId} to tombstone log.`);
     const db = await openBachataDB();
     await db.put(DELETED_DRIVE_IDS_STORE, { id: driveId, deletedAt: new Date().toISOString() }, driveId);
   }
 
-  async getDeletedDriveIds(): Promise<string[]> {
+  public getDeletedDriveIds = async (): Promise<string[]> => {
     const db = await openBachataDB();
     const keys = await db.getAllKeys(DELETED_DRIVE_IDS_STORE);
     return keys as string[];
   }
 
-  async removeDeletedDriveId(driveId: string): Promise<void> {
+  public removeDeletedDriveId = async (driveId: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(DELETED_DRIVE_IDS_STORE, driveId);
   }
 
   // --- Lessons ---
-  async getLessons(): Promise<Lesson[]> { 
+  public getLessons = async (): Promise<Lesson[]> => { 
     const db = await openBachataDB();
     return db.getAll(LESSONS_STORE);
   }
 
-  async addLesson(lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, videoFile: File): Promise<Lesson> {
+  public addLesson = async (lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, videoFile: File): Promise<Lesson> => {
     const db = await openBachataDB();
     const newId = generateId();
     const newVideoId = generateId();
@@ -254,7 +255,7 @@ export class AppDataService implements IDataService {
     return newLesson;
   }
   
-  async updateLesson(lessonId: string, lessonUpdateData: Partial<Omit<Lesson, 'id'>>): Promise<Lesson> {
+  public updateLesson = async (lessonId: string, lessonUpdateData: Partial<Omit<Lesson, 'id'>>): Promise<Lesson> => {
     const db = await openBachataDB();
 
     const lesson = await db.get(LESSONS_STORE, lessonId);
@@ -287,7 +288,7 @@ export class AppDataService implements IDataService {
     return updatedLesson;
   }
 
-  async deleteLesson(lessonId: string, options?: { skipTombstone?: boolean }): Promise<void> {
+  public deleteLesson = async (lessonId: string, options?: { skipTombstone?: boolean }): Promise<void> => {
     logger.info(`Deleting lesson ${lessonId}, skipTombstone: ${!!options?.skipTombstone}`);
     const db = await openBachataDB();
     const lesson = await db.get(LESSONS_STORE, lessonId);
@@ -337,7 +338,7 @@ export class AppDataService implements IDataService {
     this.notify();
   }
 
-  async saveDownloadedLesson(lesson: Lesson, videoFile?: Blob): Promise<void> {
+  public saveDownloadedLesson = async (lesson: Lesson, videoFile?: Blob): Promise<void> => {
     this.revokeAndClearCache(lesson.videoId, 'video');
     this.revokeAndClearCache(lesson.id, 'thumbnail');
 
@@ -368,12 +369,12 @@ export class AppDataService implements IDataService {
   }
 
   // --- Figures ---
-  async getFigures(): Promise<Figure[]> { 
+  public getFigures = async (): Promise<Figure[]> => { 
     const db = await openBachataDB();
     return db.getAll(FIGURES_STORE);
   }
 
-  async addFigure(lessonId: string, figureData: Omit<Figure, 'id' | 'lessonId'>): Promise<Figure> {
+  public addFigure = async (lessonId: string, figureData: Omit<Figure, 'id' | 'lessonId'>): Promise<Figure> => {
     const db = await openBachataDB();
 
     // Perform all reads and long-running operations *before* the write transaction.
@@ -398,7 +399,7 @@ export class AppDataService implements IDataService {
     return newFigure;
   }
 
-  async updateFigure(figureId: string, figureUpdateData: Partial<Omit<Figure, 'id' | 'lessonId'>>): Promise<Figure> {
+  public updateFigure = async (figureId: string, figureUpdateData: Partial<Omit<Figure, 'id' | 'lessonId'>>): Promise<Figure> => {
     const db = await openBachataDB();
 
     const figure = await db.get(FIGURES_STORE, figureId);
@@ -433,7 +434,7 @@ export class AppDataService implements IDataService {
     return updatedFigure;
   }
 
-  async deleteFigure(figureId: string, options?: { skipTombstone?: boolean }): Promise<void> {
+  public deleteFigure = async (figureId: string, options?: { skipTombstone?: boolean }): Promise<void> => {
     logger.info(`Deleting figure ${figureId}, skipTombstone: ${!!options?.skipTombstone}`);
     const db = await openBachataDB();
     const figure = await db.get(FIGURES_STORE, figureId);
@@ -458,7 +459,7 @@ export class AppDataService implements IDataService {
     this.notify();
   }
 
-  async saveDownloadedFigure(figure: Figure): Promise<void> {
+  public saveDownloadedFigure = async (figure: Figure): Promise<void> => {
     this.revokeAndClearCache(figure.id, 'figure-thumbnail');
 
     const db = await openBachataDB();
@@ -479,12 +480,12 @@ export class AppDataService implements IDataService {
   }
   
   // --- Figure Categories ---
-  async getFigureCategories(): Promise<FigureCategory[]> {
+  public getFigureCategories = async (): Promise<FigureCategory[]> => {
     const db = await openBachataDB();
     return await db.getAll(FIGURE_CATEGORIES_STORE);
   }
   
-  async addFigureCategory(categoryName: string): Promise<FigureCategory> {
+  public addFigureCategory = async (categoryName: string): Promise<FigureCategory> => {
     const db = await openBachataDB();
     const newCategory: FigureCategory = {
       id: generateId(),
@@ -496,7 +497,7 @@ export class AppDataService implements IDataService {
     return newCategory;
   }
 
-  async updateFigureCategory(categoryId: string, categoryUpdateData: Partial<Omit<FigureCategory, 'id'>>): Promise<FigureCategory> {
+  public updateFigureCategory = async (categoryId: string, categoryUpdateData: Partial<Omit<FigureCategory, 'id'>>): Promise<FigureCategory> => {
     const db = await openBachataDB();
     const category = await db.get(FIGURE_CATEGORIES_STORE, categoryId);
     if (!category) throw new Error(`Category with id "${categoryId}" not found.`);
@@ -507,7 +508,7 @@ export class AppDataService implements IDataService {
     return updatedCategory;
   }
 
-  async deleteFigureCategory(categoryId: string): Promise<void> {
+  public deleteFigureCategory = async (categoryId: string): Promise<void> => {
     const db = await openBachataDB();
     const category = await db.get(FIGURE_CATEGORIES_STORE, categoryId);
     if (!category) return;
@@ -532,12 +533,12 @@ export class AppDataService implements IDataService {
   }
 
   // --- Lesson Categories ---
-  async getLessonCategories(): Promise<LessonCategory[]> {
+  public getLessonCategories = async (): Promise<LessonCategory[]> => {
     const db = await openBachataDB();
     return await db.getAll(LESSON_CATEGORIES_STORE);
   }
   
-  async addLessonCategory(categoryName: string): Promise<LessonCategory> {
+  public addLessonCategory = async (categoryName: string): Promise<LessonCategory> => {
     const db = await openBachataDB();
     const newCategory: LessonCategory = {
       id: generateId(),
@@ -549,7 +550,7 @@ export class AppDataService implements IDataService {
     return newCategory;
   }
 
-  async updateLessonCategory(categoryId: string, categoryUpdateData: Partial<Omit<LessonCategory, 'id'>>): Promise<LessonCategory> {
+  public updateLessonCategory = async (categoryId: string, categoryUpdateData: Partial<Omit<LessonCategory, 'id'>>): Promise<LessonCategory> => {
     const db = await openBachataDB();
     const category = await db.get(LESSON_CATEGORIES_STORE, categoryId);
     if (!category) throw new Error(`Lesson category with id "${categoryId}" not found.`);
@@ -560,7 +561,7 @@ export class AppDataService implements IDataService {
     return updatedCategory;
   }
 
-  async deleteLessonCategory(categoryId: string): Promise<void> {
+  public deleteLessonCategory = async (categoryId: string): Promise<void> => {
     const db = await openBachataDB();
     const category = await db.get(LESSON_CATEGORIES_STORE, categoryId);
     if (!category) return;
@@ -585,7 +586,7 @@ export class AppDataService implements IDataService {
   }
 
   // --- Settings ---
-  async getSettings(): Promise<AppSettings> { 
+  public getSettings = async (): Promise<AppSettings> => { 
     const db = await openBachataDB();
     const [savedDeviceSettings, savedSyncSettings] = await Promise.all([
         db.get(SETTINGS_STORE, DEVICE_SETTINGS_KEY),
@@ -627,7 +628,7 @@ export class AppDataService implements IDataService {
     } as AppSettings;
   }
 
-  async saveSettings(settingsData: AppSettings): Promise<void> {
+  public saveSettings = async (settingsData: AppSettings): Promise<void> => {
     const db = await openBachataDB();
     const deviceSettings: Partial<AppSettings> = {};
     const syncSettings: Partial<AppSettings> & { modifiedTime?: string } = {};
@@ -670,7 +671,7 @@ export class AppDataService implements IDataService {
   }
   
   // --- File/Blob Handling ---
-  async getLessonThumbnailUrl(lessonId: string): Promise<string | null> {
+  public getLessonThumbnailUrl = async (lessonId: string): Promise<string | null> => {
     if (this.thumbUrlCache.has(lessonId)) {
       return this.thumbUrlCache.get(lessonId)!;
     }
@@ -683,7 +684,7 @@ export class AppDataService implements IDataService {
     return url;
   }
   
-  async getFigureThumbnailUrl(figureId: string): Promise<string | null> {
+  public getFigureThumbnailUrl = async (figureId: string): Promise<string | null> => {
     if (this.figureThumbUrlCache.has(figureId)) {
       return this.figureThumbUrlCache.get(figureId)!;
     }
@@ -696,7 +697,7 @@ export class AppDataService implements IDataService {
     return url;
   }
 
-  async getVideoFile(lessonId: string): Promise<File | undefined> {
+  public getVideoFile = async (lessonId: string): Promise<File | undefined> => {
     const db = await openBachataDB();
     const lesson = await db.get(LESSONS_STORE, lessonId);
     if (!lesson) return undefined;
@@ -704,7 +705,7 @@ export class AppDataService implements IDataService {
     return videoFile;
   }
 
-  async getVideoObjectUrl(lesson: Lesson): Promise<string> {
+  public getVideoObjectUrl = async (lesson: Lesson): Promise<string> => {
     if (this.videoUrlCache.has(lesson.videoId)) {
       return this.videoUrlCache.get(lesson.videoId)!;
     }
@@ -718,11 +719,11 @@ export class AppDataService implements IDataService {
     return url;
   }
 
-  public revokeVideoObjectUrl(videoId: string): void {
+  public revokeVideoObjectUrl = (videoId: string): void => {
     this.revokeAndClearCache(videoId, 'video');
   }
 
-  private revokeAndClearCache(id: string, type: 'thumbnail' | 'figure-thumbnail' | 'video' | 'all'): void {
+  private revokeAndClearCache = (id: string, type: 'thumbnail' | 'figure-thumbnail' | 'video' | 'all'): void => {
     if (type === 'video' || type === 'all') {
       const videoUrl = this.videoUrlCache.get(id);
       if (videoUrl) {
@@ -746,7 +747,7 @@ export class AppDataService implements IDataService {
     }
   }
 
-  async clearAllData(): Promise<void> {
+  public clearAllData = async (): Promise<void> => {
     // Revoke all cached URLs to prevent memory leaks before the page reloads.
     this.videoUrlCache.forEach(url => URL.revokeObjectURL(url));
     this.videoUrlCache.clear();
@@ -762,7 +763,7 @@ export class AppDataService implements IDataService {
   }
 
   // --- Data Management ---
-  async exportAllData(onProgress?: (progress: number) => void): Promise<Blob> {
+  public exportAllData = async (onProgress?: (progress: number) => void): Promise<Blob> => {
     onProgress?.(0);
     const db = await openBachataDB();
     onProgress?.(0.01);
@@ -855,7 +856,7 @@ export class AppDataService implements IDataService {
     return blob;
   }
 
-  async importData(dataBlob: Blob, onProgress?: (progress: number) => void): Promise<void> {
+  public importData = async (dataBlob: Blob, onProgress?: (progress: number) => void): Promise<void> => {
     onProgress?.(0);
     const jsonString = await dataBlob.text();
     const importObject = JSON.parse(jsonString);

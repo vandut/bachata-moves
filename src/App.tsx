@@ -1,5 +1,6 @@
 
 
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -26,7 +27,7 @@ interface I18nContextType {
   locale: Locale;
   settings: AppSettings;
   setLanguage: (lang: Language) => void;
-  updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
+  updateSettings: (updates: Partial<AppSettings>, options?: { silent?: boolean }) => Promise<void>;
   t: (key: string, options?: { [key: string]: string | number }) => string;
   reloadAllData: () => void;
 }
@@ -64,18 +65,27 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     reloadAllData();
   }, [reloadAllData]);
   
-  const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
+  const updateSettings = useCallback(async (updates: Partial<AppSettings>, options?: { silent?: boolean }) => {
     const currentSettings = settingsRef.current;
     if (!currentSettings) return;
 
     const newSettings = { ...currentSettings, ...updates };
-    setSettings(newSettings); // Optimistic UI update
+    settingsRef.current = newSettings; // Always update the ref for other callbacks
+
+    // Only trigger a full re-render if the update is not silent
+    if (!options?.silent) {
+        setSettings(newSettings); // Optimistic UI update
+    }
+    
     try {
       await dataService.saveSettings(newSettings);
     } catch (err) {
       console.error("Failed to save settings:", err);
-      // Revert state on failure
-      setSettings(currentSettings);
+      settingsRef.current = currentSettings; // Revert ref on failure
+      // Only revert state on failure if it was set in the first place
+      if (!options?.silent) {
+        setSettings(currentSettings);
+      }
     }
   }, []); // Stable: relies on ref, not state
 

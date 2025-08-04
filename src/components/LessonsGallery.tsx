@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { dataService } from '../data/service';
@@ -106,9 +107,19 @@ const LessonsGallery: React.FC = () => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonCategories, setLessonCategories] = useState<LessonCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [collapsedCategories, setCollapsedCategories] = useState(settings.collapsedLessonCategories || []);
+  const [isUncategorizedExpanded, setIsUncategorizedExpanded] = useState(settings.uncategorizedLessonCategoryIsExpanded);
+  const [collapsedDateGroups, setCollapsedDateGroups] = useState(settings.collapsedLessonDateGroups || []);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Sync with global settings when they change from another source (e.g. initial load, sync)
+  useEffect(() => {
+    setCollapsedCategories(settings.collapsedLessonCategories || []);
+    setIsUncategorizedExpanded(settings.uncategorizedLessonCategoryIsExpanded);
+    setCollapsedDateGroups(settings.collapsedLessonDateGroups || []);
+  }, [settings.collapsedLessonCategories, settings.uncategorizedLessonCategoryIsExpanded, settings.collapsedLessonDateGroups]);
 
   const SORT_OPTIONS = [
     { value: 'newest', label: t('sort.newest') },
@@ -139,28 +150,30 @@ const LessonsGallery: React.FC = () => {
       }
   };
 
-  const handleToggleCategory = async (categoryId: string) => {
-    const currentCollapsed = settings.collapsedLessonCategories || [];
-    const isCollapsed = currentCollapsed.includes(categoryId);
+  const handleToggleCategory = (categoryId: string) => {
+    const isCollapsed = collapsedCategories.includes(categoryId);
     const newCollapsedKeys = isCollapsed
-      ? currentCollapsed.filter(key => key !== categoryId)
-      : [...currentCollapsed, categoryId];
-    await updateSettings({ collapsedLessonCategories: newCollapsedKeys });
+      ? collapsedCategories.filter(key => key !== categoryId)
+      : [...collapsedCategories, categoryId];
+    setCollapsedCategories(newCollapsedKeys);
+    updateSettings({ collapsedLessonCategories: newCollapsedKeys }, { silent: true });
   };
   
   const handleToggleUncategorized = () => {
-    updateSettings({ uncategorizedLessonCategoryIsExpanded: !settings.uncategorizedLessonCategoryIsExpanded });
+    const newExpandedState = !isUncategorizedExpanded;
+    setIsUncategorizedExpanded(newExpandedState);
+    updateSettings({ uncategorizedLessonCategoryIsExpanded: newExpandedState }, { silent: true });
   };
 
   const handleToggleDateGroup = (groupKey: string) => {
-    const currentCollapsed = settings.collapsedLessonDateGroups || [];
-    const isCurrentlyCollapsed = currentCollapsed.includes(groupKey);
+    const isCurrentlyCollapsed = collapsedDateGroups.includes(groupKey);
 
     const newCollapsedKeys = isCurrentlyCollapsed
-      ? currentCollapsed.filter(key => key !== groupKey)
-      : [...currentCollapsed, groupKey];
+      ? collapsedDateGroups.filter(key => key !== groupKey)
+      : [...collapsedDateGroups, groupKey];
 
-    updateSettings({ collapsedLessonDateGroups: newCollapsedKeys });
+    setCollapsedDateGroups(newCollapsedKeys);
+    updateSettings({ collapsedLessonDateGroups: newCollapsedKeys }, { silent: true });
   };
 
   const sortLessons = (lessonsToSort: Lesson[], sortOrder: LessonSortOrder): Lesson[] => {
@@ -359,7 +372,7 @@ const LessonsGallery: React.FC = () => {
                   const group = groups.get(groupKey)!;
                   if (!group || group.lessons.length === 0) return null;
                   
-                  const isExpanded = !(settings.collapsedLessonDateGroups || []).includes(groupKey);
+                  const isExpanded = !collapsedDateGroups.includes(groupKey);
 
                   return (
                       <div key={groupKey}>
@@ -401,11 +414,11 @@ const LessonsGallery: React.FC = () => {
                 <div key={item.id}>
                     <CategoryHeader 
                         name={t('common.uncategorized')} 
-                        isExpanded={settings.uncategorizedLessonCategoryIsExpanded} 
+                        isExpanded={isUncategorizedExpanded} 
                         onToggle={handleToggleUncategorized} 
                         count={settings.showLessonCountInGroupHeaders ? count : undefined}
                     />
-                    {settings.uncategorizedLessonCategoryIsExpanded && (
+                    {isUncategorizedExpanded && (
                         <div className="pt-2 pb-6">
                             {count > 0 ? (
                                 <LessonGrid
@@ -430,7 +443,7 @@ const LessonsGallery: React.FC = () => {
               const showGroup = count > 0 || settings.showEmptyLessonCategoriesInGroupedView;
               if (!showGroup) return null;
 
-              const isExpanded = !(settings.collapsedLessonCategories || []).includes(category.id);
+              const isExpanded = !collapsedCategories.includes(category.id);
 
               return (
                 <div key={category.id}>

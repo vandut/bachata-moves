@@ -1,3 +1,4 @@
+
 import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, LessonCategory, FigureCategory } from '../types';
 import { GoogleDriveApi, FOLDERS, FILES, DriveFile } from './googledrive';
 import { dataService } from './service';
@@ -16,25 +17,25 @@ class SyncQueueService {
 
     // --- Public Interface ---
 
-    public getQueue(): SyncTask[] {
+    public getQueue = (): SyncTask[] => {
         return this.queue;
     }
 
-    public getIsActive(): boolean {
+    public getIsActive = (): boolean => {
         return this.queue.some(task => task.status === 'in-progress' || task.status === 'pending');
     }
 
-    public subscribe(listener: () => void): () => void {
+    public subscribe = (listener: () => void): () => void => {
         this.listeners.add(listener);
         return () => this.listeners.delete(listener);
     }
 
-    public startProcessing(api: GoogleDriveApi): void {
+    public startProcessing = (api: GoogleDriveApi): void => {
         this.api = api;
         this.processNext();
     }
 
-    public stopProcessing(): void {
+    public stopProcessing = (): void => {
         this.api = null;
         this.isProcessing = false;
         // Reset in-progress tasks to pending so they can be resumed on next sign-in
@@ -44,7 +45,7 @@ class SyncQueueService {
         this.notify();
     }
 
-    public addTask(type: SyncTaskType, payload?: any, isPriority = false): void {
+    public addTask = (type: SyncTaskType, payload?: any, isPriority = false): void => {
         const uniquePayloadIdentifier = type === 'sync-gallery' || type === 'sync-grouping-config' ? payload?.type : (payload?.id || payload?.driveId || payload?.lessonId || payload?.figureId);
         if (this.isDuplicate(type, uniquePayloadIdentifier)) {
             logger.info(`Skipping duplicate task: ${type}`, payload);
@@ -73,7 +74,7 @@ class SyncQueueService {
     }
     
     // --- Task Implementations (callable from outside for blocking operations) ---
-    public async syncGallery(api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<void> {
+    public syncGallery = async (api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<void> => {
         logger.info(`--- Syncing Gallery: ${type.toUpperCase()} ---`);
 
         const folderName = type === 'lesson' ? FOLDERS.lessons : FOLDERS.figures;
@@ -165,7 +166,7 @@ class SyncQueueService {
         logger.info('Sync gallery complete. Tasks queued.');
     }
 
-    public async uploadLesson(api: GoogleDriveApi, lessonId: string): Promise<Lesson> {
+    public uploadLesson = async (api: GoogleDriveApi, lessonId: string): Promise<Lesson> => {
         logger.info(`Uploading lesson ${lessonId}...`);
         const db = await openBachataDB();
         const lesson: Lesson | undefined = await db.get('lessons', lessonId);
@@ -189,7 +190,7 @@ class SyncQueueService {
         return lesson;
     }
 
-    public async uploadFigure(api: GoogleDriveApi, figureId: string): Promise<Figure> {
+    public uploadFigure = async (api: GoogleDriveApi, figureId: string): Promise<Figure> => {
         logger.info(`Uploading figure ${figureId}...`);
         const db = await openBachataDB();
         const figure: Figure | undefined = await db.get('figures', figureId);
@@ -208,7 +209,7 @@ class SyncQueueService {
         return figure;
     }
 
-    public async downloadLesson(api: GoogleDriveApi, driveId: string): Promise<void> {
+    public downloadLesson = async (api: GoogleDriveApi, driveId: string): Promise<void> => {
         logger.info(`Downloading lesson (Drive ID: ${driveId})...`);
         const db = await openBachataDB();
 
@@ -235,13 +236,12 @@ class SyncQueueService {
         logger.info(`✅ Downloaded and saved lesson (Drive ID: ${driveId}).`);
     }
 
-    public async deleteRemoteFile(api: GoogleDriveApi, driveId: string): Promise<void> {
+    public deleteRemoteFile = async (api: GoogleDriveApi, driveId: string): Promise<void> => {
         logger.info(`🗑️ Deleting remote file (Drive ID: ${driveId})`);
         await api.deleteFile(driveId);
     }
     
-    public async buildLocalGroupingConfig(type: 'lesson' | 'figure'): Promise<GroupingConfig> {
-        const storeName = type === 'lesson' ? 'lesson_categories' : 'figure_categories';
+    public buildLocalGroupingConfig = async (type: 'lesson' | 'figure'): Promise<GroupingConfig> => {
         const settingsKeys = type === 'lesson'
             ? { order: 'lessonCategoryOrder', showEmpty: 'showEmptyLessonCategoriesInGroupedView', showCount: 'showLessonCountInGroupHeaders' }
             : { order: 'figureCategoryOrder', showEmpty: 'showEmptyFigureCategoriesInGroupedView', showCount: 'showFigureCountInGroupHeaders' };
@@ -264,18 +264,27 @@ class SyncQueueService {
                 }
             });
             return latest > 0 ? new Date(latest).toISOString() : new Date(0).toISOString();
+        };
+
+        const allKnownIds = new Set(['__uncategorized__', ...localCategories.map(c => c.id)]);
+        let order = (localSettings as any)[settingsKeys.order] || [];
+        const orderSet = new Set(order);
+
+        if (order.length < allKnownIds.size) {
+            const missingIds = [...allKnownIds].filter(id => !orderSet.has(id));
+            order = [...order, ...missingIds];
         }
     
         return {
             modifiedTime: await getLatestTime(),
             categories: localCategories,
-            order: (localSettings as any)[settingsKeys.order] || [],
+            order: order,
             showEmpty: (localSettings as any)[settingsKeys.showEmpty] || false,
             showCount: (localSettings as any)[settingsKeys.showCount] || false,
         };
     };
 
-    public async downloadAndApplyGroupingConfig(config: GroupingConfig, type: 'lesson' | 'figure'): Promise<void> {
+    public downloadAndApplyGroupingConfig = async (config: GroupingConfig, type: 'lesson' | 'figure'): Promise<void> => {
         const db = await openBachataDB();
         const storeName = type === 'lesson' ? 'lesson_categories' : 'figure_categories';
         const settingsKeys = type === 'lesson'
@@ -308,7 +317,7 @@ class SyncQueueService {
         logger.info(`✅ Applied grouping config for ${type} from remote. Local timestamp updated to match remote: ${config.modifiedTime}.`);
     };
 
-    public async syncGroupingConfig(api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<void> {
+    public syncGroupingConfig = async (api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<void> => {
         logger.info(`--- Syncing Grouping Config: ${type.toUpperCase()} ---`);
 
         const configFileName = type === 'lesson' ? FILES.lessonGroupingConfig : FILES.figureGroupingConfig;
@@ -351,7 +360,7 @@ class SyncQueueService {
 
     // --- Private Methods ---
     
-    private async uploadGroupingConfig(api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<DriveFile> {
+    private uploadGroupingConfig = async (api: GoogleDriveApi, type: 'lesson' | 'figure'): Promise<DriveFile> => {
         const configToUpload = await this.buildLocalGroupingConfig(type);
         // The modifiedTime is set by the server on upload, so we don't need to set it here.
     
@@ -374,11 +383,11 @@ class SyncQueueService {
         return uploadedFile;
     };
 
-    private notify(): void {
+    private notify = (): void => {
         this.listeners.forEach(listener => listener());
     }
 
-    private isDuplicate(type: SyncTaskType, uniqueIdentifier: string | undefined): boolean {
+    private isDuplicate = (type: SyncTaskType, uniqueIdentifier: string | undefined): boolean => {
         if (!uniqueIdentifier && (type !== 'sync-deleted-log' && type !== 'sync-settings')) {
             return false; // Cannot determine duplication without an ID
         }
@@ -399,7 +408,7 @@ class SyncQueueService {
         });
     }
 
-    private async processNext(): Promise<void> {
+    private processNext = async (): Promise<void> => {
         if (this.isProcessing || !this.api) return;
 
         const task = this.queue.find(t => t.status === 'pending');
@@ -517,7 +526,7 @@ class SyncQueueService {
         }
     }
 
-    private updateTaskStatus(taskId: string, status: SyncTask['status'], error?: string, newCreatedAt?: number) {
+    private updateTaskStatus = (taskId: string, status: SyncTask['status'], error?: string, newCreatedAt?: number) => {
         this.queue = this.queue.map(t =>
             t.id === taskId
                 ? { ...t, status, error, createdAt: newCreatedAt ?? t.createdAt }
@@ -527,7 +536,7 @@ class SyncQueueService {
         this.notify();
     }
     
-    private removeTask(taskId: string) {
+    private removeTask = (taskId: string) => {
         this.queue = this.queue.filter(t => t.id !== taskId);
         this.notify();
     }
