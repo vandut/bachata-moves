@@ -131,11 +131,18 @@ const EditorScreen: React.FC = () => {
                     videoLessonSource = lesson;
                     // Pre-populate figure from lesson data
                     loadedItem = {
-                        ...lesson,
                         id: 'new',
-                        name: '',
                         lessonId: lesson.id,
-                    };
+                        name: '',
+                        description: null, // Start with empty description for new figures
+                        // Copy timings and assignments from parent lesson as a starting point
+                        startTime: lesson.startTime,
+                        endTime: lesson.endTime,
+                        thumbTime: lesson.thumbTime,
+                        categoryId: lesson.categoryId,
+                        schoolId: lesson.schoolId,
+                        instructorId: lesson.instructorId,
+                    } as Figure;
                     thumbPromise = dataService.getLessonThumbnailUrl(lesson.id);
                 } else { // Editing
                     const itemId = figureId || lessonIdParam;
