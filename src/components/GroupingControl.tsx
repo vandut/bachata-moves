@@ -46,6 +46,7 @@ const GroupingControl: React.FC<GroupingControlProps> = ({ options, value, onCha
   };
   
   const buttonLabel = isMobile ? '' : (selectedOption ? selectedOption.label : t('grouping.groupBy'));
+  const iconName = value === 'none' ? 'layers_clear' : 'layers';
 
   const buttonClass = isMobile
     ? "inline-flex items-center justify-center w-10 h-10 rounded-md border border-gray-300 shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -63,7 +64,7 @@ const GroupingControl: React.FC<GroupingControlProps> = ({ options, value, onCha
           onClick={() => setIsOpen(!isOpen)}
           aria-label={t('grouping.groupBy')}
         >
-          <i className="material-icons text-[20px]" aria-hidden="true">{isMobile ? 'layers' : 'layers'}</i>
+          <i className="material-icons text-[20px]" aria-hidden="true">{iconName}</i>
            {!isMobile && <span className="ml-2">{buttonLabel}</span>}
            {!isMobile && <i className="material-icons -mr-1 ml-2 text-[20px]" aria-hidden="true">arrow_drop_down</i>}
         </button>

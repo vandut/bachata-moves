@@ -28,6 +28,8 @@ export const en = {
     school: 'School',
     instructor: 'Instructor',
     unassigned: 'Unassigned',
+    clear: 'Clear',
+    selectAll: 'Select All',
   },
   gallery: {
     loading: 'Loading {item}...',
@@ -57,6 +59,13 @@ export const en = {
     bySchool: 'Schools',
     byInstructor: 'Instructors',
     customize: 'Customize',
+  },
+  filter: {
+    title: 'Filter',
+    years: 'Years',
+    categories: 'Categories',
+    schools: 'Schools',
+    instructors: 'Instructors',
   },
   sync: {
     syncStatus: 'Sync Status',
@@ -227,6 +236,8 @@ export const pl = {
     school: 'Szkoła',
     instructor: 'Instruktor',
     unassigned: 'Nieprzypisane',
+    clear: 'Wyczyść',
+    selectAll: 'Zaznacz wszystko',
   },
   gallery: {
     loading: 'Ładowanie {item}...',
@@ -256,6 +267,13 @@ export const pl = {
     bySchool: 'Szkoły',
     byInstructor: 'Instruktorzy',
     customize: 'Dostosuj',
+  },
+  filter: {
+    title: 'Filtruj',
+    years: 'Lata',
+    categories: 'Kategorie',
+    schools: 'Szkoły',
+    instructors: 'Instruktorzy',
   },
   sync: {
     syncStatus: 'Status synchronizacji',

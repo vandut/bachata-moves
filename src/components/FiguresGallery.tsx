@@ -6,13 +6,11 @@ import FigureCard from './FigureCard';
 import MobileTopNav from './MobileTopNav';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import DesktopTopNav from './DesktopTopNav';
-import SortControl from './SortControl';
 import { useTranslation } from '../App';
-import MuteToggleButton from './MuteToggleButton';
-import GroupingControl from './GroupingControl';
 import EmptyState from './EmptyState';
-import SyncStatus from './SyncStatus';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import GalleryActionBar from './GalleryActionBar';
+import { GroupingOption } from './GroupingControl';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 const UNASSIGNED_ID = '__unassigned__';
@@ -141,14 +139,14 @@ const FiguresGallery: React.FC = () => {
       settings.collapsedFigureInstructors, settings.uncategorizedFigureInstructorIsExpanded
     ]);
 
-  const SORT_OPTIONS = [
+  const SORT_OPTIONS = useMemo(() => [
     { value: 'newest', label: t('sort.newest') },
     { value: 'oldest', label: t('sort.oldest') },
     { value: 'alphabetical_asc', label: t('sort.alphaAsc') },
     { value: 'alphabetical_desc', label: t('sort.alphaDesc') },
-  ];
+  ], [t]);
   
-  const GROUPING_OPTIONS = [
+  const GROUPING_OPTIONS: GroupingOption[] = useMemo(() => [
       { value: 'none', label: t('grouping.none') },
       { value: 'byMonth', label: t('grouping.byMonth') },
       { value: 'byYear', label: t('grouping.byYear') },
@@ -157,7 +155,7 @@ const FiguresGallery: React.FC = () => {
       { value: 'byInstructor', label: t('grouping.byInstructor') },
       { value: 'divider', label: '-', isDivider: true },
       { value: 'customize', label: t('grouping.customize'), isAction: true },
-  ];
+  ], [t]);
 
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as FigureSortOrder;
@@ -172,6 +170,15 @@ const FiguresGallery: React.FC = () => {
       await updateSettings({ figureGrouping: newGroupingValue as AppSettings['figureGrouping'] });
   };
   
+  const handleFilterChange = (newExcludedIds: any) => {
+    updateSettings({
+      figureFilter_excludedYears: newExcludedIds.years,
+      figureFilter_excludedCategoryIds: newExcludedIds.categories,
+      figureFilter_excludedSchoolIds: newExcludedIds.schools,
+      figureFilter_excludedInstructorIds: newExcludedIds.instructors,
+    });
+  };
+
   const handleGroupingAction = (action: string) => {
       if (action === 'customize') {
           navigate('/figures/categories');
@@ -307,15 +314,47 @@ const FiguresGallery: React.FC = () => {
   
   const intelligentRefresh = refreshGalleries;
 
+  const filteredFigures = useMemo(() => {
+    const { 
+      figureFilter_excludedYears: excludedYears, 
+      figureFilter_excludedCategoryIds: excludedCategories,
+      figureFilter_excludedSchoolIds: excludedSchools,
+      figureFilter_excludedInstructorIds: excludedInstructors
+    } = settings;
+
+    if (excludedYears.length === 0 && excludedCategories.length === 0 && excludedSchools.length === 0 && excludedInstructors.length === 0) {
+      return figures;
+    }
+
+    return figures.filter(figure => {
+      const lesson = lessonsMap.get(figure.lessonId);
+      if (!lesson) return false;
+
+      const year = new Date(lesson.uploadDate).getFullYear().toString();
+      if (excludedYears.includes(year)) return false;
+
+      const categoryId = figure.categoryId || UNCATEGORIZED_ID;
+      if (excludedCategories.includes(categoryId)) return false;
+
+      const schoolId = figure.schoolId || UNASSIGNED_ID;
+      if (excludedSchools.includes(schoolId)) return false;
+
+      const instructorId = figure.instructorId || UNASSIGNED_ID;
+      if (excludedInstructors.includes(instructorId)) return false;
+      
+      return true;
+    });
+  }, [figures, lessonsMap, settings]);
+  
   const allSortedFigures = useMemo(() => {
-    return sortFigures(figures, lessonsMap, settings.figureSortOrder);
-  }, [figures, lessonsMap, settings.figureSortOrder]);
+    return sortFigures(filteredFigures, lessonsMap, settings.figureSortOrder);
+  }, [filteredFigures, lessonsMap, settings.figureSortOrder]);
 
   const { categorized: categorizedFigures, new: uncategorizedFigures } = useMemo(() => {
     const grouped: { [key: string]: Figure[] } = {};
     figureCategories.forEach(c => { grouped[c.id] = []; });
     const uncategorized: Figure[] = [];
-    for (const figure of figures) {
+    for (const figure of filteredFigures) {
       if (figure.categoryId && grouped.hasOwnProperty(figure.categoryId)) {
         grouped[figure.categoryId].push(figure);
       } else {
@@ -328,13 +367,13 @@ const FiguresGallery: React.FC = () => {
     }
     const sortedNew = sortFigures(uncategorized, lessonsMap, settings.figureSortOrder);
     return { categorized: sortedCategorized, new: sortedNew };
-  }, [figures, figureCategories, lessonsMap, settings.figureSortOrder]);
+  }, [filteredFigures, figureCategories, lessonsMap, settings.figureSortOrder]);
   
    const groupedBySchool = useMemo(() => {
     const grouped: { [key: string]: Figure[] } = {};
     schools.forEach(c => { grouped[c.id] = []; });
     const unassigned: Figure[] = [];
-    for (const figure of figures) {
+    for (const figure of filteredFigures) {
       if (figure.schoolId && grouped.hasOwnProperty(figure.schoolId)) {
         grouped[figure.schoolId].push(figure);
       } else {
@@ -346,13 +385,13 @@ const FiguresGallery: React.FC = () => {
         sortedGrouped[id] = sortFigures(grouped[id], lessonsMap, settings.figureSortOrder);
     }
     return { grouped: sortedGrouped, unassigned: sortFigures(unassigned, lessonsMap, settings.figureSortOrder) };
-  }, [figures, schools, lessonsMap, settings.figureSortOrder]);
+  }, [filteredFigures, schools, lessonsMap, settings.figureSortOrder]);
 
   const groupedByInstructor = useMemo(() => {
     const grouped: { [key: string]: Figure[] } = {};
     instructors.forEach(c => { grouped[c.id] = []; });
     const unassigned: Figure[] = [];
-    for (const figure of figures) {
+    for (const figure of filteredFigures) {
       if (figure.instructorId && grouped.hasOwnProperty(figure.instructorId)) {
         grouped[figure.instructorId].push(figure);
       } else {
@@ -364,7 +403,7 @@ const FiguresGallery: React.FC = () => {
         sortedGrouped[id] = sortFigures(grouped[id], lessonsMap, settings.figureSortOrder);
     }
     return { grouped: sortedGrouped, unassigned: sortFigures(unassigned, lessonsMap, settings.figureSortOrder) };
-  }, [figures, instructors, lessonsMap, settings.figureSortOrder]);
+  }, [filteredFigures, instructors, lessonsMap, settings.figureSortOrder]);
 
   const dateBasedGroupedFigures = useMemo(() => {
     if (settings.figureGrouping !== 'byMonth' && settings.figureGrouping !== 'byYear') {
@@ -475,31 +514,42 @@ const FiguresGallery: React.FC = () => {
     navigate('/figures/add');
   };
 
+  const filterOptions = useMemo(() => ({
+    years: [...new Set(Array.from(lessonsMap.values()).map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a,b) => b.localeCompare(a)),
+    categories: figureCategories,
+    schools,
+    instructors
+  }), [lessonsMap, figureCategories, schools, instructors]);
+
+  const excludedIds = useMemo(() => ({
+    years: settings.figureFilter_excludedYears,
+    categories: settings.figureFilter_excludedCategoryIds,
+    schools: settings.figureFilter_excludedSchoolIds,
+    instructors: settings.figureFilter_excludedInstructorIds,
+  }), [settings]);
+
   const actionMenu = (
-    <div className="flex items-center space-x-2">
-      <button
-        onClick={handleAddClick}
-        className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-transparent shadow-sm bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        aria-label={t('common.addNew')}
-      >
-        <i className="material-icons">add</i>
-      </button>
-      <MuteToggleButton />
-      <SyncStatus />
-      <GroupingControl
-        options={GROUPING_OPTIONS}
-        value={settings.figureGrouping}
-        onChange={handleGroupingChange}
-        onAction={handleGroupingAction}
-        isMobile={isMobile}
-      />
-      <SortControl
-        options={SORT_OPTIONS}
-        value={settings.figureSortOrder}
-        onChange={handleSortChange}
-        isMobile={isMobile}
-      />
-    </div>
+    <GalleryActionBar
+      isMobile={isMobile}
+      onAddClick={handleAddClick}
+      // Filter props
+      filterOptions={filterOptions}
+      excludedIds={excludedIds}
+      onFilterChange={handleFilterChange}
+      uncategorizedId={UNCATEGORIZED_ID}
+      uncategorizedLabel={t('common.uncategorized')}
+      unassignedId={UNASSIGNED_ID}
+      unassignedLabel={t('common.unassigned')}
+      // Grouping props
+      groupingOptions={GROUPING_OPTIONS}
+      groupingValue={settings.figureGrouping}
+      onGroupingChange={handleGroupingChange}
+      onGroupingAction={handleGroupingAction}
+      // Sorting props
+      sortOptions={SORT_OPTIONS}
+      sortValue={settings.figureSortOrder}
+      onSortChange={handleSortChange}
+    />
   );
   
   const baseRoute = '/figures';

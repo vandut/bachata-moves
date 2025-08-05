@@ -711,6 +711,15 @@ export class AppDataService implements IDataService {
       collapsedFigureInstructors: [],
       uncategorizedLessonInstructorIsExpanded: true,
       uncategorizedFigureInstructorIsExpanded: true,
+      // Filters
+      lessonFilter_excludedYears: [],
+      lessonFilter_excludedCategoryIds: [],
+      lessonFilter_excludedSchoolIds: [],
+      lessonFilter_excludedInstructorIds: [],
+      figureFilter_excludedYears: [],
+      figureFilter_excludedCategoryIds: [],
+      figureFilter_excludedSchoolIds: [],
+      figureFilter_excludedInstructorIds: [],
     };
 
     const defaultSyncSettings: Partial<AppSettings> = {
@@ -762,6 +771,14 @@ export class AppDataService implements IDataService {
         'collapsedFigureInstructors',
         'uncategorizedLessonInstructorIsExpanded',
         'uncategorizedFigureInstructorIsExpanded',
+        'lessonFilter_excludedYears',
+        'lessonFilter_excludedCategoryIds',
+        'lessonFilter_excludedSchoolIds',
+        'lessonFilter_excludedInstructorIds',
+        'figureFilter_excludedYears',
+        'figureFilter_excludedCategoryIds',
+        'figureFilter_excludedSchoolIds',
+        'figureFilter_excludedInstructorIds',
     ];
 
     for (const key in settingsData) {

@@ -107,6 +107,16 @@ export interface AppSettings {
   uncategorizedFigureInstructorIsExpanded: boolean;
   lessonInstructorOrder: string[];
   figureInstructorOrder: string[];
+  // Lesson Filters
+  lessonFilter_excludedYears: string[];
+  lessonFilter_excludedCategoryIds: string[];
+  lessonFilter_excludedSchoolIds: string[];
+  lessonFilter_excludedInstructorIds: string[];
+  // Figure Filters
+  figureFilter_excludedYears: string[];
+  figureFilter_excludedCategoryIds: string[];
+  figureFilter_excludedSchoolIds: string[];
+  figureFilter_excludedInstructorIds: string[];
   // Sync settings
   lastSyncTimestamp?: string;
 }
