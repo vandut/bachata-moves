@@ -8,6 +8,9 @@ const logger = createLogger('SyncQueue');
 const VIDEO_FILES_STORE = 'video_files';
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+const UNCATEGORIZED_ID = '__uncategorized__';
+const UNASSIGNED_ID = '__unassigned__';
+
 class SyncQueueService {
     private queue: SyncTask[] = [];
     private listeners: Set<() => void> = new Set();
@@ -283,9 +286,13 @@ class SyncQueueService {
             return latest > 0 ? new Date(latest).toISOString() : new Date(0).toISOString();
         };
 
-        const getOrderedItems = (items: any[], orderKey: keyof AppSettings) => {
+        const getOrderedItems = (items: any[], orderKey: keyof AppSettings, specialId: string) => {
             const order = (localSettings as any)[orderKey] as string[] || [];
-            const itemMap = new Map(items.map(i => [i.id, i]));
+            
+            // The placeholder has an empty name as requested by the user.
+            const allItems = [...items, { id: specialId, name: '' }];
+
+            const itemMap = new Map(allItems.map(i => [i.id, i]));
             const orderedItems: any[] = [];
             const processedIds = new Set<string>();
 
@@ -297,7 +304,7 @@ class SyncQueueService {
                 }
             }
             // Add any items not in the order array to the end
-            for (const item of items) {
+            for (const item of allItems) {
                 if (!processedIds.has(item.id)) {
                     orderedItems.push(item);
                 }
@@ -307,9 +314,9 @@ class SyncQueueService {
 
         return {
             modifiedTime: await getLatestTime(),
-            categories: getOrderedItems(localCategories, settingsKeys.order),
-            schools: getOrderedItems(localSchools, settingsKeys.schoolOrder),
-            instructors: getOrderedItems(localInstructors, settingsKeys.instructorOrder),
+            categories: getOrderedItems(localCategories, settingsKeys.order, UNCATEGORIZED_ID),
+            schools: getOrderedItems(localSchools, settingsKeys.schoolOrder, UNASSIGNED_ID),
+            instructors: getOrderedItems(localInstructors, settingsKeys.instructorOrder, UNASSIGNED_ID),
             showEmpty: (localSettings as any)[settingsKeys.showEmpty] || false,
             showCount: (localSettings as any)[settingsKeys.showCount] || false,
         };
@@ -349,9 +356,14 @@ class SyncQueueService {
         ]);
 
         // Defensively handle old formats from Drive where properties might be missing.
-        const categoriesToPut = config.categories || [];
-        const schoolsToPut = config.schools || [];
-        const instructorsToPut = config.instructors || [];
+        const allCategories = config.categories || [];
+        const allSchools = config.schools || [];
+        const allInstructors = config.instructors || [];
+
+        // Filter out placeholders before saving to DB.
+        const categoriesToPut = allCategories.filter(c => (c as any).id !== UNCATEGORIZED_ID);
+        const schoolsToPut = allSchools.filter(s => s.id !== UNASSIGNED_ID);
+        const instructorsToPut = allInstructors.filter(i => i.id !== UNASSIGNED_ID);
 
         await Promise.all([
             ...categoriesToPut.map(cat => stores.categories.put(cat as any)),
@@ -361,10 +373,10 @@ class SyncQueueService {
     
         const syncSettings: any = await stores.settings.get('sync-settings') || {};
         
-        // Derive order from the downloaded arrays
-        syncSettings[settingsKeys.order] = (config.categories || []).map(c => (c as any).id);
-        syncSettings[settingsKeys.schoolOrder] = (config.schools || []).map(s => s.id);
-        syncSettings[settingsKeys.instructorOrder] = (config.instructors || []).map(i => i.id);
+        // Derive order from the downloaded arrays, preserving the special IDs.
+        syncSettings[settingsKeys.order] = allCategories.map(c => (c as any).id);
+        syncSettings[settingsKeys.schoolOrder] = allSchools.map(s => s.id);
+        syncSettings[settingsKeys.instructorOrder] = allInstructors.map(i => i.id);
         
         syncSettings[settingsKeys.showEmpty] = !!config.showEmpty;
         syncSettings[settingsKeys.showCount] = !!config.showCount;
