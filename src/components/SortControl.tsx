@@ -68,7 +68,7 @@ const SortControl: React.FC<SortControlProps> = ({ options, value, onChange, isM
 
       {isOpen && (
         <div
-          className="origin-top-right absolute right-0 mt-2 w-max rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
+          className="origin-top-right absolute right-0 mt-2 w-auto min-w-full rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
           role="menu"
           aria-orientation="vertical"
           aria-labelledby="menu-button"

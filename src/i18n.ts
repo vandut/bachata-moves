@@ -29,7 +29,7 @@ export const en = {
     instructor: 'Instructor',
     unassigned: 'Unassigned',
     clear: 'Clear',
-    selectAll: 'Select All',
+    apply: 'Apply',
   },
   gallery: {
     loading: 'Loading {item}...',
@@ -237,7 +237,7 @@ export const pl = {
     instructor: 'Instruktor',
     unassigned: 'Nieprzypisane',
     clear: 'Wyczyść',
-    selectAll: 'Zaznacz wszystko',
+    apply: 'Zastosuj',
   },
   gallery: {
     loading: 'Ładowanie {item}...',

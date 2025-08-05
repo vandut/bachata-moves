@@ -90,13 +90,12 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     updateSettings({ language: lang });
   }, [updateSettings]); // Stable
 
+  const language = settings?.language || 'english';
+  
   const t = useCallback((key: string, options?: { [key: string]: string | number }): string => {
-    // This is the tricky one. It needs the latest language but should be stable.
-    // Using a ref is the classic way to solve this.
-    const lang = settingsRef.current?.language || 'english';
-    let translation = getNestedTranslation(lang, key);
+    let translation = getNestedTranslation(language, key);
     if (translation === undefined) {
-      console.warn(`Translation key not found for language '${lang}': ${key}. Falling back to English.`);
+      console.warn(`Translation key not found for language '${language}': ${key}. Falling back to English.`);
       translation = getNestedTranslation('english', key);
     }
     if (translation === undefined) {
@@ -107,10 +106,9 @@ const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       return Object.entries(options).reduce((str, [k, v]) => str.replace(`{${k}}`, String(v)), translation);
     }
     return translation;
-  }, []); // Stable
+  }, [language]);
 
   // This logic must run before the early return to ensure hooks are not called conditionally.
-  const language = settings?.language || 'english';
   const locale: Locale = language === 'polish' ? 'pl-PL' : 'en-US';
   
   // Memoize the context value. It's now called on every render, fixing the conditional hook error.

@@ -162,9 +162,6 @@ export interface GroupingConfig {
     categories: FigureCategory[] | LessonCategory[];
     schools: School[];
     instructors: Instructor[];
-    categoryOrder: string[];
-    schoolOrder: string[];
-    instructorOrder: string[];
     showEmpty: boolean;
     showCount: boolean;
 }

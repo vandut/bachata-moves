@@ -144,7 +144,7 @@ const FiguresGallery: React.FC = () => {
     { value: 'oldest', label: t('sort.oldest') },
     { value: 'alphabetical_asc', label: t('sort.alphaAsc') },
     { value: 'alphabetical_desc', label: t('sort.alphaDesc') },
-  ], [t]);
+  ], [t, settings.language]);
   
   const GROUPING_OPTIONS: GroupingOption[] = useMemo(() => [
       { value: 'none', label: t('grouping.none') },
@@ -155,7 +155,7 @@ const FiguresGallery: React.FC = () => {
       { value: 'byInstructor', label: t('grouping.byInstructor') },
       { value: 'divider', label: '-', isDivider: true },
       { value: 'customize', label: t('grouping.customize'), isAction: true },
-  ], [t]);
+  ], [t, settings.language]);
 
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as FigureSortOrder;
@@ -355,8 +355,13 @@ const FiguresGallery: React.FC = () => {
     figureCategories.forEach(c => { grouped[c.id] = []; });
     const uncategorized: Figure[] = [];
     for (const figure of filteredFigures) {
-      if (figure.categoryId && grouped.hasOwnProperty(figure.categoryId)) {
-        grouped[figure.categoryId].push(figure);
+      if (figure.categoryId) {
+        if (grouped.hasOwnProperty(figure.categoryId)) {
+          grouped[figure.categoryId].push(figure);
+        } else {
+          console.warn(`Figure with name "${figure.name}" (ID: ${figure.id}) is assigned to a non-existent category ID: ${figure.categoryId}. It will be treated as uncategorized.`);
+          uncategorized.push(figure);
+        }
       } else {
         uncategorized.push(figure);
       }
@@ -371,11 +376,16 @@ const FiguresGallery: React.FC = () => {
   
    const groupedBySchool = useMemo(() => {
     const grouped: { [key: string]: Figure[] } = {};
-    schools.forEach(c => { grouped[c.id] = []; });
+    schools.forEach(s => { grouped[s.id] = []; });
     const unassigned: Figure[] = [];
     for (const figure of filteredFigures) {
-      if (figure.schoolId && grouped.hasOwnProperty(figure.schoolId)) {
-        grouped[figure.schoolId].push(figure);
+      if (figure.schoolId) {
+        if (grouped.hasOwnProperty(figure.schoolId)) {
+          grouped[figure.schoolId].push(figure);
+        } else {
+          console.warn(`Figure with name "${figure.name}" (ID: ${figure.id}) is assigned to a non-existent school ID: ${figure.schoolId}. It will be treated as unassigned.`);
+          unassigned.push(figure);
+        }
       } else {
         unassigned.push(figure);
       }
@@ -389,11 +399,16 @@ const FiguresGallery: React.FC = () => {
 
   const groupedByInstructor = useMemo(() => {
     const grouped: { [key: string]: Figure[] } = {};
-    instructors.forEach(c => { grouped[c.id] = []; });
+    instructors.forEach(i => { grouped[i.id] = []; });
     const unassigned: Figure[] = [];
     for (const figure of filteredFigures) {
-      if (figure.instructorId && grouped.hasOwnProperty(figure.instructorId)) {
-        grouped[figure.instructorId].push(figure);
+      if (figure.instructorId) {
+        if (grouped.hasOwnProperty(figure.instructorId)) {
+          grouped[figure.instructorId].push(figure);
+        } else {
+          console.warn(`Figure with name "${figure.name}" (ID: ${figure.id}) is assigned to a non-existent instructor ID: ${figure.instructorId}. It will be treated as unassigned.`);
+          unassigned.push(figure);
+        }
       } else {
         unassigned.push(figure);
       }
@@ -514,12 +529,18 @@ const FiguresGallery: React.FC = () => {
     navigate('/figures/add');
   };
 
-  const filterOptions = useMemo(() => ({
-    years: [...new Set(Array.from(lessonsMap.values()).map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a,b) => b.localeCompare(a)),
-    categories: figureCategories,
-    schools,
-    instructors
-  }), [lessonsMap, figureCategories, schools, instructors]);
+  const filterOptions = useMemo(() => {
+    let years = [...new Set(Array.from(lessonsMap.values()).map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a,b) => b.localeCompare(a));
+    if (years.length === 0) {
+        years.push(new Date().getFullYear().toString());
+    }
+    return {
+        years,
+        categories: figureCategories,
+        schools,
+        instructors
+    }
+  }, [lessonsMap, figureCategories, schools, instructors]);
 
   const excludedIds = useMemo(() => ({
     years: settings.figureFilter_excludedYears,

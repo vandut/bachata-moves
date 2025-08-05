@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from '../App';
 
 export interface ExcludedIds {
@@ -37,137 +37,131 @@ const FilterControl: React.FC<FilterControlProps> = ({
     unassignedLabel,
 }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const [activeSubMenu, setActiveSubMenu] = useState<MenuType | null>(null);
+    const [expandedSections, setExpandedSections] = useState<Set<MenuType>>(new Set());
+    const [localExcludedIds, setLocalExcludedIds] = useState<ExcludedIds>(excludedIds);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation();
 
-    const menuItems = useMemo<{ key: MenuType; label: string }[]>(() => [
-        { key: 'years', label: t('filter.years') },
-        { key: 'categories', label: t('filter.categories') },
-        { key: 'schools', label: t('filter.schools') },
-        { key: 'instructors', label: t('filter.instructors') },
-    ], [t]);
-
-    const activeFilterCount = useMemo(() => {
-        let count = 0;
-        if (excludedIds.years.length > 0) count++;
-        if (excludedIds.categories.length > 0) count++;
-        if (excludedIds.schools.length > 0) count++;
-        if (excludedIds.instructors.length > 0) count++;
-        return count;
-    }, [excludedIds]);
-
-
+    // Effect to initialize local state when the dropdown is opened
+    useEffect(() => {
+        if (isOpen) {
+            setLocalExcludedIds(excludedIds);
+        }
+    }, [isOpen, excludedIds]);
+    
+    // Effect to close dropdown on outside click
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
-                setActiveSubMenu(null);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const handleToggle = () => {
-        setIsOpen(!isOpen);
-        if (isOpen) setActiveSubMenu(null);
-    };
+    const handleToggleDropdown = () => setIsOpen(!isOpen);
 
-    const handleCheckboxChange = (menu: MenuType, id: string, isChecked: boolean) => {
-        const currentExcluded = excludedIds[menu];
-        let newExcluded: string[];
-        if (isChecked) {
-            newExcluded = currentExcluded.filter(exId => exId !== id);
-        } else {
-            newExcluded = [...currentExcluded, id];
-        }
-        onFilterChange({ ...excludedIds, [menu]: newExcluded });
-    };
-
-    const handleClear = (menu: MenuType, allIds: string[]) => {
-        onFilterChange({ ...excludedIds, [menu]: allIds });
-    };
-
-    const handleSelectAll = (menu: MenuType) => {
-        onFilterChange({ ...excludedIds, [menu]: [] });
+    const handleToggleSection = (section: MenuType) => {
+        setExpandedSections(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(section)) newSet.delete(section);
+            else newSet.add(section);
+            return newSet;
+        });
     };
     
-    const renderSubMenu = () => {
-        if (!activeSubMenu) return null;
-
-        let allItems: { id: string; name: string }[] = [];
-        let title = '';
-
-        switch (activeSubMenu) {
-            case 'years':
-                allItems = filterOptions.years.map(y => ({ id: y, name: y }));
-                title = t('filter.years');
-                break;
-            case 'categories':
-                allItems = [{id: uncategorizedId, name: uncategorizedLabel}, ...filterOptions.categories];
-                title = t('filter.categories');
-                break;
-            case 'schools':
-                allItems = [{id: unassignedId, name: unassignedLabel}, ...filterOptions.schools];
-                title = t('filter.schools');
-                break;
-            case 'instructors':
-                allItems = [{id: unassignedId, name: unassignedLabel}, ...filterOptions.instructors];
-                title = t('filter.instructors');
-                break;
-        }
-        
-        const allIds = allItems.map(item => item.id);
-        const excluded = excludedIds[activeSubMenu];
-
-        return (
-            <div className="absolute inset-0 bg-white flex flex-col animate-slide-in">
-                <div className="flex-shrink-0 flex items-center p-2 border-b border-gray-200">
-                    <button onClick={() => setActiveSubMenu(null)} className="p-2 text-gray-700 hover:bg-gray-100 rounded-full">
-                        <i className="material-icons">arrow_back</i>
-                    </button>
-                    <h4 className="ml-2 font-semibold text-gray-800">{title}</h4>
-                </div>
-                <div className="flex-grow overflow-y-auto p-2">
-                    {allItems.map(item => {
-                        const isChecked = !excluded.includes(item.id);
-                        return (
-                            <label key={item.id} className="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => handleCheckboxChange(activeSubMenu, item.id, e.target.checked)}
-                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="ml-3 text-sm text-gray-800">{item.name}</span>
-                            </label>
-                        );
-                    })}
-                </div>
-                <div className="flex-shrink-0 flex justify-end space-x-2 p-2 border-t border-gray-200">
-                    <button onClick={() => handleClear(activeSubMenu, allIds)} className="px-3 py-1 text-sm text-blue-600 font-medium rounded-md hover:bg-blue-50">{t('common.clear')}</button>
-                    <button onClick={() => handleSelectAll(activeSubMenu)} className="px-3 py-1 text-sm text-blue-600 font-medium rounded-md hover:bg-blue-50">{t('common.selectAll')}</button>
-                </div>
-            </div>
-        );
+    const handleItemCheckboxChange = (menu: MenuType, id: string, isChecked: boolean) => {
+        setLocalExcludedIds(prev => {
+            const currentExcluded = prev[menu] || [];
+            // If checked, it means we should include it, so remove from excluded list.
+            // If unchecked, it means we should exclude it, so add to excluded list.
+            const newExcluded = isChecked
+                ? currentExcluded.filter(exId => exId !== id)
+                : [...currentExcluded, id];
+            return { ...prev, [menu]: newExcluded };
+        });
     };
 
-    const renderMainMenu = () => (
-        <ul className="animate-fade-in-fast">
-            {menuItems.map(item => {
-                const isFiltered = excludedIds[item.key].length > 0;
-                return (
-                    <li key={item.key}>
-                        <button onClick={() => setActiveSubMenu(item.key)} className="flex items-center w-full text-left px-4 py-2 text-sm text-gray-800 hover:bg-gray-100">
-                            <span className={`flex-grow ${isFiltered ? 'font-bold' : ''}`}>{item.label}</span>
-                            {isFiltered && <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>}
-                            <i className="material-icons ml-auto text-lg text-gray-500">chevron_right</i>
-                        </button>
-                    </li>
-                );
-            })}
-        </ul>
+    const handleApply = () => {
+        onFilterChange(localExcludedIds);
+        setIsOpen(false);
+    };
+
+    const handleClear = () => {
+        const clearedIds: ExcludedIds = { years: [], categories: [], schools: [], instructors: [] };
+        setLocalExcludedIds(clearedIds);
+        onFilterChange(clearedIds); // Clear immediately
+        setIsOpen(false);
+    };
+
+    const activeFilterCount = useMemo(() => {
+        return (Object.keys(excludedIds) as (keyof ExcludedIds)[])
+            .filter(key => excludedIds[key].length > 0)
+            .length;
+    }, [excludedIds]);
+
+    const menuHeaders: { key: MenuType; label: string; options: {id: string; name: string}[] }[] = useMemo(() => [
+        { key: 'years', label: t('filter.years'), options: filterOptions.years.map(y => ({id:y, name:y})) },
+        { key: 'categories', label: t('filter.categories'), options: [{id: uncategorizedId, name: uncategorizedLabel}, ...filterOptions.categories] },
+        { key: 'schools', label: t('filter.schools'), options: [{id: unassignedId, name: unassignedLabel}, ...filterOptions.schools] },
+        { key: 'instructors', label: t('filter.instructors'), options: [{id: unassignedId, name: unassignedLabel}, ...filterOptions.instructors] },
+    ], [t, filterOptions, uncategorizedId, uncategorizedLabel, unassignedId, unassignedLabel]);
+
+    const renderMenu = () => (
+        <div className="flex flex-col h-full">
+            <div className="flex-grow overflow-y-auto p-2 space-y-1">
+                {menuHeaders.map(header => {
+                    const totalCount = header.options.length;
+                    if (totalCount === 0) return null;
+                    
+                    const excludedCount = (localExcludedIds[header.key] || []).length;
+                    const selectedCount = totalCount - excludedCount;
+                    const isSectionExpanded = expandedSections.has(header.key);
+                    
+                    const summary = selectedCount < totalCount ? `(${selectedCount}/${totalCount})` : null;
+
+                    return (
+                        <div key={header.key}>
+                            <button
+                                onClick={() => handleToggleSection(header.key)}
+                                className="flex items-center w-full p-2 rounded-md hover:bg-gray-100 text-left"
+                                aria-expanded={isSectionExpanded}
+                            >
+                                <span className="flex-grow font-semibold text-gray-700">{header.label}</span>
+                                {summary && (
+                                    <span className="text-sm text-gray-500 mr-1">{summary}</span>
+                                )}
+                                <i className={`material-icons text-gray-600 transition-transform duration-200 ${isSectionExpanded ? 'rotate-90' : ''}`}>chevron_right</i>
+                            </button>
+
+                            {isSectionExpanded && (
+                                <div className="pl-6 mt-1 space-y-1">
+                                    {header.options.map(item => {
+                                        const isItemChecked = !(localExcludedIds[header.key] || []).includes(item.id);
+                                        return (
+                                            <label key={item.id} className="flex items-center p-1.5 rounded-md hover:bg-gray-50 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isItemChecked}
+                                                    onChange={(e) => handleItemCheckboxChange(header.key, item.id, e.target.checked)}
+                                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <span className="ml-3 text-sm text-gray-800">{item.name}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            <div className="flex-shrink-0 flex justify-end space-x-2 p-2 border-t border-gray-200 bg-gray-50">
+                <button onClick={handleClear} className="px-4 py-2 text-sm text-gray-700 font-medium rounded-md hover:bg-gray-200 border border-gray-300">{t('common.clear')}</button>
+                <button onClick={handleApply} className="px-4 py-2 text-sm text-white font-medium rounded-md bg-blue-600 hover:bg-blue-700">{t('common.apply')}</button>
+            </div>
+        </div>
     );
     
     const buttonClass = isMobile
@@ -182,7 +176,7 @@ const FilterControl: React.FC<FilterControlProps> = ({
         <div className="relative inline-block text-left" ref={wrapperRef}>
             <button
                 type="button"
-                onClick={handleToggle}
+                onClick={handleToggleDropdown}
                 className={buttonClass}
                 id="filter-menu-button"
                 aria-expanded={isOpen}
@@ -209,22 +203,13 @@ const FilterControl: React.FC<FilterControlProps> = ({
 
             {isOpen && (
                 <div
-                    className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10 overflow-hidden"
+                    className="origin-top-right absolute right-0 mt-2 w-72 h-[450px] max-h-[70vh] rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10 overflow-hidden flex flex-col"
                     role="menu"
                     aria-orientation="vertical"
-                    style={{ minHeight: '180px' }}
                 >
-                    <div className="py-1 relative h-full">
-                        {activeSubMenu ? renderSubMenu() : renderMainMenu()}
-                    </div>
+                    {renderMenu()}
                 </div>
             )}
-            <style>{`
-                @keyframes fade-in-fast { from { opacity: 0; } to { opacity: 1; } }
-                .animate-fade-in-fast { animation: fade-in-fast 0.1s ease-out forwards; }
-                @keyframes slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
-                .animate-slide-in { animation: slide-in 0.2s ease-out forwards; }
-            `}</style>
         </div>
     );
 };

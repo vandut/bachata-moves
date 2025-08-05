@@ -140,7 +140,7 @@ const LessonsGallery: React.FC = () => {
   const SORT_OPTIONS = useMemo(() => [
     { value: 'newest', label: t('sort.newest') },
     { value: 'oldest', label: t('sort.oldest') },
-  ], [t]);
+  ], [t, settings.language]);
   
   const GROUPING_OPTIONS: GroupingOption[] = useMemo(() => [
     { value: 'none', label: t('grouping.none') },
@@ -151,7 +151,7 @@ const LessonsGallery: React.FC = () => {
     { value: 'byInstructor', label: t('grouping.byInstructor') },
     { value: 'divider', label: '-', isDivider: true },
     { value: 'customize', label: t('grouping.customize'), isAction: true },
-  ], [t]);
+  ], [t, settings.language]);
 
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as LessonSortOrder;
@@ -320,11 +320,16 @@ const LessonsGallery: React.FC = () => {
     lessonCategories.forEach(c => { grouped[c.id] = []; });
     const uncategorized: Lesson[] = [];
     for (const lesson of filteredLessons) {
-      if (lesson.categoryId && grouped.hasOwnProperty(lesson.categoryId)) {
-        grouped[lesson.categoryId].push(lesson);
-      } else {
-        uncategorized.push(lesson);
-      }
+        if (lesson.categoryId) {
+            if (grouped.hasOwnProperty(lesson.categoryId)) {
+                grouped[lesson.categoryId].push(lesson);
+            } else {
+                console.warn(`Lesson with ID ${lesson.id} is assigned to a non-existent category ID: ${lesson.categoryId}. It will be treated as uncategorized.`);
+                uncategorized.push(lesson);
+            }
+        } else {
+            uncategorized.push(lesson);
+        }
     }
     const sortedCategorized: { [key: string]: Lesson[] } = {};
     for (const categoryId in grouped) {
@@ -336,11 +341,16 @@ const LessonsGallery: React.FC = () => {
   
   const groupedBySchool = useMemo(() => {
     const grouped: { [key: string]: Lesson[] } = {};
-    schools.forEach(c => { grouped[c.id] = []; });
+    schools.forEach(s => { grouped[s.id] = []; });
     const unassigned: Lesson[] = [];
     for (const lesson of filteredLessons) {
-      if (lesson.schoolId && grouped.hasOwnProperty(lesson.schoolId)) {
-        grouped[lesson.schoolId].push(lesson);
+      if (lesson.schoolId) {
+        if (grouped.hasOwnProperty(lesson.schoolId)) {
+          grouped[lesson.schoolId].push(lesson);
+        } else {
+          console.warn(`Lesson with ID ${lesson.id} is assigned to a non-existent school ID: ${lesson.schoolId}. It will be treated as unassigned.`);
+          unassigned.push(lesson);
+        }
       } else {
         unassigned.push(lesson);
       }
@@ -354,11 +364,16 @@ const LessonsGallery: React.FC = () => {
 
   const groupedByInstructor = useMemo(() => {
     const grouped: { [key: string]: Lesson[] } = {};
-    instructors.forEach(c => { grouped[c.id] = []; });
+    instructors.forEach(i => { grouped[i.id] = []; });
     const unassigned: Lesson[] = [];
     for (const lesson of filteredLessons) {
-      if (lesson.instructorId && grouped.hasOwnProperty(lesson.instructorId)) {
-        grouped[lesson.instructorId].push(lesson);
+      if (lesson.instructorId) {
+        if (grouped.hasOwnProperty(lesson.instructorId)) {
+          grouped[lesson.instructorId].push(lesson);
+        } else {
+            console.warn(`Lesson with ID ${lesson.id} is assigned to a non-existent instructor ID: ${lesson.instructorId}. It will be treated as unassigned.`);
+            unassigned.push(lesson);
+        }
       } else {
         unassigned.push(lesson);
       }
@@ -462,12 +477,18 @@ const LessonsGallery: React.FC = () => {
   const isChildRouteActive = location.pathname !== '/lessons';
   const pageTitle = t('nav.lessons');
 
-  const filterOptions = useMemo(() => ({
-    years: [...new Set(lessons.map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a,b) => b.localeCompare(a)),
-    categories: lessonCategories,
-    schools,
-    instructors
-  }), [lessons, lessonCategories, schools, instructors]);
+  const filterOptions = useMemo(() => {
+    let years = [...new Set(lessons.map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a,b) => b.localeCompare(a));
+    if (years.length === 0) {
+        years.push(new Date().getFullYear().toString());
+    }
+    return {
+        years,
+        categories: lessonCategories,
+        schools,
+        instructors
+    }
+  }, [lessons, lessonCategories, schools, instructors]);
 
   const excludedIds = useMemo(() => ({
     years: settings.lessonFilter_excludedYears,

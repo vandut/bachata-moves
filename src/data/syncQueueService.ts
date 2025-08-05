@@ -1,7 +1,3 @@
-
-
-
-
 import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, LessonCategory, FigureCategory, School, Instructor, AppSettings } from '../types';
 import { GoogleDriveApi, FOLDERS, FILES, DriveFile } from './googledrive';
 import { dataService } from './service';
@@ -287,26 +283,33 @@ class SyncQueueService {
             return latest > 0 ? new Date(latest).toISOString() : new Date(0).toISOString();
         };
 
-        const createOrder = (items: any[], orderKey: keyof AppSettings, specialId: string) => {
-            const allItemIds = new Set([specialId, ...items.map(i => i.id)]);
-            let order = (localSettings as any)[orderKey] || [];
-            const orderSet = new Set(order);
+        const getOrderedItems = (items: any[], orderKey: keyof AppSettings) => {
+            const order = (localSettings as any)[orderKey] as string[] || [];
+            const itemMap = new Map(items.map(i => [i.id, i]));
+            const orderedItems: any[] = [];
+            const processedIds = new Set<string>();
 
-            if (order.length < allItemIds.size) {
-                const missingIds = [...allItemIds].filter(id => !orderSet.has(id));
-                order = [...order, ...missingIds];
+            // Add items based on the stored order
+            for (const id of order) {
+                if (itemMap.has(id)) {
+                    orderedItems.push(itemMap.get(id)!);
+                    processedIds.add(id);
+                }
             }
-            return order;
-        }
+            // Add any items not in the order array to the end
+            for (const item of items) {
+                if (!processedIds.has(item.id)) {
+                    orderedItems.push(item);
+                }
+            }
+            return orderedItems;
+        };
 
         return {
             modifiedTime: await getLatestTime(),
-            categories: localCategories,
-            schools: localSchools,
-            instructors: localInstructors,
-            categoryOrder: createOrder(localCategories, settingsKeys.order, '__uncategorized__'),
-            schoolOrder: createOrder(localSchools, settingsKeys.schoolOrder, '__unassigned__'),
-            instructorOrder: createOrder(localInstructors, settingsKeys.instructorOrder, '__unassigned__'),
+            categories: getOrderedItems(localCategories, settingsKeys.order),
+            schools: getOrderedItems(localSchools, settingsKeys.schoolOrder),
+            instructors: getOrderedItems(localInstructors, settingsKeys.instructorOrder),
             showEmpty: (localSettings as any)[settingsKeys.showEmpty] || false,
             showCount: (localSettings as any)[settingsKeys.showCount] || false,
         };
@@ -358,9 +361,11 @@ class SyncQueueService {
     
         const syncSettings: any = await stores.settings.get('sync-settings') || {};
         
-        syncSettings[settingsKeys.order] = config.categoryOrder || [];
-        syncSettings[settingsKeys.schoolOrder] = config.schoolOrder || [];
-        syncSettings[settingsKeys.instructorOrder] = config.instructorOrder || [];
+        // Derive order from the downloaded arrays
+        syncSettings[settingsKeys.order] = (config.categories || []).map(c => (c as any).id);
+        syncSettings[settingsKeys.schoolOrder] = (config.schools || []).map(s => s.id);
+        syncSettings[settingsKeys.instructorOrder] = (config.instructors || []).map(i => i.id);
+        
         syncSettings[settingsKeys.showEmpty] = !!config.showEmpty;
         syncSettings[settingsKeys.showCount] = !!config.showCount;
         syncSettings.modifiedTime = config.modifiedTime;
@@ -418,13 +423,10 @@ class SyncQueueService {
         
         const stripTime = (item: any) => { const { modifiedTime, ...rest } = item; return rest; };
 
-        const configToUpload = {
+        const configToUpload: Omit<GroupingConfig, 'modifiedTime'> = {
             categories: localConfig.categories.map(stripTime),
             schools: localConfig.schools.map(stripTime),
             instructors: localConfig.instructors.map(stripTime),
-            categoryOrder: localConfig.categoryOrder,
-            schoolOrder: localConfig.schoolOrder,
-            instructorOrder: localConfig.instructorOrder,
             showEmpty: localConfig.showEmpty,
             showCount: localConfig.showCount,
         };
