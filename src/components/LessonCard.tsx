@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Lesson, LessonCategory, School, Instructor } from '../types';
-import { dataService } from '../data/service';
+import { dataService } from '../data/DataService';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
@@ -10,7 +9,6 @@ import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
-import { syncQueueService } from '../data/syncQueueService';
 
 interface LessonCardProps {
   lesson: Lesson;
@@ -25,7 +23,7 @@ interface LessonCardProps {
 
 const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t, locale, settings } = useTranslation();
-  const { isSignedIn } = useGoogleDrive();
+  const { isSignedIn, initiateSync } = useGoogleDrive();
 
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -181,7 +179,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schoo
     try {
         await dataService.updateLesson(lesson.id, { [key]: value });
         if (isSignedIn) {
-            syncQueueService.addTask('upload-lesson', { lessonId: lesson.id });
+            initiateSync('lesson');
         }
         onRefresh();
     } catch (err) {

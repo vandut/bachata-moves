@@ -1,19 +1,6 @@
 import { createLogger } from '../utils/logger';
 
-const logger = createLogger('DriveAPI');
-
-export const FOLDERS = {
-    lessons: 'lessons',
-    figures: 'figures',
-    videos: 'videos'
-};
-
-export const FILES = {
-    lessonGroupingConfig: 'lesson_grouping_config.json',
-    figureGroupingConfig: 'figure_grouping_config.json',
-    settings: 'settings.json',
-    deletedItemsLog: 'deleted_items_log.json',
-};
+// --- Types and Interface ---
 
 export interface DriveFile {
     id: string;
@@ -23,11 +10,31 @@ export interface DriveFile {
     trashed?: boolean;
 }
 
-export class GoogleDriveApi {
+export interface DriveFileMetadata {
+    name: string;
+    mimeType: string;
+    parents?: string[];
+}
+
+export interface GoogleDriveApi {
+    listFiles(query: string, pageSize?: number): Promise<DriveFile[]>;
+    findOrCreateFolder(name: string, parentId?: string): Promise<string>;
+    upload(content: Blob | string, metadata: DriveFileMetadata, fileId?: string): Promise<DriveFile>;
+    downloadJson<T>(fileId: string): Promise<T | null>;
+    downloadBlob(fileId: string): Promise<Blob | null>;
+    deleteFile(fileId: string): Promise<void>;
+    getFile(fileId: string): Promise<DriveFile | null>;
+}
+
+// --- Implementation ---
+
+const logger = createLogger('DriveAPI');
+
+export class GoogleDriveApiImpl implements GoogleDriveApi {
     private readonly accessToken: string;
     private readonly baseUrl = 'https://www.googleapis.com/drive/v3';
     private readonly uploadBaseUrl = 'https://www.googleapis.com/upload/drive/v3';
-    private readonly apiTimeout = 15000; // 15 seconds
+    private readonly apiTimeout = 15000;
 
     constructor(token: string) {
         this.accessToken = token;
@@ -48,7 +55,7 @@ export class GoogleDriveApi {
 
         try {
             const response = await fetch(url, {
-                cache: 'no-cache', // Prevent browser from returning stale data
+                cache: 'no-cache',
                 ...options,
                 signal: controller.signal,
             });
@@ -123,14 +130,14 @@ export class GoogleDriveApi {
         return file.id;
     }
     
-    async upload(content: Blob | string, metadata: { name: string, mimeType: string, parents?: string[] }, fileId?: string): Promise<DriveFile> {
+    async upload(content: Blob | string, metadata: DriveFileMetadata, fileId?: string): Promise<DriveFile> {
         const action = fileId ? 'Updating' : 'Uploading';
         logger.info(`${action} file: "${metadata.name}"`);
         const boundary = '-------314159265358979323846';
         const delimiter = `\r\n--${boundary}\r\n`;
         const close_delim = `\r\n--${boundary}--`;
       
-        const requestMetadata = { ...metadata };
+        const requestMetadata: DriveFileMetadata = { ...metadata };
         if (fileId) {
             delete requestMetadata.parents;
         } else if (!requestMetadata.parents) {
@@ -139,7 +146,7 @@ export class GoogleDriveApi {
         
         const queryParams = new URLSearchParams({
             uploadType: 'multipart',
-            fields: 'id,name,modifiedTime,parents' // Specify the fields we want in the response.
+            fields: 'id,name,modifiedTime,parents'
         });
         
         const uploadUrl = fileId 

@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Figure, Lesson, FigureCategory, School, Instructor } from '../types';
-import { dataService } from '../data/service';
+import { dataService } from '../data/DataService';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
@@ -10,7 +9,6 @@ import ContextMenu, { ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
-import { syncQueueService } from '../data/syncQueueService';
 
 interface FigureCardProps {
   figure: Figure;
@@ -26,7 +24,7 @@ interface FigureCardProps {
 
 const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t, settings } = useTranslation();
-  const { isSignedIn } = useGoogleDrive();
+  const { isSignedIn, initiateSync } = useGoogleDrive();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +180,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
     try {
         await dataService.updateFigure(figure.id, { [key]: value });
         if (isSignedIn) {
-            syncQueueService.addTask('upload-figure', { figureId: figure.id });
+            initiateSync('figure');
         }
         onRefresh();
     } catch (err) {

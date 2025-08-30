@@ -1,7 +1,7 @@
 import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, School, Instructor } from '../types';
-import { AppDataService } from './indexdb';
+import { IndexDbDataService } from './IndexDbDataService';
 
-export interface IDataService {
+export interface DataService {
   // Lessons
   getLessons(): Promise<Lesson[]>;
   addLesson(lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, videoFile: File): Promise<Lesson>;
@@ -66,7 +66,7 @@ export interface IDataService {
 }
 
 /**
- * A singleton instance of the AppDataService.
+ * A singleton instance of the IndexDbDataService.
  * Components will import this instance to interact with the application's data layer.
  */
-export const dataService: IDataService = new AppDataService();
+export const dataService: DataService = new IndexDbDataService();

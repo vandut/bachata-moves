@@ -4,6 +4,7 @@ import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { dataService } from '../data/DataService';
 
 interface GalleryContext {
     refresh: () => void;
@@ -14,7 +15,7 @@ const AddLessonModal: React.FC = () => {
   const { refresh, isMobile } = useOutletContext<GalleryContext>();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { forceAddItem } = useGoogleDrive();
+  const { isSignedIn, forceAddItem } = useGoogleDrive();
 
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -143,8 +144,12 @@ const AddLessonModal: React.FC = () => {
         endTime: videoDurationMs,
       };
       
-      await forceAddItem(lessonData, 'lesson', { videoFile });
-
+      if (isSignedIn) {
+        await forceAddItem(lessonData, 'lesson', { videoFile });
+      } else {
+        await dataService.addLesson(lessonData, videoFile);
+      }
+      
       if (refresh) {
         refresh();
       }

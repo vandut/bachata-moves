@@ -1,7 +1,5 @@
-
-
 import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, SyncTask, School, Instructor } from '../types';
-import type { IDataService } from './service';
+import type { DataService } from './DataService';
 import { openDB, deleteDB, type IDBPDatabase, type IDBPObjectStore } from 'idb';
 import { createLogger } from '../utils/logger';
 
@@ -187,7 +185,7 @@ const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
 };
 
 
-export class AppDataService implements IDataService {
+export class IndexDbDataService implements DataService {
   private videoUrlCache = new Map<string, string>();
   private thumbUrlCache = new Map<string, string>();
   private figureThumbUrlCache = new Map<string, string>();
@@ -274,7 +272,11 @@ export class AppDataService implements IDataService {
     }
 
     const tx = db.transaction([LESSONS_STORE, LESSON_THUMBNAILS_STORE], 'readwrite');
-    const updatedLesson = { ...lesson, ...lessonUpdateData, modifiedTime: new Date().toISOString() };
+    const updatedLesson = { 
+        ...lesson, 
+        ...lessonUpdateData, 
+        modifiedTime: lessonUpdateData.modifiedTime || new Date().toISOString() 
+    };
     
     const writePromises: Promise<any>[] = [
       tx.objectStore(LESSONS_STORE).put(updatedLesson),
@@ -420,7 +422,11 @@ export class AppDataService implements IDataService {
     }
 
     const tx = db.transaction([FIGURES_STORE, FIGURE_THUMBNAILS_STORE], 'readwrite');
-    const updatedFigure = { ...figure, ...figureUpdateData, modifiedTime: new Date().toISOString() };
+    const updatedFigure = { 
+        ...figure, 
+        ...figureUpdateData, 
+        modifiedTime: figureUpdateData.modifiedTime || new Date().toISOString() 
+    };
     
     const writePromises = [
       tx.objectStore(FIGURES_STORE).put(updatedFigure),
@@ -505,7 +511,11 @@ export class AppDataService implements IDataService {
     const category = await db.get(FIGURE_CATEGORIES_STORE, categoryId);
     if (!category) throw new Error(`Category with id "${categoryId}" not found.`);
 
-    const updatedCategory = { ...category, ...categoryUpdateData, modifiedTime: new Date().toISOString() };
+    const updatedCategory = { 
+        ...category, 
+        ...categoryUpdateData, 
+        modifiedTime: categoryUpdateData.modifiedTime || new Date().toISOString() 
+    };
     await db.put(FIGURE_CATEGORIES_STORE, updatedCategory);
     this.notify();
     return updatedCategory;
@@ -558,7 +568,11 @@ export class AppDataService implements IDataService {
     const category = await db.get(LESSON_CATEGORIES_STORE, categoryId);
     if (!category) throw new Error(`Lesson category with id "${categoryId}" not found.`);
 
-    const updatedCategory = { ...category, ...categoryUpdateData, modifiedTime: new Date().toISOString() };
+    const updatedCategory = { 
+        ...category, 
+        ...categoryUpdateData, 
+        modifiedTime: categoryUpdateData.modifiedTime || new Date().toISOString() 
+    };
     await db.put(LESSON_CATEGORIES_STORE, updatedCategory);
     this.notify();
     return updatedCategory;
@@ -606,7 +620,11 @@ export class AppDataService implements IDataService {
     const db = await openBachataDB();
     const school = await db.get(SCHOOLS_STORE, id);
     if (!school) throw new Error(`School with id "${id}" not found.`);
-    const updatedSchool = { ...school, ...updateData, modifiedTime: new Date().toISOString() };
+    const updatedSchool = { 
+        ...school, 
+        ...updateData, 
+        modifiedTime: updateData.modifiedTime || new Date().toISOString() 
+    };
     await db.put(SCHOOLS_STORE, updatedSchool);
     this.notify();
     return updatedSchool;
@@ -651,7 +669,11 @@ export class AppDataService implements IDataService {
     const db = await openBachataDB();
     const instructor = await db.get(INSTRUCTORS_STORE, id);
     if (!instructor) throw new Error(`Instructor with id "${id}" not found.`);
-    const updatedInstructor = { ...instructor, ...updateData, modifiedTime: new Date().toISOString() };
+    const updatedInstructor = { 
+        ...instructor, 
+        ...updateData, 
+        modifiedTime: updateData.modifiedTime || new Date().toISOString() 
+    };
     await db.put(INSTRUCTORS_STORE, updatedInstructor);
     this.notify();
     return updatedInstructor;

@@ -10,7 +10,7 @@ import MobileBottomNav from './components/MobileBottomNav';
 import AddLessonModal from './components/AddLessonModal';
 import AddFigureModal from './components/AddFigureModal';
 import EditorScreen from './components/EditorScreen';
-import { dataService } from './data/service';
+import { dataService } from './data/DataService';
 import { translations } from './i18n';
 import CustomizeGroupingScreen from './components/CustomizeCategoriesScreen';
 import { GoogleDriveProvider, useGoogleDrive } from './hooks/useGoogleDrive';

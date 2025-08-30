@@ -3,7 +3,7 @@ import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
 import type { ModalAction, FigureCategory, LessonCategory, AppSettings, School, Instructor } from '../types';
-import { dataService } from '../data/service';
+import { dataService } from '../data/DataService';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 

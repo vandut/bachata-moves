@@ -3,7 +3,7 @@ import { useNavigate, useLocation, useOutletContext, useParams } from 'react-rou
 import BaseModal from './BaseModal';
 import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure, School, Instructor } from '../types';
-import { dataService } from '../data/service';
+import { dataService } from '../data/DataService';
 import { useTranslation } from '../App';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
@@ -376,15 +376,29 @@ const EditorScreen: React.FC = () => {
         };
 
         try {
+            const useForceMethod = isSignedIn && (shouldForceCreate || isEditingFigure || isEditingLesson);
+            
             if (isCreatingFigure && lessonIdForNewFigure) {
                 const figureData = { ...commonData, name: formData.name };
-                await forceAddItem(figureData, 'figure', { lessonId: lessonIdForNewFigure });
+                if (useForceMethod) {
+                    await forceAddItem(figureData, 'figure', { lessonId: lessonIdForNewFigure });
+                } else {
+                    await dataService.addFigure(lessonIdForNewFigure, figureData);
+                }
             } else if (isEditingFigure && figureId) {
                 const updateData = { ...commonData, name: formData.name };
-                await forceUpdateItem(figureId, updateData, 'figure');
+                if (useForceMethod) {
+                    await forceUpdateItem(figureId, updateData, 'figure');
+                } else {
+                    await dataService.updateFigure(figureId, updateData);
+                }
             } else if (isEditingLesson && lessonIdParam) {
                 const updateData = { ...commonData, uploadDate: new Date(formData.uploadDate).toISOString() };
-                await forceUpdateItem(lessonIdParam, updateData, 'lesson');
+                if (useForceMethod) {
+                    await forceUpdateItem(lessonIdParam, updateData, 'lesson');
+                } else {
+                    await dataService.updateLesson(lessonIdParam, updateData);
+                }
             }
             if (refresh) refresh();
             navigate(baseNavPath, { state: { skipSync: true } });

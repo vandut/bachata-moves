@@ -1,10 +1,9 @@
-
 import React, { useState, useRef } from 'react';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
 import { useTranslation } from '../App';
-import { dataService } from '../data/service';
+import { dataService } from '../data/DataService';
 import GoogleDriveSync from './GoogleDriveSync';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import { isDev } from '../utils/logger';

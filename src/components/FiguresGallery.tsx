@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { dataService } from '../data/service';
+import { dataService } from '../data/DataService';
 import type { Figure, Lesson, FigureSortOrder, FigureCategory, AppSettings, School, Instructor } from '../types';
 import FigureCard from './FigureCard';
 import MobileTopNav from './MobileTopNav';

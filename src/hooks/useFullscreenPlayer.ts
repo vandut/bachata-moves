@@ -1,8 +1,9 @@
 
 
 
+
 import { useRef, useCallback } from 'react';
-import { dataService } from '../data/service';
+import { dataService } from '../data/DataService';
 import type { Lesson, Figure, AppSettings } from '../types';
 import { useTranslation } from '../App';
 
