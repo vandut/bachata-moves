@@ -11,6 +11,7 @@ import EmptyState from './EmptyState';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import GalleryActionBar from './GalleryActionBar';
 import { GroupingOption } from './GroupingControl';
+import { settingsService } from '../services/SettingsService';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 const UNASSIGNED_ID = '__unassigned__';
@@ -111,31 +112,9 @@ const LessonsGallery: React.FC = () => {
   const [schools, setSchools] = useState<School[]>([]);
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [collapsedCategories, setCollapsedCategories] = useState(settings.collapsedLessonCategories || []);
-  const [isUncategorizedExpanded, setIsUncategorizedExpanded] = useState(settings.uncategorizedLessonCategoryIsExpanded);
-  const [collapsedDateGroups, setCollapsedDateGroups] = useState(settings.collapsedLessonDateGroups || []);
-  const [collapsedSchools, setCollapsedSchools] = useState(settings.collapsedLessonSchools || []);
-  const [isUnassignedSchoolExpanded, setIsUnassignedSchoolExpanded] = useState(settings.uncategorizedLessonSchoolIsExpanded);
-  const [collapsedInstructors, setCollapsedInstructors] = useState(settings.collapsedLessonInstructors || []);
-  const [isUnassignedInstructorExpanded, setIsUnassignedInstructorExpanded] = useState(settings.uncategorizedLessonInstructorIsExpanded);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const navigate = useNavigate();
-
-  // Sync with global settings when they change from another source (e.g. initial load, sync)
-  useEffect(() => {
-    setCollapsedCategories(settings.collapsedLessonCategories || []);
-    setIsUncategorizedExpanded(settings.uncategorizedLessonCategoryIsExpanded);
-    setCollapsedDateGroups(settings.collapsedLessonDateGroups || []);
-    setCollapsedSchools(settings.collapsedLessonSchools || []);
-    setIsUnassignedSchoolExpanded(settings.uncategorizedLessonSchoolIsExpanded);
-    setCollapsedInstructors(settings.collapsedLessonInstructors || []);
-    setIsUnassignedInstructorExpanded(settings.uncategorizedLessonInstructorIsExpanded);
-  }, [
-      settings.collapsedLessonCategories, settings.uncategorizedLessonCategoryIsExpanded, settings.collapsedLessonDateGroups,
-      settings.collapsedLessonSchools, settings.uncategorizedLessonSchoolIsExpanded,
-      settings.collapsedLessonInstructors, settings.uncategorizedLessonInstructorIsExpanded
-    ]);
 
   const SORT_OPTIONS = useMemo(() => [
     { value: 'newest', label: t('sort.newest') },
@@ -178,61 +157,32 @@ const LessonsGallery: React.FC = () => {
   };
 
   const handleToggleCategory = (categoryId: string) => {
-    const isCollapsed = collapsedCategories.includes(categoryId);
-    const newCollapsedKeys = isCollapsed
-      ? collapsedCategories.filter(key => key !== categoryId)
-      : [...collapsedCategories, categoryId];
-    setCollapsedCategories(newCollapsedKeys);
-    updateSettings({ collapsedLessonCategories: newCollapsedKeys }, { silent: true });
+    settingsService.toggleLessonCategoryCollapsed(categoryId);
   };
   
   const handleToggleUncategorized = () => {
-    const newExpandedState = !isUncategorizedExpanded;
-    setIsUncategorizedExpanded(newExpandedState);
-    updateSettings({ uncategorizedLessonCategoryIsExpanded: newExpandedState }, { silent: true });
+    settingsService.toggleLessonUncategorizedExpanded();
   };
 
   const handleToggleDateGroup = (groupKey: string) => {
-    const isCurrentlyCollapsed = collapsedDateGroups.includes(groupKey);
-
-    const newCollapsedKeys = isCurrentlyCollapsed
-      ? collapsedDateGroups.filter(key => key !== groupKey)
-      : [...collapsedDateGroups, groupKey];
-
-    setCollapsedDateGroups(newCollapsedKeys);
-    updateSettings({ collapsedLessonDateGroups: newCollapsedKeys }, { silent: true });
+    settingsService.toggleLessonDateGroupCollapsed(groupKey);
+  };
+  
+  const handleToggleSchool = (schoolId: string) => {
+    settingsService.toggleLessonSchoolCollapsed(schoolId);
+  };
+  
+  const handleToggleUnassignedSchool = () => {
+    settingsService.toggleLessonUnassignedSchoolExpanded();
+  };
+  
+  const handleToggleInstructor = (instructorId: string) => {
+    settingsService.toggleLessonInstructorCollapsed(instructorId);
   };
 
-  const handleToggleSchool = useCallback((schoolId: string) => {
-    const isCollapsed = collapsedSchools.includes(schoolId);
-    const newCollapsedKeys = isCollapsed
-      ? collapsedSchools.filter(key => key !== schoolId)
-      : [...collapsedSchools, schoolId];
-    setCollapsedSchools(newCollapsedKeys);
-    updateSettings({ collapsedLessonSchools: newCollapsedKeys }, { silent: true });
-  }, [collapsedSchools, updateSettings]);
-  
-  const handleToggleUnassignedSchool = useCallback(() => {
-    const newExpandedState = !isUnassignedSchoolExpanded;
-    setIsUnassignedSchoolExpanded(newExpandedState);
-    updateSettings({ uncategorizedLessonSchoolIsExpanded: newExpandedState }, { silent: true });
-  }, [isUnassignedSchoolExpanded, updateSettings]);
-  
-  const handleToggleInstructor = useCallback((instructorId: string) => {
-    const isCollapsed = collapsedInstructors.includes(instructorId);
-    const newCollapsedKeys = isCollapsed
-      ? collapsedInstructors.filter(key => key !== instructorId)
-      : [...collapsedInstructors, instructorId];
-    setCollapsedInstructors(newCollapsedKeys);
-    updateSettings({ collapsedLessonInstructors: newCollapsedKeys }, { silent: true });
-  }, [collapsedInstructors, updateSettings]);
-
-  const handleToggleUnassignedInstructor = useCallback(() => {
-    const newExpandedState = !isUnassignedInstructorExpanded;
-    setIsUnassignedInstructorExpanded(newExpandedState);
-    updateSettings({ uncategorizedLessonInstructorIsExpanded: newExpandedState }, { silent: true });
-  }, [isUnassignedInstructorExpanded, updateSettings]);
-
+  const handleToggleUnassignedInstructor = () => {
+    settingsService.toggleLessonUnassignedInstructorExpanded();
+  };
 
   const sortLessons = (lessonsToSort: Lesson[], sortOrder: LessonSortOrder): Lesson[] => {
       return [...lessonsToSort].sort((a, b) => {
@@ -534,14 +484,14 @@ const LessonsGallery: React.FC = () => {
   ) => {
     const groupRenderConfig = (groupingType === 'school')
         ? {
-            collapsedGroups: collapsedSchools,
-            isUnassignedExpanded: isUnassignedSchoolExpanded,
+            collapsedGroups: settings.collapsedLessonSchools,
+            isUnassignedExpanded: settings.uncategorizedLessonSchoolIsExpanded,
             handleToggle: handleToggleSchool,
             handleToggleUnassigned: handleToggleUnassignedSchool,
         }
         : {
-            collapsedGroups: collapsedInstructors,
-            isUnassignedExpanded: isUnassignedInstructorExpanded,
+            collapsedGroups: settings.collapsedLessonInstructors,
+            isUnassignedExpanded: settings.uncategorizedLessonInstructorIsExpanded,
             handleToggle: handleToggleInstructor,
             handleToggleUnassigned: handleToggleUnassignedInstructor,
         };
@@ -582,9 +532,9 @@ const LessonsGallery: React.FC = () => {
     );
   }, [
       settings.showEmptyLessonCategoriesInGroupedView, settings.showLessonCountInGroupHeaders,
-      lessonCategories, schools, instructors, refreshGallery, baseRoute, allLessonIds, onForceDelete,
-      collapsedSchools, isUnassignedSchoolExpanded, handleToggleSchool, handleToggleUnassignedSchool,
-      collapsedInstructors, isUnassignedInstructorExpanded, handleToggleInstructor, handleToggleUnassignedInstructor
+      settings.collapsedLessonSchools, settings.uncategorizedLessonSchoolIsExpanded,
+      settings.collapsedLessonInstructors, settings.uncategorizedLessonInstructorIsExpanded,
+      lessonCategories, schools, instructors, refreshGallery, baseRoute, allLessonIds, onForceDelete
   ]);
 
   const renderContent = () => {
@@ -626,7 +576,7 @@ const LessonsGallery: React.FC = () => {
                   const group = groups.get(groupKey)!;
                   if (!group || group.lessons.length === 0) return null;
                   
-                  const isExpanded = !collapsedDateGroups.includes(groupKey);
+                  const isExpanded = !settings.collapsedLessonDateGroups.includes(groupKey);
 
                   return (
                       <div key={groupKey}>
@@ -661,11 +611,11 @@ const LessonsGallery: React.FC = () => {
                 <div key={item.id}>
                     <CategoryHeader 
                         name={t('common.uncategorized')} 
-                        isExpanded={isUncategorizedExpanded} 
+                        isExpanded={settings.uncategorizedLessonCategoryIsExpanded} 
                         onToggle={handleToggleUncategorized} 
                         count={settings.showLessonCountInGroupHeaders ? count : undefined}
                     />
-                    {isUncategorizedExpanded && (
+                    {settings.uncategorizedLessonCategoryIsExpanded && (
                         <div className="pt-2 pb-6">
                             {count > 0 ? (
                                 <LessonGrid lessons={uncategorizedLessons} lessonCategories={lessonCategories} schools={schools} instructors={instructors} onRefresh={refreshGallery} baseRoute={baseRoute} allLessonIds={allLessonIds} onForceDelete={onForceDelete} />
@@ -683,7 +633,7 @@ const LessonsGallery: React.FC = () => {
               const showGroup = count > 0 || settings.showEmptyLessonCategoriesInGroupedView;
               if (!showGroup) return null;
 
-              const isExpanded = !collapsedCategories.includes(category.id);
+              const isExpanded = !settings.collapsedLessonCategories.includes(category.id);
 
               return (
                 <div key={category.id}>

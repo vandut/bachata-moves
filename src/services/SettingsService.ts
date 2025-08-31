@@ -70,6 +70,22 @@ export interface SettingsService {
   updateSettings(updates: Partial<AppSettings>, options?: { silent?: boolean }): Promise<void>;
   subscribe(callback: (settings: AppSettings) => void): () => void;
   getSettingsSnapshot(): AppSettings | null;
+
+  // New methods for toggling gallery group states
+  toggleLessonCategoryCollapsed(categoryId: string): Promise<void>;
+  toggleFigureCategoryCollapsed(categoryId: string): Promise<void>;
+  toggleLessonUncategorizedExpanded(): Promise<void>;
+  toggleFigureUncategorizedExpanded(): Promise<void>;
+  toggleLessonDateGroupCollapsed(groupKey: string): Promise<void>;
+  toggleFigureDateGroupCollapsed(groupKey: string): Promise<void>;
+  toggleLessonSchoolCollapsed(schoolId: string): Promise<void>;
+  toggleFigureSchoolCollapsed(schoolId: string): Promise<void>;
+  toggleLessonUnassignedSchoolExpanded(): Promise<void>;
+  toggleFigureUnassignedSchoolExpanded(): Promise<void>;
+  toggleLessonInstructorCollapsed(instructorId: string): Promise<void>;
+  toggleFigureInstructorCollapsed(instructorId: string): Promise<void>;
+  toggleLessonUnassignedInstructorExpanded(): Promise<void>;
+  toggleFigureUnassignedInstructorExpanded(): Promise<void>;
 }
 
 // --- Implementation ---
@@ -154,6 +170,47 @@ class SettingsServiceImpl implements SettingsService {
       this.listeners.forEach(listener => listener(this.settings!));
     }
   }
+
+  // --- Private Helpers for Toggling State ---
+  private async toggleArrayItem(key: keyof AppSettings, id: string): Promise<void> {
+    const currentSettings = await this.getSettings();
+    const currentArray = (currentSettings[key] as string[] | undefined) || [];
+    const isIncluded = currentArray.includes(id);
+    const newArray = isIncluded
+        ? currentArray.filter(i => i !== id)
+        : [...currentArray, id];
+    
+    // Optimistic update and persist silently
+    this.updateSettings({ [key]: newArray } as Partial<AppSettings>, { silent: true });
+  }
+
+  private async toggleBoolean(key: keyof AppSettings): Promise<void> {
+      const currentSettings = await this.getSettings();
+      const currentValue = !!currentSettings[key];
+      this.updateSettings({ [key]: !currentValue } as Partial<AppSettings>, { silent: true });
+  }
+
+  // --- Public Toggle Methods ---
+  public toggleLessonCategoryCollapsed = (categoryId: string): Promise<void> => this.toggleArrayItem('collapsedLessonCategories', categoryId);
+  public toggleFigureCategoryCollapsed = (categoryId: string): Promise<void> => this.toggleArrayItem('collapsedFigureCategories', categoryId);
+  
+  public toggleLessonUncategorizedExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedLessonCategoryIsExpanded');
+  public toggleFigureUncategorizedExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedFigureCategoryIsExpanded');
+  
+  public toggleLessonDateGroupCollapsed = (groupKey: string): Promise<void> => this.toggleArrayItem('collapsedLessonDateGroups', groupKey);
+  public toggleFigureDateGroupCollapsed = (groupKey: string): Promise<void> => this.toggleArrayItem('collapsedFigureDateGroups', groupKey);
+  
+  public toggleLessonSchoolCollapsed = (schoolId: string): Promise<void> => this.toggleArrayItem('collapsedLessonSchools', schoolId);
+  public toggleFigureSchoolCollapsed = (schoolId: string): Promise<void> => this.toggleArrayItem('collapsedFigureSchools', schoolId);
+  
+  public toggleLessonUnassignedSchoolExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedLessonSchoolIsExpanded');
+  public toggleFigureUnassignedSchoolExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedFigureSchoolIsExpanded');
+  
+  public toggleLessonInstructorCollapsed = (instructorId: string): Promise<void> => this.toggleArrayItem('collapsedLessonInstructors', instructorId);
+  public toggleFigureInstructorCollapsed = (instructorId: string): Promise<void> => this.toggleArrayItem('collapsedFigureInstructors', instructorId);
+
+  public toggleLessonUnassignedInstructorExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedLessonInstructorIsExpanded');
+  public toggleFigureUnassignedInstructorExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedFigureInstructorIsExpanded');
 }
 
 // --- Singleton Instance ---

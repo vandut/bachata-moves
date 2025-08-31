@@ -28,9 +28,8 @@ export const useFullscreenPlayer = () => {
             // FIX: Refactor to async/await to handle the promise from exitFullscreen().
             // This can resolve obscure environment-specific linter errors related to promise handling.
             try {
-                // FIX: Use .call(document) to invoke exitFullscreen. This resolves a TypeScript
-                // error about argument counts that can occur with incorrect lib definitions.
-                await document.exitFullscreen.call(document);
+                // FIX: The standard document.exitFullscreen() call is correct. The previous use of .call() was an attempt to fix a misleading type error "Expected 1 arguments, but got 0".
+                await document.exitFullscreen();
             } catch (err) {
                 console.error("Error exiting fullscreen:", err);
             }
