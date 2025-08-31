@@ -4,7 +4,7 @@ import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
-import { dataService } from '../data/DataService';
+import { dataService } from '../services/DataService';
 
 interface GalleryContext {
     refresh: () => void;

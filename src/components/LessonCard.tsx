@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Lesson, LessonCategory, School, Instructor } from '../types';
-import { dataService } from '../data/DataService';
+import { dataService } from '../services/DataService';
 import { useTranslation } from '../App';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
@@ -22,7 +23,8 @@ interface LessonCardProps {
 }
 
 const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
-  const { t, locale, settings } = useTranslation();
+  // FIX: Destructure updateSettings to pass to the fullscreen player hook.
+  const { t, locale, settings, updateSettings } = useTranslation();
   const { isSignedIn, initiateSync } = useGoogleDrive();
 
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -164,6 +166,9 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schoo
         onExit: handleExitFullscreen,
         itemIds,
         baseRoute,
+        // FIX: Pass settings and updateSettings to the hook.
+        settings,
+        updateSettings,
     });
   };
 

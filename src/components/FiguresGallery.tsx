@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { dataService } from '../data/DataService';
+import { localDatabaseService } from '../services/LocalDatabaseService';
 import type { Figure, Lesson, FigureSortOrder, FigureCategory, AppSettings, School, Instructor } from '../types';
 import FigureCard from './FigureCard';
 import MobileTopNav from './MobileTopNav';
@@ -279,11 +279,11 @@ const FiguresGallery: React.FC = () => {
   const refreshGalleries = useCallback(() => {
     setIsLoading(true);
     Promise.all([
-      dataService.getFigures(),
-      dataService.getLessons(),
-      dataService.getFigureCategories(),
-      dataService.getSchools(),
-      dataService.getInstructors(),
+      localDatabaseService.getFigures(),
+      localDatabaseService.getLessons(),
+      localDatabaseService.getFigureCategories(),
+      localDatabaseService.getSchools(),
+      localDatabaseService.getInstructors(),
     ]).then(([fetchedFigures, fetchedLessons, fetchedCategories, fetchedSchools, fetchedInstructors]) => {
       const lessonIdMap = new Map(fetchedLessons.map(lesson => [lesson.id, lesson]));
       setFigures(fetchedFigures);
@@ -308,7 +308,7 @@ const FiguresGallery: React.FC = () => {
 
   // Effect for live updates from data service
   useEffect(() => {
-    const unsubscribe = dataService.subscribe(refreshGalleries);
+    const unsubscribe = localDatabaseService.subscribe(refreshGalleries);
     return () => unsubscribe();
   }, [refreshGalleries]);
   

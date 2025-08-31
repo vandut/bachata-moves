@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure, School, Instructor } from '../types';
-import { dataService } from '../data/DataService';
+import { localDatabaseService } from '../services/LocalDatabaseService';
+import { dataService } from '../services/DataService';
 import { useTranslation } from '../App';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 
@@ -118,15 +120,15 @@ const EditorScreen: React.FC = () => {
                 let thumbPromise: Promise<string | null> | null = null;
                 
                 const [fetchedSchools, fetchedInstructors] = await Promise.all([
-                    dataService.getSchools(),
-                    dataService.getInstructors(),
+                    localDatabaseService.getSchools(),
+                    localDatabaseService.getInstructors(),
                 ]);
                 if (isCancelled) return;
                 setSchools(fetchedSchools);
                 setInstructors(fetchedInstructors);
 
                 if (isCreatingFigure && lessonIdForNewFigure) {
-                    const lesson = (await dataService.getLessons()).find(l => l.id === lessonIdForNewFigure);
+                    const lesson = (await localDatabaseService.getLessons()).find(l => l.id === lessonIdForNewFigure);
                     if (!lesson) throw new Error("Source lesson for new figure not found.");
                     videoLessonSource = lesson;
                     // Pre-populate figure from lesson data
@@ -149,13 +151,13 @@ const EditorScreen: React.FC = () => {
                     const type = figureId ? 'figure' : 'lesson';
                     if (!itemId) throw new Error("Item ID not specified for editing.");
 
-                    const items = type === 'figure' ? await dataService.getFigures() : await dataService.getLessons();
+                    const items = type === 'figure' ? await localDatabaseService.getFigures() : await localDatabaseService.getLessons();
                     loadedItem = items.find(i => i.id === itemId) || null;
                     
                     if (!loadedItem) throw new Error("Item to edit not found.");
                     
                     if ('lessonId' in loadedItem) { // Figure
-                        videoLessonSource = (await dataService.getLessons()).find(l => l.id === (loadedItem as Figure).lessonId);
+                        videoLessonSource = (await localDatabaseService.getLessons()).find(l => l.id === (loadedItem as Figure).lessonId);
                         thumbPromise = dataService.getFigureThumbnailUrl(loadedItem.id);
                     } else { // Lesson
                         videoLessonSource = loadedItem as Lesson;

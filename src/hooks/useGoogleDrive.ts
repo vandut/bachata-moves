@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useCallback, createContext, useContext, ReactNode, useMemo } from 'react';
 import type { UserProfile } from '../api/GoogleIdentityAPI';
-import type { SyncTask } from '../types';
+import type { SyncTask, FigureCategory, LessonCategory, School, Instructor } from '../types';
 // FIX: Corrected import casing to resolve module resolution issue with duplicate filenames.
 import { syncQueueService } from '../services/SyncQueueService';
 import { googleDriveService, type AuthState } from '../services/GoogleDriveService';
@@ -19,6 +20,7 @@ interface GoogleDriveContextType {
   forceAddItem: (itemData: any, type: 'lesson' | 'figure', options?: any) => Promise<any>;
   forceUpdateItem: (itemId: string, itemData: any, type: 'lesson' | 'figure') => Promise<any>;
   forceDeleteItem: (item: any) => Promise<void>;
+  forceDeleteGroupingItem(item: FigureCategory | LessonCategory | School | Instructor, itemType: 'category' | 'school' | 'instructor', galleryType: 'lesson' | 'figure'): Promise<void>;
 }
 
 const GoogleDriveContext = createContext<GoogleDriveContextType | undefined>(undefined);
@@ -72,6 +74,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
     forceAddItem: syncQueueService.forceAddItem,
     forceUpdateItem: syncQueueService.forceUpdateItem,
     forceDeleteItem: syncQueueService.forceDeleteItem,
+    forceDeleteGroupingItem: syncQueueService.forceDeleteGroupingItem,
   }), [authState, syncQueue, initiateSync]);
 
   return React.createElement(GoogleDriveContext.Provider, { value }, children);

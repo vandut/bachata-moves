@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
-import { dataService } from '../data/DataService';
+import { localDatabaseService } from '../services/LocalDatabaseService';
+import { dataService } from '../services/DataService';
 import type { Lesson, Figure, ModalAction } from '../types';
 import CustomSlider from './CustomSlider';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
@@ -69,14 +71,14 @@ const PlayerScreen: React.FC = () => {
         let videoLessonSource: Lesson | undefined;
 
         if (lessonId) {
-          const lessons = await dataService.getLessons();
+          const lessons = await localDatabaseService.getLessons();
           if (isCancelled) return;
           loadedItem = lessons.find(l => l.id === lessonId);
           videoLessonSource = loadedItem as Lesson;
         } else if (figureId) {
           const [figures, lessons] = await Promise.all([
-            dataService.getFigures(),
-            dataService.getLessons(),
+            localDatabaseService.getFigures(),
+            localDatabaseService.getLessons(),
           ]);
           if (isCancelled) return;
           loadedItem = figures.find(f => f.id === figureId);

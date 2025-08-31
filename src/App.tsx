@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext, useEffect, ReactNode, useCallback, useRef, useMemo } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import type { NavItem, AppSettings } from './types';
@@ -10,10 +11,10 @@ import MobileBottomNav from './components/MobileBottomNav';
 import AddLessonModal from './components/AddLessonModal';
 import AddFigureModal from './components/AddFigureModal';
 import EditorScreen from './components/EditorScreen';
-import { dataService } from './data/DataService';
 import { translations } from './i18n';
 import CustomizeGroupingScreen from './components/CustomizeCategoriesScreen';
 import { GoogleDriveProvider, useGoogleDrive } from './hooks/useGoogleDrive';
+import { settingsService } from './services/SettingsService';
 
 // --- I18N Provider and Hook ---
 type Language = 'english' | 'polish';
@@ -44,47 +45,25 @@ export const useTranslation = (): I18nContextType => {
 };
 
 const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(settingsService.getSettingsSnapshot());
 
-  // Use a ref to hold the latest settings for callbacks, breaking dependency cycles
-  const settingsRef = useRef(settings);
   useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
-
-  const reloadAllData = useCallback(() => {
-    // Fetches fresh settings from DB and updates state, triggering re-renders where needed.
-    dataService.getSettings().then(setSettings);
-  }, []); // This is stable
-
-  // Initial data load on component mount
-  useEffect(() => {
-    reloadAllData();
-  }, [reloadAllData]);
+    // Subscribe to settings changes
+    const unsubscribe = settingsService.subscribe(setSettings);
+    // Ensure settings are loaded if they weren't in the initial snapshot
+    if (!settings) {
+        settingsService.getSettings().then(setSettings);
+    }
+    return unsubscribe;
+  }, []);
   
   const updateSettings = useCallback(async (updates: Partial<AppSettings>, options?: { silent?: boolean }) => {
-    const currentSettings = settingsRef.current;
-    if (!currentSettings) return;
+    await settingsService.updateSettings(updates, options);
+  }, []);
 
-    const newSettings = { ...currentSettings, ...updates };
-    settingsRef.current = newSettings; // Always update the ref for other callbacks
-
-    // Only trigger a full re-render if the update is not silent
-    if (!options?.silent) {
-        setSettings(newSettings); // Optimistic UI update
-    }
-    
-    try {
-      await dataService.saveSettings(newSettings, options);
-    } catch (err) {
-      console.error("Failed to save settings:", err);
-      settingsRef.current = currentSettings; // Revert ref on failure
-      // Only revert state on failure if it was set in the first place
-      if (!options?.silent) {
-        setSettings(currentSettings);
-      }
-    }
-  }, []); // Stable: relies on ref, not state
+  const reloadAllData = useCallback(() => {
+    settingsService.getSettings().then(setSettings);
+  }, []);
 
   const setLanguage = useCallback((lang: Language) => {
     updateSettings({ language: lang });

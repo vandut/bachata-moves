@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { dataService } from '../data/DataService';
+import { localDatabaseService } from '../services/LocalDatabaseService';
 import type { Lesson, LessonSortOrder, LessonCategory, AppSettings, School, Instructor } from '../types';
 import LessonCard from './LessonCard';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -252,10 +252,10 @@ const LessonsGallery: React.FC = () => {
   const refreshGallery = useCallback(() => {
     setIsLoading(true);
     Promise.all([
-        dataService.getLessons(),
-        dataService.getLessonCategories(),
-        dataService.getSchools(),
-        dataService.getInstructors(),
+        localDatabaseService.getLessons(),
+        localDatabaseService.getLessonCategories(),
+        localDatabaseService.getSchools(),
+        localDatabaseService.getInstructors(),
     ]).then(([fetchedLessons, fetchedCategories, fetchedSchools, fetchedInstructors]) => {
         setLessons(fetchedLessons);
         setLessonCategories(fetchedCategories);
@@ -278,7 +278,7 @@ const LessonsGallery: React.FC = () => {
   
   // Effect for live updates from data service
   useEffect(() => {
-    const unsubscribe = dataService.subscribe(refreshGallery);
+    const unsubscribe = localDatabaseService.subscribe(refreshGallery);
     return () => unsubscribe();
   }, [refreshGallery]);
 

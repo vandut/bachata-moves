@@ -3,7 +3,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
 import { useTranslation } from '../App';
-import { dataService } from '../data/DataService';
+import { backupService } from '../services/BackupService';
 import GoogleDriveSync from './GoogleDriveSync';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import { isDev } from '../utils/logger';
@@ -42,7 +42,7 @@ const SettingsView: React.FC = () => {
     setProgress(0);
     setDataManagementStatus(null);
     try {
-        const dataBlob = await dataService.exportAllData((p) => setProgress(p));
+        const dataBlob = await backupService.exportAllData((p) => setProgress(p));
         const url = URL.createObjectURL(dataBlob);
         const a = document.createElement('a');
         const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
@@ -75,7 +75,7 @@ const SettingsView: React.FC = () => {
       setProgress(0);
       setDataManagementStatus(null);
       try {
-          await dataService.importData(file, (p) => setProgress(p));
+          await backupService.importData(file, (p) => setProgress(p));
           setDataManagementStatus({ type: 'success', message: t('settings.importSuccess')});
           reloadAllData();
 

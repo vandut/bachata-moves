@@ -1,12 +1,17 @@
+
+
+
+
 import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, AppSettings, FigureCategory, LessonCategory, School, Instructor } from '../types';
-import type { DataService } from '../data/DataService';
+import type { LocalDatabaseService } from './LocalDatabaseService';
 import type { GoogleDriveService } from './GoogleDriveService';
 import type { ExternalStorageService, RemoteItem } from './ExternalStorageService';
-import { dataService } from '../data/DataService';
+import { localDatabaseService } from './LocalDatabaseService';
+import { dataService } from './DataService';
 import { externalStorageService } from './ExternalStorageService';
 import { googleDriveService } from './GoogleDriveService';
+import { settingsService } from './SettingsService';
 import { createLogger } from '../utils/logger';
-import { openBachataDB } from '../data/IndexDbDataService';
 
 const logger = createLogger('SyncQueue');
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -23,6 +28,7 @@ export interface SyncQueueService {
     forceAddItem(itemData: any, type: 'lesson' | 'figure', options?: any): Promise<any>;
     forceUpdateItem(itemId: string, itemData: any, type: 'lesson' | 'figure'): Promise<any>;
     forceDeleteItem(item: any): Promise<void>;
+    forceDeleteGroupingItem(item: FigureCategory | LessonCategory | School | Instructor, itemType: 'category' | 'school' | 'instructor', galleryType: 'lesson' | 'figure'): Promise<void>;
     forceUploadGroupingConfig(type: 'lesson' | 'figure'): Promise<void>;
 }
 
@@ -32,12 +38,12 @@ class SyncQueueServiceImpl implements SyncQueueService {
     private queue: SyncTask[] = [];
     private listeners: Set<() => void> = new Set();
     private isProcessing = false;
-    private dataService: DataService;
+    private localDB: LocalDatabaseService;
     private externalStorageService: ExternalStorageService;
-    private driveService: GoogleDriveService; // Retained for auth state checking
+    private driveService: GoogleDriveService;
 
-    constructor(dataService: DataService, externalStorageService: ExternalStorageService, driveService: GoogleDriveService) {
-        this.dataService = dataService;
+    constructor(localDB: LocalDatabaseService, externalStorageService: ExternalStorageService, driveService: GoogleDriveService) {
+        this.localDB = localDB;
         this.externalStorageService = externalStorageService;
         this.driveService = driveService;
     }
@@ -113,12 +119,12 @@ class SyncQueueServiceImpl implements SyncQueueService {
 
         if (type === 'lesson') {
             if (!options?.videoFile) throw new Error("Video file is required to add a lesson.");
-            newItem = await this.dataService.addLesson(itemData as Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, options.videoFile);
+            newItem = await dataService.addLesson(itemData as Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, options.videoFile);
             logger.info(' > Lesson added locally:', newItem.id);
             newItem = await this.uploadLesson(newItem.id);
         } else { // type === 'figure'
             if (!options?.lessonId) throw new Error("Lesson ID is required to add a figure.");
-            newItem = await this.dataService.addFigure(options.lessonId, itemData as Omit<Figure, 'id' | 'lessonId'>);
+            newItem = await dataService.addFigure(options.lessonId, itemData as Omit<Figure, 'id' | 'lessonId'>);
             logger.info(' > Figure added locally:', newItem.id);
             newItem = await this.uploadFigure(newItem.id);
         }
@@ -136,10 +142,10 @@ class SyncQueueServiceImpl implements SyncQueueService {
         let updatedItem: Lesson | Figure;
 
         if (type === 'lesson') {
-            updatedItem = await this.dataService.updateLesson(itemId, itemData as Partial<Omit<Lesson, 'id'>>);
+            updatedItem = await dataService.updateLesson(itemId, itemData as Partial<Omit<Lesson, 'id'>>);
             updatedItem = await this.uploadLesson(updatedItem.id);
         } else {
-            updatedItem = await this.dataService.updateFigure(itemId, itemData as Partial<Omit<Figure, 'id'>>);
+            updatedItem = await dataService.updateFigure(itemId, itemData as Partial<Omit<Figure, 'id'>>);
             updatedItem = await this.uploadFigure(updatedItem.id);
         }
         logger.info('✅ Force update complete.');
@@ -150,30 +156,39 @@ class SyncQueueServiceImpl implements SyncQueueService {
         if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot delete item while not signed in.");
         const itemType = 'uploadDate' in item ? 'lesson' : 'figure';
         logger.info(`--- UI-BLOCK: Forcing DELETE for ${itemType} ${item.id} ---`);
-    
-        if (itemType === 'lesson') {
-            const allFigures = await this.dataService.getFigures();
-            const childFigures = allFigures.filter(fig => fig.lessonId === item.id);
-            await Promise.all(childFigures.map(fig => this.forceDeleteItem(fig)));
-        }
-    
-        const freshItem: Lesson | Figure | undefined = await (itemType === 'lesson'
-            ? this.dataService.getLessons().then(items => items.find(i => i.id === item.id))
-            : this.dataService.getFigures().then(items => items.find(i => i.id === item.id)));
 
-        if (!freshItem) {
-            logger.warn(`Item ${item.id} not found in DB for deletion.`);
-            return;
-        }
+        const driveIdsToDelete = itemType === 'lesson'
+            ? await dataService.deleteLesson(item.id)
+            : [await dataService.deleteFigure(item.id)].filter((id): id is string => !!id);
 
-        if (freshItem.driveId) await this.deleteRemoteItem(freshItem.driveId);
-        if ('videoDriveId' in freshItem && freshItem.videoDriveId) await this.deleteRemoteItem(freshItem.videoDriveId);
+        if (driveIdsToDelete.length > 0) {
+            await this.localDB.addTombstones(driveIdsToDelete);
+            this.addTask('sync-deleted-log', {}, true);
+        }
         
-        if (itemType === 'lesson') await this.dataService.deleteLesson(freshItem.id, { skipTombstone: true });
-        else await this.dataService.deleteFigure(freshItem.id, { skipTombstone: true });
-
-        logger.info(`✅ Force delete complete for ${itemType} ${item.id}.`);
+        logger.info(`✅ Force delete for ${itemType} ${item.id} processed locally. Sync queued.`);
     };
+
+    public forceDeleteGroupingItem = async (item: FigureCategory | LessonCategory | School | Instructor, itemType: 'category' | 'school' | 'instructor', galleryType: 'lesson' | 'figure'): Promise<void> => {
+        if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot delete grouping item while not signed in.");
+        logger.info(`--- UI-BLOCK: Forcing DELETE for grouping item ${item.id} ---`);
+
+        let driveId: string | null = null;
+        if (itemType === 'category') {
+            driveId = galleryType === 'lesson'
+                ? await dataService.deleteLessonCategory(item.id)
+                : await dataService.deleteFigureCategory(item.id);
+        } else if (itemType === 'school') {
+            driveId = await dataService.deleteSchool(item.id);
+        } else if (itemType === 'instructor') {
+            driveId = await dataService.deleteInstructor(item.id);
+        }
+
+        if (driveId) {
+            await this.localDB.addTombstones([driveId]);
+            this.addTask('sync-deleted-log', {}, true);
+        }
+    }
     
     public forceUploadGroupingConfig = async (type: 'lesson' | 'figure'): Promise<void> => {
         if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot upload config while not signed in.");
@@ -185,10 +200,10 @@ class SyncQueueServiceImpl implements SyncQueueService {
     private syncGallery = async (type: 'lesson' | 'figure'): Promise<void> => {
         logger.info(`--- Syncing Gallery: ${type.toUpperCase()} ---`);
 
-        const [remoteItems, localItems, deletedDriveIds] = await Promise.all([
+        const [remoteItems, localItems, tombstones] = await Promise.all([
             this.externalStorageService.listRemoteItems(type),
-            type === 'lesson' ? this.dataService.getLessons() : this.dataService.getFigures(),
-            this.dataService.getDeletedDriveIds()
+            type === 'lesson' ? this.localDB.getLessons() : this.localDB.getFigures(),
+            this.localDB.getTombstones()
         ]);
 
         const remoteItemMap = new Map<string, RemoteItem>();
@@ -199,17 +214,20 @@ class SyncQueueServiceImpl implements SyncQueueService {
             }
         }
         
-        const localItemMap = new Map(localItems.map(item => [item.id, item]));
+        // FIX: Explicitly type the result of the map function to a tuple `[string, Lesson | Figure]`
+        // to ensure TypeScript correctly infers the type for the Map constructor.
+        const localItemMap = new Map<string, Lesson | Figure>(localItems.map((item: Lesson | Figure): [string, Lesson | Figure] => [item.id, item]));
 
         // Check remote items against local
         for (const remoteItem of remoteItems) {
             if (!remoteItem.name.endsWith('.json')) continue;
-            const localId = remoteItem.name.replace('.json', '');
-
-            if (deletedDriveIds.includes(remoteItem.externalId)) {
+            
+            if (tombstones.includes(remoteItem.externalId)) {
                 this.addTask('delete-remote', { externalId: remoteItem.externalId });
                 continue;
             }
+
+            const localId = remoteItem.name.replace('.json', '');
             const localItem = localItemMap.get(localId);
             if (!localItem || new Date(remoteItem.modifiedTime) > new Date(localItem.modifiedTime || 0)) {
                 this.addTask(type === 'lesson' ? 'download-lesson' : 'download-figure', { remoteItem });
@@ -255,46 +273,44 @@ class SyncQueueServiceImpl implements SyncQueueService {
     }
 
     private uploadLesson = async (lessonId: string): Promise<Lesson> => {
-        const lesson = await this.dataService.getLessons().then(l => l.find(x => x.id === lessonId));
+        const lesson = await this.localDB.getLessons().then(l => l.find(x => x.id === lessonId));
         if (!lesson) throw new Error(`Cannot upload lesson ${lessonId}: not found in local DB.`);
-        const videoFile = await this.dataService.getVideoFile(lesson.id);
+        const videoFile = await dataService.getVideoFile(lesson.id);
         if (!videoFile) throw new Error(`Cannot upload lesson ${lessonId}: video file not found.`);
 
         const { lessonMetadata, videoMetadata } = await this.externalStorageService.uploadLesson(lesson, videoFile);
 
-        const updatedLesson = { ...lesson, driveId: lessonMetadata.externalId, videoDriveId: videoMetadata.externalId, modifiedTime: lessonMetadata.modifiedTime };
-        await this.dataService.updateLesson(lesson.id, updatedLesson);
-        return updatedLesson;
+        const updatedLessonData = { driveId: lessonMetadata.externalId, videoDriveId: videoMetadata.externalId, modifiedTime: lessonMetadata.modifiedTime };
+        return dataService.updateLesson(lesson.id, updatedLessonData);
     }
 
     private uploadFigure = async (figureId: string): Promise<Figure> => {
-        const figure = await this.dataService.getFigures().then(f => f.find(x => x.id === figureId));
+        const figure = await this.localDB.getFigures().then(f => f.find(x => x.id === figureId));
         if (!figure) throw new Error(`Cannot upload figure ${figureId}: not found in local DB.`);
         
         const figureMetadata = await this.externalStorageService.uploadFigure(figure);
         
-        const updatedFigure = { ...figure, driveId: figureMetadata.externalId, modifiedTime: figureMetadata.modifiedTime };
-        await this.dataService.updateFigure(figure.id, updatedFigure);
-        return updatedFigure;
+        const updatedFigureData = { driveId: figureMetadata.externalId, modifiedTime: figureMetadata.modifiedTime };
+        return dataService.updateFigure(figure.id, updatedFigureData);
     }
 
     private downloadLesson = async (remoteItem: RemoteItem): Promise<void> => {
         const downloaded = await this.externalStorageService.downloadLesson(remoteItem);
         if (downloaded) {
-            await this.dataService.saveDownloadedLesson(downloaded.lesson, downloaded.video);
+            await dataService.saveDownloadedLesson(downloaded.lesson, downloaded.video);
         }
     }
 
     private downloadFigure = async (remoteItem: RemoteItem): Promise<void> => {
         const figureData = await this.externalStorageService.downloadFigure(remoteItem);
         if (figureData) {
-            await this.dataService.saveDownloadedFigure(figureData);
+            await dataService.saveDownloadedFigure(figureData);
         }
     }
 
     private deleteRemoteItem = async (externalId: string): Promise<void> => {
         await this.externalStorageService.deleteRemoteItemById(externalId);
-        await this.dataService.removeDeletedDriveId(externalId);
+        await this.localDB.removeTombstones([externalId]);
     }
 
     // --- Private Methods ---
@@ -358,10 +374,10 @@ class SyncQueueServiceImpl implements SyncQueueService {
 
     private getLocalGroupingConfig = async (type: 'lesson' | 'figure'): Promise<GroupingConfig> => {
         const [categories, schools, instructors, settings] = await Promise.all([
-            type === 'lesson' ? this.dataService.getLessonCategories() : this.dataService.getFigureCategories(),
-            this.dataService.getSchools(),
-            this.dataService.getInstructors(),
-            this.dataService.getSettings()
+            type === 'lesson' ? this.localDB.getLessonCategories() : this.localDB.getFigureCategories(),
+            this.localDB.getSchools(),
+            this.localDB.getInstructors(),
+            settingsService.getSettings()
         ]);
         
         const getLatestTime = (items: any[]) => items.reduce((latest, item) => Math.max(latest, new Date(item.modifiedTime || 0).getTime()), 0);
@@ -376,38 +392,30 @@ class SyncQueueServiceImpl implements SyncQueueService {
     }
 
     private applyRemoteGroupingConfig = async (remoteConfig: GroupingConfig, type: 'lesson' | 'figure'): Promise<void> => {
-        const db = await openBachataDB();
         const { categories, schools, instructors, showEmpty, showCount } = remoteConfig;
 
-        // FIX: Define a type for items being synced and apply it to function parameters
-        // to resolve type errors with Map constructor and property access.
         type SyncableConfigItem = (LessonCategory | FigureCategory | School | Instructor);
 
-        const syncItems = async (localItems: SyncableConfigItem[], remoteItems: SyncableConfigItem[], storeName: string) => {
-            const tx = db.transaction(storeName, 'readwrite');
-            const store = tx.objectStore(storeName as any);
-            // FIX: Explicitly type the Map to ensure correct type inference for its values.
+        const syncItems = async (localItems: SyncableConfigItem[], remoteItems: SyncableConfigItem[], addFn: any, updateFn: any) => {
             const localDriveIdMap = new Map<string, SyncableConfigItem>(localItems.filter(i => i.driveId).map(i => [i.driveId!, i]));
             for (const remoteItem of remoteItems) {
                 const existingByDriveId = localDriveIdMap.get(remoteItem.id); 
                 if (existingByDriveId) {
                     if (new Date(remoteItem.modifiedTime!) > new Date(existingByDriveId.modifiedTime!)) {
-                        await store.put({ ...existingByDriveId, name: remoteItem.name, modifiedTime: remoteItem.modifiedTime });
+                        await updateFn(existingByDriveId.id, { name: remoteItem.name, modifiedTime: remoteItem.modifiedTime, driveId: remoteItem.id });
                     }
                 } else {
-                    await store.put({ ...remoteItem, driveId: remoteItem.id });
+                    await addFn(remoteItem.name, remoteItem.id, remoteItem.modifiedTime);
                 }
             }
-            await tx.done;
         };
 
-        if (type === 'lesson') await syncItems(await this.dataService.getLessonCategories(), categories as LessonCategory[], 'lesson_categories');
-        else await syncItems(await this.dataService.getFigureCategories(), categories as FigureCategory[], 'figure_categories');
+        if (type === 'lesson') await syncItems(await this.localDB.getLessonCategories(), categories as LessonCategory[], this.localDB.addLessonCategory, this.localDB.updateLessonCategory);
+        else await syncItems(await this.localDB.getFigureCategories(), categories as FigureCategory[], this.localDB.addFigureCategory, this.localDB.updateFigureCategory);
         
-        await syncItems(await this.dataService.getSchools(), schools, 'schools');
-        await syncItems(await this.dataService.getInstructors(), instructors, 'instructors');
+        await syncItems(await this.localDB.getSchools(), schools, this.localDB.addSchool, this.localDB.updateSchool);
+        await syncItems(await this.localDB.getInstructors(), instructors, this.localDB.addInstructor, this.localDB.updateInstructor);
 
-        const settings = await this.dataService.getSettings();
         const settingsUpdate: Partial<AppSettings> = type === 'lesson' ? {
             showEmptyLessonCategoriesInGroupedView: showEmpty,
             showLessonCountInGroupHeaders: showCount
@@ -415,9 +423,9 @@ class SyncQueueServiceImpl implements SyncQueueService {
             showEmptyFigureCategoriesInGroupedView: showEmpty,
             showFigureCountInGroupHeaders: showCount
         };
-        await this.dataService.saveSettings({ ...settings, ...settingsUpdate });
+        await settingsService.updateSettings(settingsUpdate);
     }
 }
 
 // --- Singleton Instance ---
-export const syncQueueService: SyncQueueService = new SyncQueueServiceImpl(dataService, externalStorageService, googleDriveService);
+export const syncQueueService: SyncQueueService = new SyncQueueServiceImpl(localDatabaseService, externalStorageService, googleDriveService);

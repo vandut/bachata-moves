@@ -1,9 +1,12 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
 import type { ModalAction, FigureCategory, LessonCategory, AppSettings, School, Instructor } from '../types';
-import { dataService } from '../data/DataService';
+import { localDatabaseService } from '../services/LocalDatabaseService';
+import { dataService } from '../services/DataService';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 
@@ -24,8 +27,8 @@ const CustomizeGroupingScreen: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { isMobile } = useOutletContext<GalleryContext>();
-    const { t, updateSettings, reloadAllData } = useTranslation();
-    const { isSignedIn, forceUploadGroupingConfig } = useGoogleDrive();
+    const { t, settings, updateSettings, reloadAllData } = useTranslation();
+    const { isSignedIn, forceUploadGroupingConfig, forceDeleteGroupingItem } = useGoogleDrive();
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);
 
@@ -43,9 +46,9 @@ const CustomizeGroupingScreen: React.FC = () => {
     const config = useMemo(() => {
         return type === 'lesson'
             ? {
-                getCategories: dataService.getLessonCategories, addCategory: dataService.addLessonCategory, updateCategory: dataService.updateLessonCategory, deleteCategory: dataService.deleteLessonCategory,
-                getSchools: dataService.getSchools, addSchool: dataService.addSchool, updateSchool: dataService.updateSchool, deleteSchool: dataService.deleteSchool,
-                getInstructors: dataService.getInstructors, addInstructor: dataService.addInstructor, updateInstructor: dataService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
+                getCategories: localDatabaseService.getLessonCategories, addCategory: localDatabaseService.addLessonCategory, updateCategory: localDatabaseService.updateLessonCategory, deleteCategory: dataService.deleteLessonCategory,
+                getSchools: localDatabaseService.getSchools, addSchool: localDatabaseService.addSchool, updateSchool: localDatabaseService.updateSchool, deleteSchool: dataService.deleteSchool,
+                getInstructors: localDatabaseService.getInstructors, addInstructor: localDatabaseService.addInstructor, updateInstructor: localDatabaseService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
                 updateSettingsKeys: {
                     order: 'lessonCategoryOrder' as keyof AppSettings,
                     schoolOrder: 'lessonSchoolOrder' as keyof AppSettings,
@@ -55,9 +58,9 @@ const CustomizeGroupingScreen: React.FC = () => {
                 }
             }
             : {
-                getCategories: dataService.getFigureCategories, addCategory: dataService.addFigureCategory, updateCategory: dataService.updateFigureCategory, deleteCategory: dataService.deleteFigureCategory,
-                getSchools: dataService.getSchools, addSchool: dataService.addSchool, updateSchool: dataService.updateSchool, deleteSchool: dataService.deleteSchool,
-                getInstructors: dataService.getInstructors, addInstructor: dataService.addInstructor, updateInstructor: dataService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
+                getCategories: localDatabaseService.getFigureCategories, addCategory: localDatabaseService.addFigureCategory, updateCategory: localDatabaseService.updateFigureCategory, deleteCategory: dataService.deleteFigureCategory,
+                getSchools: localDatabaseService.getSchools, addSchool: localDatabaseService.addSchool, updateSchool: localDatabaseService.updateSchool, deleteSchool: dataService.deleteSchool,
+                getInstructors: localDatabaseService.getInstructors, addInstructor: localDatabaseService.addInstructor, updateInstructor: localDatabaseService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
                 updateSettingsKeys: {
                     order: 'figureCategoryOrder' as keyof AppSettings,
                     schoolOrder: 'figureSchoolOrder' as keyof AppSettings,
@@ -99,14 +102,13 @@ const CustomizeGroupingScreen: React.FC = () => {
             setIsLoading(true);
             setError(null);
             try {
-                const [dbSettings, fetchedCategories, fetchedSchools, fetchedInstructors] = await Promise.all([
-                    dataService.getSettings(),
+                const [fetchedCategories, fetchedSchools, fetchedInstructors] = await Promise.all([
                     config.getCategories(),
                     config.getSchools(),
                     config.getInstructors(),
                 ]);
                 
-                const { lessonCategoryOrder, lessonSchoolOrder, lessonInstructorOrder, figureCategoryOrder, figureSchoolOrder, figureInstructorOrder } = dbSettings;
+                const { lessonCategoryOrder, lessonSchoolOrder, lessonInstructorOrder, figureCategoryOrder, figureSchoolOrder, figureInstructorOrder } = settings;
                 const categoryOrder = type === 'lesson' ? lessonCategoryOrder : figureCategoryOrder;
                 const schoolOrder = type === 'lesson' ? lessonSchoolOrder : figureSchoolOrder;
                 const instructorOrder = type === 'lesson' ? lessonInstructorOrder : figureInstructorOrder;
@@ -115,8 +117,8 @@ const CustomizeGroupingScreen: React.FC = () => {
                 setSchools(buildOrderedList(fetchedSchools, schoolOrder, UNASSIGNED_ID, t('common.unassigned')));
                 setInstructors(buildOrderedList(fetchedInstructors, instructorOrder, UNASSIGNED_ID, t('common.unassigned')));
 
-                setShowEmpty(!!(type === 'lesson' ? dbSettings.showEmptyLessonCategoriesInGroupedView : dbSettings.showEmptyFigureCategoriesInGroupedView));
-                setShowCount(!!(type === 'lesson' ? dbSettings.showLessonCountInGroupHeaders : dbSettings.showFigureCountInGroupHeaders));
+                setShowEmpty(!!(type === 'lesson' ? settings.showEmptyLessonCategoriesInGroupedView : settings.showEmptyFigureCategoriesInGroupedView));
+                setShowCount(!!(type === 'lesson' ? settings.showLessonCountInGroupHeaders : settings.showFigureCountInGroupHeaders));
             } catch (err: any) {
                 setError(err.message);
             } finally {
@@ -124,7 +126,7 @@ const CustomizeGroupingScreen: React.FC = () => {
             }
         };
         loadData();
-    }, [type, t, config]);
+    }, [type, t, config, settings]);
 
 
     const handleClose = () => navigate(type === 'lesson' ? '/lessons' : '/figures');
@@ -141,20 +143,25 @@ const CustomizeGroupingScreen: React.FC = () => {
             const initialSchools = await config.getSchools();
             const initialInstructors = await config.getInstructors();
 
-            const createUpdateDelete = async (initialItems: any[], localItems: any[], addFn: any, updateFn: any, deleteFn: any) => {
-                const initialIds = new Set(initialItems.map(i => i.id));
+            const createUpdateDelete = async (initialItems: any[], localItems: any[], addFn: any, updateFn: any) => {
                 const localIds = new Set(localItems.map(i => i.id));
-                const toDelete = initialItems.filter(i => !localIds.has(i.id)).map(i => deleteFn(i.id));
+                const toDelete = initialItems.filter(i => !localIds.has(i.id));
+                for(const item of toDelete) {
+                    if (item.id.includes('category')) await config.deleteCategory(item.id);
+                    else if (item.id.includes('school')) await config.deleteSchool(item.id);
+                    else if (item.id.includes('instructor')) await config.deleteInstructor(item.id);
+                }
+
                 const toAdd = localItems.filter(i => i.isNew).map(i => addFn(i.name.trim()));
                 const toUpdate = localItems.filter(i => !i.isNew && i.isDirty).map(i => updateFn(i.id, { name: i.name.trim() }));
                 const newItems = await Promise.all(toAdd);
-                await Promise.all([...toDelete, ...toUpdate]);
+                await Promise.all(toUpdate);
                 return newItems;
             };
             
-            const newCats = await createUpdateDelete(initialCategories, categories.filter(c => !c.isSpecial), config.addCategory, config.updateCategory, config.deleteCategory);
-            const newSchools = await createUpdateDelete(initialSchools, schools.filter(s => !s.isSpecial), config.addSchool, config.updateSchool, config.deleteSchool);
-            const newInstructors = await createUpdateDelete(initialInstructors, instructors.filter(i => !i.isSpecial), config.addInstructor, config.updateInstructor, config.deleteInstructor);
+            const newCats = await createUpdateDelete(initialCategories, categories.filter(c => !c.isSpecial), config.addCategory, config.updateCategory);
+            const newSchools = await createUpdateDelete(initialSchools, schools.filter(s => !s.isSpecial), config.addSchool, config.updateSchool);
+            const newInstructors = await createUpdateDelete(initialInstructors, instructors.filter(i => !i.isSpecial), config.addInstructor, config.updateInstructor);
             
             const newCatIdMap = new Map<string, string>();
             categories.filter(c => c.isNew).forEach((c, index) => { newCatIdMap.set(c.id, newCats[index].id); });
@@ -205,7 +212,7 @@ const CustomizeGroupingScreen: React.FC = () => {
             setItems(updatedItems);
         };
         const handleNameChange = (id: string, newName: string) => setItems(prev => prev.map(i => i.id === id ? { ...i, name: newName, isDirty: true } : i));
-        const handleAddNew = () => setItems(prev => [...prev, { id: `new-${Date.now()}`, name: '', isNew: true }]);
+        const handleAddNew = () => setItems(prev => [...prev, { id: `new-${options.type}-${Date.now()}`, name: '', isNew: true }]);
         const handleDelete = (id: string, name: string) => setItemToDelete({ id, name, type: options.type });
         
         return (
@@ -237,12 +244,39 @@ const CustomizeGroupingScreen: React.FC = () => {
         );
     };
     
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         if (!itemToDelete) return;
-        const { id, type } = itemToDelete;
-        if (type === 'category') setCategories(prev => prev.filter(item => item.id !== id));
-        else if (type === 'school') setSchools(prev => prev.filter(item => item.id !== id));
-        else if (type === 'instructor') setInstructors(prev => prev.filter(item => item.id !== id));
+        const { id, type: itemType } = itemToDelete;
+
+        const stateUpdaterMap = {
+            category: setCategories,
+            school: setSchools,
+            instructor: setInstructors,
+        };
+        const stateItemsMap = {
+            category: categories,
+            school: schools,
+            instructor: instructors,
+        };
+
+        const itemToDeleteObject = stateItemsMap[itemType].find(item => item.id === id);
+        if (!itemToDeleteObject) return;
+        
+        try {
+            if (isSignedIn) {
+                await forceDeleteGroupingItem(itemToDeleteObject, itemType, type);
+            } else {
+                if (itemType === 'category') await config.deleteCategory(id);
+                else if (itemType === 'school') await config.deleteSchool(id);
+                else if (itemType === 'instructor') await config.deleteInstructor(id);
+            }
+            // Optimistic UI update
+            stateUpdaterMap[itemType](prev => prev.filter(item => item.id !== id));
+        } catch (err) {
+            console.error("Failed to delete item:", err);
+            setError(err instanceof Error ? err.message : "Failed to delete");
+        }
+        
         setItemToDelete(null);
     };
 
