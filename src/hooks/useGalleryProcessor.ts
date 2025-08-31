@@ -36,7 +36,9 @@ export const useGalleryProcessor = <T extends Lesson | Figure>(type: 'lesson' | 
                 setGalleryData(processedData);
                 
                 const currentPath = type === 'lesson' ? '/lessons' : '/figures';
-                if (processedData.totalItemCount > 0 && location.pathname === currentPath && isSignedIn && !location.state?.skipSync) {
+                // FIX: Removed `processedData.totalItemCount > 0` condition. The sync should trigger
+                // on a fresh install (where itemCount is 0) to pull data from the cloud.
+                if (location.pathname === currentPath && isSignedIn && !location.state?.skipSync) {
                     addTask('sync-grouping-config', { type }, true);
                     addTask('sync-gallery', { type });
                 }
