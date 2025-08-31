@@ -5,6 +5,9 @@ import { createLogger } from '../utils/logger';
 
 const logger = createLogger('SettingsService');
 
+const UNCATEGORIZED_ID = '__uncategorized__';
+const UNASSIGNED_ID = '__unassigned__';
+
 const getInitialLanguage = (): 'english' | 'polish' => {
   if (typeof navigator !== 'undefined' && navigator.language) {
     const lang = navigator.language.toLowerCase();
@@ -286,34 +289,48 @@ class SettingsServiceImpl implements SettingsService {
     const allSettings = await this.getSettings();
     const syncSettingsInDb = await this.localDB.getRawSettings().then(s => s.sync);
 
-    const [categories, schools, instructors] = await Promise.all(type === 'lesson' 
+    const [dbCategories, dbSchools, dbInstructors] = await Promise.all(type === 'lesson' 
       ? [this.localDB.getLessonCategories(), this.localDB.getSchools(), this.localDB.getInstructors()]
       : [this.localDB.getFigureCategories(), this.localDB.getSchools(), this.localDB.getInstructors()]
     );
 
-    const sortItems = <T extends { id: string }>(items: T[], order: string[]): T[] => {
-        const orderMap = new Map(order.map((id, index) => [id, index]));
-        return [...items].sort((a, b) => {
-            const indexA = orderMap.get(a.id);
-            const indexB = orderMap.get(b.id);
-            if (indexA !== undefined && indexB !== undefined) return indexA - indexB;
-            if (indexA !== undefined) return -1;
-            if (indexB !== undefined) return 1;
-            return 0; // or some other default sort
-        });
+    const uncategorizedItem: RemoteGroupingItem = { id: UNCATEGORIZED_ID, name: 'Uncategorized' };
+    const unassignedItem: RemoteGroupingItem = { id: UNASSIGNED_ID, name: 'Unassigned' };
+    
+    const allCategories = [...dbCategories, uncategorizedItem];
+    const allSchools = [...dbSchools, unassignedItem];
+    const allInstructors = [...dbInstructors, unassignedItem];
+    
+    const orderItems = <T extends { id: string }>(items: T[], order: string[]): T[] => {
+        const itemMap = new Map(items.map(item => [item.id, item]));
+        const orderedResult: T[] = [];
+        const processedIds = new Set<string>();
+
+        for (const id of order) {
+            if (itemMap.has(id)) {
+                orderedResult.push(itemMap.get(id)!);
+                processedIds.add(id);
+            }
+        }
+        for (const item of items) {
+            if (!processedIds.has(item.id)) {
+                orderedResult.push(item);
+            }
+        }
+        return orderedResult;
     };
 
     const content: RemoteGroupingConfig = type === 'lesson'
         ? {
-            categories: sortItems(categories, allSettings.lessonCategoryOrder),
-            schools: sortItems(schools, allSettings.lessonSchoolOrder),
-            instructors: sortItems(instructors, allSettings.lessonInstructorOrder),
+            categories: orderItems(allCategories, allSettings.lessonCategoryOrder),
+            schools: orderItems(allSchools, allSettings.lessonSchoolOrder),
+            instructors: orderItems(allInstructors, allSettings.lessonInstructorOrder),
             showEmpty: allSettings.showEmptyLessonCategoriesInGroupedView,
             showCount: allSettings.showLessonCountInGroupHeaders,
         } : {
-            categories: sortItems(categories, allSettings.figureCategoryOrder),
-            schools: sortItems(schools, allSettings.figureSchoolOrder),
-            instructors: sortItems(instructors, allSettings.figureInstructorOrder),
+            categories: orderItems(allCategories, allSettings.figureCategoryOrder),
+            schools: orderItems(allSchools, allSettings.figureSchoolOrder),
+            instructors: orderItems(allInstructors, allSettings.figureInstructorOrder),
             showEmpty: allSettings.showEmptyFigureCategoriesInGroupedView,
             showCount: allSettings.showFigureCountInGroupHeaders,
         };
@@ -342,12 +359,15 @@ class SettingsServiceImpl implements SettingsService {
         updateItem: (id: string, data: { name: string; driveId?: string }) => Promise<T>,
         deleteItem: (id: string) => Promise<void>
     ) => {
+        const isSpecial = (id: string) => id === UNCATEGORIZED_ID || id === UNASSIGNED_ID;
         const localItems = await getLocalItems();
         const localMap = new Map(localItems.map(item => [item.id, item]));
         const remoteMap = new Map(remoteItems.map(item => [item.id, item]));
 
         // Add/Update
         for (const remoteItem of remoteItems) {
+            if (isSpecial(remoteItem.id)) continue;
+
             const localItem = localMap.get(remoteItem.id);
             if (localItem) {
                 if (localItem.name !== remoteItem.name || localItem.driveId !== remoteItem.driveId) {
