@@ -10,9 +10,8 @@ import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 import ContextMenu, { type ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { localDatabaseService } from '../services/LocalDatabaseService';
+import { itemManagementService } from '../services/ItemManagementService';
 
 interface LessonCardProps {
   lesson: Lesson;
@@ -28,7 +27,6 @@ interface LessonCardProps {
 const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t, locale } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { isSignedIn, addTask } = useGoogleDrive();
 
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -184,10 +182,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schoo
 
   const handleChange = async (key: 'categoryId' | 'schoolId' | 'instructorId', value: string | null) => {
     try {
-        await dataService.updateLesson(lesson.id, { [key]: value });
-        if (isSignedIn) {
-            addTask('sync-gallery', { type: 'lesson' }, true);
-        }
+        await itemManagementService.updateItemProperty('lesson', lesson.id, key, value);
         onRefresh();
     } catch (err) {
         console.error(`Failed to update lesson ${key}:`, err);
@@ -197,11 +192,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schoo
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
-      const driveIdsToDelete = await dataService.deleteLesson(lesson.id);
-      if (isSignedIn && driveIdsToDelete.length > 0) {
-        await localDatabaseService.addTombstones(driveIdsToDelete);
-        addTask('sync-gallery', { type: 'lesson' }, true);
-      }
+      await itemManagementService.deleteItem('lesson', lesson.id);
       setShowDeleteConfirm(false);
       onRefresh();
     } catch (err) {

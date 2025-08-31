@@ -10,9 +10,8 @@ import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
 import ContextMenu, { type ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { localDatabaseService } from '../services/LocalDatabaseService';
+import { itemManagementService } from '../services/ItemManagementService';
 
 interface FigureCardProps {
   figure: Figure;
@@ -29,7 +28,6 @@ interface FigureCardProps {
 const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { isSignedIn, addTask } = useGoogleDrive();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -185,10 +183,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
 
   const handleChange = async (key: 'categoryId' | 'schoolId' | 'instructorId', value: string | null) => {
     try {
-        await dataService.updateFigure(figure.id, { [key]: value });
-        if (isSignedIn) {
-            addTask('sync-gallery', { type: 'figure' }, true);
-        }
+        await itemManagementService.updateItemProperty('figure', figure.id, key, value);
         onRefresh();
     } catch (err) {
         console.error(`Failed to update figure ${key}:`, err);
@@ -198,11 +193,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
-      const driveId = await dataService.deleteFigure(figure.id);
-      if (isSignedIn && driveId) {
-        await localDatabaseService.addTombstones([driveId]);
-        addTask('sync-gallery', { type: 'figure' }, true);
-      }
+      await itemManagementService.deleteItem('figure', figure.id);
       setShowDeleteConfirm(false);
       onRefresh();
     } catch (err) {
