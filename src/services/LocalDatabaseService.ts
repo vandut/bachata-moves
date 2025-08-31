@@ -24,32 +24,38 @@ export interface LocalDatabaseService {
   getFigureCategories(): Promise<FigureCategory[]>;
   addFigureCategory(categoryName: string, driveId?: string): Promise<FigureCategory>;
   updateFigureCategory(categoryId: string, categoryUpdateData: Partial<Omit<FigureCategory, 'id'>>): Promise<FigureCategory>;
+  saveFigureCategory(category: FigureCategory): Promise<void>;
   deleteFigureCategory(categoryId: string): Promise<void>;
   
   // Lesson Categories
   getLessonCategories(): Promise<LessonCategory[]>;
   addLessonCategory(categoryName: string, driveId?: string): Promise<LessonCategory>;
   updateLessonCategory(categoryId: string, categoryUpdateData: Partial<Omit<LessonCategory, 'id'>>): Promise<LessonCategory>;
+  saveLessonCategory(category: LessonCategory): Promise<void>;
   deleteLessonCategory(categoryId: string): Promise<void>;
 
   // Schools
   getLessonSchools(): Promise<School[]>;
   addLessonSchool(name: string, driveId?: string): Promise<School>;
   updateLessonSchool(id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School>;
+  saveLessonSchool(school: School): Promise<void>;
   deleteLessonSchool(id: string): Promise<void>;
   getFigureSchools(): Promise<School[]>;
   addFigureSchool(name: string, driveId?: string): Promise<School>;
   updateFigureSchool(id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School>;
+  saveFigureSchool(school: School): Promise<void>;
   deleteFigureSchool(id: string): Promise<void>;
   
   // Instructors
   getLessonInstructors(): Promise<Instructor[]>;
   addLessonInstructor(name: string, driveId?: string): Promise<Instructor>;
   updateLessonInstructor(id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor>;
+  saveLessonInstructor(instructor: Instructor): Promise<void>;
   deleteLessonInstructor(id: string): Promise<void>;
   getFigureInstructors(): Promise<Instructor[]>;
   addFigureInstructor(name: string, driveId?: string): Promise<Instructor>;
   updateFigureInstructor(id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor>;
+  saveFigureInstructor(instructor: Instructor): Promise<void>;
   deleteFigureInstructor(id: string): Promise<void>;
 
   // Settings
@@ -458,6 +464,12 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     this.notify();
     return updatedCategory;
   }
+  
+  public saveFigureCategory = async (category: FigureCategory): Promise<void> => {
+    const db = await openBachataDB();
+    await db.put(FIGURE_CATEGORIES_STORE, category);
+    this.notify();
+  };
 
   public deleteFigureCategory = async (categoryId: string): Promise<void> => {
     const db = await openBachataDB();
@@ -496,6 +508,12 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     this.notify();
     return updatedCategory;
   }
+  
+  public saveLessonCategory = async (category: LessonCategory): Promise<void> => {
+    const db = await openBachataDB();
+    await db.put(LESSON_CATEGORIES_STORE, category);
+    this.notify();
+  };
 
   public deleteLessonCategory = async (categoryId: string): Promise<void> => {
     const db = await openBachataDB();
@@ -524,6 +542,11 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     this.notify();
     return updatedSchool;
   }
+  public saveLessonSchool = async (school: School): Promise<void> => {
+    const db = await openBachataDB();
+    await db.put(LESSON_SCHOOLS_STORE, school);
+    this.notify();
+  }
   public deleteLessonSchool = async (id: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(LESSON_SCHOOLS_STORE, id);
@@ -550,6 +573,11 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     await db.put(FIGURE_SCHOOLS_STORE, updatedSchool);
     this.notify();
     return updatedSchool;
+  }
+  public saveFigureSchool = async (school: School): Promise<void> => {
+    const db = await openBachataDB();
+    await db.put(FIGURE_SCHOOLS_STORE, school);
+    this.notify();
   }
   public deleteFigureSchool = async (id: string): Promise<void> => {
     const db = await openBachataDB();
@@ -578,6 +606,11 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     this.notify();
     return updatedInstructor;
   }
+  public saveLessonInstructor = async (instructor: Instructor): Promise<void> => {
+    const db = await openBachataDB();
+    await db.put(LESSON_INSTRUCTORS_STORE, instructor);
+    this.notify();
+  }
   public deleteLessonInstructor = async (id: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(LESSON_INSTRUCTORS_STORE, id);
@@ -604,6 +637,11 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     await db.put(FIGURE_INSTRUCTORS_STORE, updatedInstructor);
     this.notify();
     return updatedInstructor;
+  }
+  public saveFigureInstructor = async (instructor: Instructor): Promise<void> => {
+    const db = await openBachataDB();
+    await db.put(FIGURE_INSTRUCTORS_STORE, instructor);
+    this.notify();
   }
   public deleteFigureInstructor = async (id: string): Promise<void> => {
     const db = await openBachataDB();

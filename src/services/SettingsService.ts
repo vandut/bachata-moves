@@ -2,6 +2,7 @@ import type { FigureCategory, LessonCategory, School, Instructor } from '../type
 import type { AppSettings } from '../contexts/SettingsContext';
 import { localDatabaseService, LocalDatabaseService } from './LocalDatabaseService';
 import { createLogger } from '../utils/logger';
+import { dataService } from './DataService';
 
 const logger = createLogger('SettingsService');
 
@@ -343,7 +344,6 @@ class SettingsServiceImpl implements SettingsService {
   public async applyRemoteGroupingConfig(type: 'lesson' | 'figure', remoteConfig: RemoteGroupingConfig, modifiedTime: string): Promise<void> {
     logger.info(`Applying remote grouping config for ${type}`);
 
-    // FIX: Destructure with default empty arrays to prevent crash if remote config is malformed.
     const { 
         categories = [], 
         schools = [], 
@@ -352,53 +352,47 @@ class SettingsServiceImpl implements SettingsService {
         showCount = false
     } = remoteConfig || {};
 
+    // This helper function syncs a set of items (e.g., all categories) between the remote config and local DB.
+    // It correctly uses the remote ID as the source of truth.
     const syncItems = async <T extends { id: string; name: string; driveId?: string; }>(
         remoteItems: RemoteGroupingItem[],
         getLocalItems: () => Promise<T[]>,
-        addItem: (name: string, driveId?: string) => Promise<T>,
-        updateItem: (id: string, data: { name: string; driveId?: string }) => Promise<T>,
-        deleteItem: (id: string) => Promise<void>
+        saveItem: (item: T) => Promise<any>, // Can be `add` or `update`, uses `put` so it's an upsert.
+        deleteItem: (id: string) => Promise<any> // From dataService to handle unlinking.
     ) => {
         const isSpecial = (id: string) => id === UNCATEGORIZED_ID || id === UNASSIGNED_ID;
         const localItems = await getLocalItems();
         const localMap = new Map(localItems.map(item => [item.id, item]));
-        const remoteMap = new Map(remoteItems.map(item => [item.id, item]));
+        const remoteIdSet = new Set(remoteItems.map(item => item.id));
 
-        // Add/Update
+        // Add or update items from the remote source.
         for (const remoteItem of remoteItems) {
             if (isSpecial(remoteItem.id)) continue;
-
+            
             const localItem = localMap.get(remoteItem.id);
-            if (localItem) {
-                if (localItem.name !== remoteItem.name || localItem.driveId !== remoteItem.driveId) {
-                    await updateItem(localItem.id, { name: remoteItem.name, driveId: remoteItem.driveId });
-                }
-            } else {
-                // If a local item exists with the same name, assume it's the same and update its ID.
-                const localItemByName = localItems.find(li => li.name === remoteItem.name);
-                if (localItemByName) {
-                     await updateItem(localItemByName.id, { name: remoteItem.name, driveId: remoteItem.driveId });
-                } else {
-                    await addItem(remoteItem.name, remoteItem.driveId);
-                }
+            if (!localItem || localItem.name !== remoteItem.name || localItem.driveId !== remoteItem.driveId) {
+                // Item is new, or needs an update. `saveItem` (which uses `put`) handles both cases,
+                // preserving the ID from the remote data.
+                await saveItem(remoteItem as T);
             }
         }
-        // Delete
+
+        // Delete any local items that are no longer present on the remote source.
         for (const localItem of localItems) {
-            if (!remoteMap.has(localItem.id) && !remoteItems.some(ri => ri.name === localItem.name)) {
+            if (!isSpecial(localItem.id) && !remoteIdSet.has(localItem.id)) {
                 await deleteItem(localItem.id);
             }
         }
     };
 
     if (type === 'lesson') {
-        await syncItems(categories, this.localDB.getLessonCategories, this.localDB.addLessonCategory, this.localDB.updateLessonCategory, this.localDB.deleteLessonCategory);
-        await syncItems(schools, this.localDB.getLessonSchools, this.localDB.addLessonSchool, this.localDB.updateLessonSchool, this.localDB.deleteLessonSchool);
-        await syncItems(instructors, this.localDB.getLessonInstructors, this.localDB.addLessonInstructor, this.localDB.updateLessonInstructor, this.localDB.deleteLessonInstructor);
+        await syncItems(categories, this.localDB.getLessonCategories, this.localDB.saveLessonCategory, dataService.deleteLessonCategory);
+        await syncItems(schools, this.localDB.getLessonSchools, this.localDB.saveLessonSchool, dataService.deleteLessonSchool);
+        await syncItems(instructors, this.localDB.getLessonInstructors, this.localDB.saveLessonInstructor, dataService.deleteLessonInstructor);
     } else {
-        await syncItems(categories, this.localDB.getFigureCategories, this.localDB.addFigureCategory, this.localDB.updateFigureCategory, this.localDB.deleteFigureCategory);
-        await syncItems(schools, this.localDB.getFigureSchools, this.localDB.addFigureSchool, this.localDB.updateFigureSchool, this.localDB.deleteFigureSchool);
-        await syncItems(instructors, this.localDB.getFigureInstructors, this.localDB.addFigureInstructor, this.localDB.updateFigureInstructor, this.localDB.deleteFigureInstructor);
+        await syncItems(categories, this.localDB.getFigureCategories, this.localDB.saveFigureCategory, dataService.deleteFigureCategory);
+        await syncItems(schools, this.localDB.getFigureSchools, this.localDB.saveFigureSchool, dataService.deleteFigureSchool);
+        await syncItems(instructors, this.localDB.getFigureInstructors, this.localDB.saveFigureInstructor, dataService.deleteFigureInstructor);
     }
 
     const settingsUpdate: Partial<AppSettings> = type === 'lesson'
