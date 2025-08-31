@@ -8,6 +8,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { thumbnailService } from '../services/ThumbnailService';
 import { itemManagementService, EditorData } from '../services/ItemManagementService';
 import { msToSecondsString, secondsStringToMs } from '../utils/formatters';
+import { useVideoPlayback } from '../hooks/useVideoPlayback';
 
 interface GalleryContext {
     refresh: () => void;
@@ -51,6 +52,9 @@ const EditorScreen: React.FC = () => {
 
     const baseNavPath = isEditingLesson ? '/lessons' : '/figures';
 
+    const itemForPlayback = editorData ? { ...editorData.item, startTime: formData.startTime, endTime: formData.endTime } : null;
+    useVideoPlayback({ videoRef, item: itemForPlayback });
+
     // --- Data Loading Effect ---
     useEffect(() => {
         let isCancelled = false;
@@ -90,7 +94,7 @@ const EditorScreen: React.FC = () => {
                 console.error("Failed to load editor data:", e);
                 setError(e instanceof Error ? e.message : t('editor.itemNotFound'));
             } finally {
-                if (!isCancelled) setIsLoading(false);
+                if (isCancelled) setIsLoading(false);
             }
         };
         loadData();
@@ -149,34 +153,17 @@ const EditorScreen: React.FC = () => {
         const video = videoRef.current;
         // Don't update time while user is dragging handles/scrubber
         if (!video || draggingElement) return;
-
         setCurrentTimeMs(video.currentTime * 1000);
-
-        // Loop logic
-        const startTimeSec = (formData.startTime || 0) / 1000;
-        const endTimeSec = formData.endTime / 1000;
-
-        if (!video.paused && endTimeSec > startTimeSec && video.currentTime >= endTimeSec - 0.1) {
-            video.currentTime = startTimeSec;
-            video.play().catch(e => console.warn("Editor loop playback failed", e));
-        }
     };
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
         if (id === 'startTime' || id === 'endTime') {
             const newTimeMs = secondsStringToMs(value);
-            let finalTimeMs;
-            if (id === 'startTime') {
-                finalTimeMs = Math.max(0, Math.min(newTimeMs, formData.endTime));
-                setFormData(prev => ({ ...prev, startTime: finalTimeMs }));
-            } else { // endTime
-                finalTimeMs = Math.max(formData.startTime, Math.min(newTimeMs, editorData?.videoDurationMs || 0));
-                setFormData(prev => ({ ...prev, endTime: finalTimeMs }));
-            }
-            if (videoRef.current && !isNaN(finalTimeMs)) {
-                videoRef.current.currentTime = finalTimeMs / 1000;
-                setCurrentTimeMs(finalTimeMs);
+            setFormData(prev => ({ ...prev, [id]: newTimeMs }));
+            if (videoRef.current && !isNaN(newTimeMs)) {
+                videoRef.current.currentTime = newTimeMs / 1000;
+                setCurrentTimeMs(newTimeMs);
             }
         } else {
             setFormData(prev => ({ ...prev, [id]: value }));
@@ -259,7 +246,10 @@ const EditorScreen: React.FC = () => {
         const isNew = isCreatingFigure;
 
         try {
-            await itemManagementService.saveItem(type, formData, { isNew });
+            await itemManagementService.saveItem(type, formData, { 
+                isNew, 
+                videoDurationMs: editorData?.videoDurationMs 
+            });
             if (refresh) refresh();
             navigate(baseNavPath, { state: { skipSync: true } });
         } catch (err) {

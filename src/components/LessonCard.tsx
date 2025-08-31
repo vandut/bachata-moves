@@ -11,6 +11,7 @@ import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSettings } from '../contexts/SettingsContext';
 import { itemManagementService } from '../services/ItemManagementService';
+import { useVideoPlayback } from '../hooks/useVideoPlayback';
 
 interface LessonCardProps {
   lesson: Lesson;
@@ -31,7 +32,6 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, thumbnailUrl, videoUrl,
 
   const [error, setError] = useState<string | null>(null);
   const [isHovering, setIsHovering] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isVideoVisible, setIsVideoVisible] = useState(false);
   
   const cardRef = useRef<HTMLDivElement>(null);
@@ -45,78 +45,12 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, thumbnailUrl, videoUrl,
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
-  const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
+  const shouldPlay = ((settings.autoplayGalleryVideos && isVisible) || isHovering) && !!videoUrl;
+  useVideoPlayback({ videoRef, item: lesson, shouldPlay, onVideoVisibilityChange: setIsVideoVisible });
 
   useEffect(() => {
     setError(null);
   }, [lesson.id]);
-  
-  // Effect to set the final playing state
-  useEffect(() => {
-    setIsPlaying(shouldPlay && !!videoUrl);
-  }, [shouldPlay, videoUrl]);
-  
-  // Effect to stop video playback when tab becomes inactive.
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && isPlaying) {
-        setIsHovering(false); // Stop hover-play if tab is hidden
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isPlaying]);
-
-  // Effect that handles the actual video element playback
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const onPlaying = () => setIsVideoVisible(true);
-    const onPause = () => setIsVideoVisible(false);
-
-    video.addEventListener('playing', onPlaying);
-    video.addEventListener('pause', onPause);
-
-    if (isPlaying) {
-      const handleTimeUpdate = () => {
-        const startTimeSec = (lesson.startTime || 0) / 1000;
-        const endTimeSec = lesson.endTime / 1000;
-
-        // Custom loop logic if endTime is set
-        if (endTimeSec > startTimeSec && video.currentTime >= endTimeSec) {
-          video.currentTime = startTimeSec;
-          video.play().catch(e => {
-            if (e.name !== 'AbortError') {
-              console.warn("Loop playback failed", e);
-            }
-          });
-        }
-      };
-      video.addEventListener('timeupdate', handleTimeUpdate);
-
-      video.currentTime = (lesson.startTime || 0) / 1000;
-      video.play().catch(e => {
-        if (e.name !== 'AbortError') {
-          console.warn("Autoplay was prevented.", e);
-        }
-      });
-      
-      return () => {
-        video.removeEventListener('timeupdate', handleTimeUpdate);
-      }
-    } else {
-      video.pause();
-    }
-
-    return () => {
-      video.removeEventListener('playing', onPlaying);
-      video.removeEventListener('pause', onPause);
-    }
-  }, [isPlaying, lesson.startTime, lesson.endTime]);
-
 
   const handleMouseEnter = () => setIsHovering(true);
   const handleMouseLeave = () => setIsHovering(false);

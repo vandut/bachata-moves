@@ -57,7 +57,7 @@ export interface ItemManagementService {
     saveItem(
         type: 'lesson' | 'figure', 
         data: Partial<Lesson & Figure>, 
-        options: { videoFile?: File, isNew: boolean }
+        options: { videoFile?: File, isNew: boolean, videoDurationMs?: number }
     ): Promise<void>;
     getLessonsForNewFigure(): Promise<{ lessons: Lesson[], thumbnailUrls: Map<string, string | null> }>;
     getGroupingEditorData(type: 'lesson' | 'figure'): Promise<GroupingEditorData>;
@@ -209,9 +209,9 @@ class ItemManagementServiceImpl implements ItemManagementService {
     public async saveItem(
         type: 'lesson' | 'figure', 
         data: Partial<Lesson & Figure>, 
-        options: { videoFile?: File, isNew: boolean }
+        options: { videoFile?: File, isNew: boolean, videoDurationMs?: number }
     ): Promise<void> {
-        const commonData = {
+        const commonData: Partial<Lesson & Figure> = {
             description: data.description,
             startTime: data.startTime,
             endTime: data.endTime,
@@ -220,27 +220,41 @@ class ItemManagementServiceImpl implements ItemManagementService {
             instructorId: data.instructorId || null,
         };
 
+        // Server-side validation for time values
+        if (typeof data.startTime === 'number' && typeof data.endTime === 'number' && typeof options.videoDurationMs === 'number') {
+            commonData.startTime = Math.max(0, Math.min(data.startTime, data.endTime));
+            commonData.endTime = Math.max(data.startTime, Math.min(data.endTime, options.videoDurationMs));
+        }
+
         if (type === 'lesson') {
-            const lessonData = {
+            const lessonData: Partial<Lesson> = {
                 ...commonData,
                 uploadDate: data.uploadDate!,
                 categoryId: data.categoryId || null
             };
             if (options.isNew) {
                 if (!options.videoFile) throw new Error("Video file is required for a new lesson.");
-                await this.dataSvc.addLesson(lessonData, options.videoFile);
+                // Get duration from video file and set default times
+                const { durationMs } = await this.thumbSvc.generateThumbnail(options.videoFile, 0);
+                const finalLessonData = {
+                    ...lessonData,
+                    startTime: 0,
+                    endTime: durationMs,
+                    thumbTime: 0,
+                };
+                await this.dataSvc.addLesson(finalLessonData as Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, options.videoFile);
             } else {
                 await this.dataSvc.updateLesson(data.id!, lessonData);
             }
         } else { // Figure
-            const figureData = {
+            const figureData: Partial<Figure> = {
                 ...commonData,
                 name: data.name!,
                 categoryId: data.categoryId || null
             };
             if (options.isNew) {
                 // FIX: Cast `data` to Partial<Figure> to access lessonId, as the compiler incorrectly infers the type.
-                await this.dataSvc.addFigure((data as Partial<Figure>).lessonId!, figureData);
+                await this.dataSvc.addFigure((data as Partial<Figure>).lessonId!, figureData as Omit<Figure, 'id' | 'lessonId'>);
             } else {
                 await this.dataSvc.updateFigure(data.id!, figureData);
             }

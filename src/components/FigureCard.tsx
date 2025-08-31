@@ -11,6 +11,7 @@ import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useSettings } from '../contexts/SettingsContext';
 import { itemManagementService } from '../services/ItemManagementService';
+import { useVideoPlayback } from '../hooks/useVideoPlayback';
 
 interface FigureCardProps {
   figure: Figure;
@@ -31,7 +32,6 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, thumbnail
   const { settings, updateSettings } = useSettings();
   const [error, setError] = useState<string | null>(null);
   const [isHovering, setIsHovering] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isVideoVisible, setIsVideoVisible] = useState(false);
   
   const cardRef = useRef<HTMLDivElement>(null);
@@ -45,78 +45,13 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, thumbnail
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
+  const shouldPlay = ((settings.autoplayGalleryVideos && isVisible) || isHovering) && !!videoUrl && !!parentLesson;
+  useVideoPlayback({ videoRef, item: figure, shouldPlay, onVideoVisibilityChange: setIsVideoVisible });
 
   // Effect to clear errors when figure changes
   useEffect(() => {
     setError(null);
   }, [figure.id]);
-
-  // Effect to set the final playing state
-  useEffect(() => {
-    setIsPlaying(shouldPlay && !!videoUrl && !!parentLesson);
-  }, [shouldPlay, videoUrl, parentLesson]);
-
-  // Effect to stop video playback when tab becomes inactive.
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && isPlaying) {
-        setIsHovering(false); // Stop hover-play if tab is hidden
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [isPlaying]);
-
-  // Effect to handle video element playback logic
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const onPlaying = () => setIsVideoVisible(true);
-    const onPause = () => setIsVideoVisible(false);
-
-    video.addEventListener('playing', onPlaying);
-    video.addEventListener('pause', onPause);
-
-    if (isPlaying) {
-      const handleTimeUpdate = () => {
-        const startTimeSec = (figure.startTime || 0) / 1000;
-        const endTimeSec = figure.endTime / 1000;
-
-        // Loop logic
-        if (endTimeSec > startTimeSec && video.currentTime >= endTimeSec) {
-          video.currentTime = startTimeSec;
-          video.play().catch(e => {
-            if (e.name !== 'AbortError') {
-              console.warn("Figure loop playback failed", e);
-            }
-          });
-        }
-      };
-      video.addEventListener('timeupdate', handleTimeUpdate);
-
-      video.currentTime = (figure.startTime || 0) / 1000;
-      video.play().catch(e => {
-        if (e.name !== 'AbortError') {
-          console.warn("Figure autoplay was prevented.", e);
-        }
-      });
-      
-      return () => {
-        video.removeEventListener('timeupdate', handleTimeUpdate);
-      }
-    } else {
-      video.pause();
-    }
-    
-    return () => {
-      video.removeEventListener('playing', onPlaying);
-      video.removeEventListener('pause', onPause);
-    };
-  }, [isPlaying, figure.startTime, figure.endTime]);
 
   const handleMouseEnter = () => setIsHovering(true);
   const handleMouseLeave = () => setIsHovering(false);

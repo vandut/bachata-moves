@@ -21,7 +21,6 @@ const AddLessonModal: React.FC = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [videoDurationMs, setVideoDurationMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -32,11 +31,9 @@ const AddLessonModal: React.FC = () => {
       setError(null);
       setVideoFile(file);
       setThumbnailUrl(null); // Reset thumbnail while generating new one
-      setVideoDurationMs(0);
       try {
-        const { dataUrl, durationMs } = await thumbnailService.generateThumbnail(file, 0); // Use 0 for first frame
+        const { dataUrl } = await thumbnailService.generateThumbnail(file, 0); // Use 0 for first frame
         setThumbnailUrl(dataUrl);
-        setVideoDurationMs(durationMs);
       } catch (genError) {
         console.error(genError);
         setError(t('addLessonModal.errorThumb'));
@@ -46,7 +43,6 @@ const AddLessonModal: React.FC = () => {
       setError(t('addLessonModal.errorFile'));
       setVideoFile(null);
       setThumbnailUrl(null);
-      setVideoDurationMs(0);
     }
   };
 
@@ -98,9 +94,6 @@ const AddLessonModal: React.FC = () => {
       const lessonData: Partial<Lesson> = {
         uploadDate: new Date(date).toISOString(),
         description: description || null,
-        startTime: 0,
-        endTime: videoDurationMs,
-        thumbTime: 0, // Default to first frame
       };
       
       await itemManagementService.saveItem('lesson', lessonData, { videoFile, isNew: true });

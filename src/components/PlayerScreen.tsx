@@ -1,4 +1,4 @@
-import React, 'react';
+import React from 'react';
 import { useNavigate, useParams, useLocation, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import type { Lesson, Figure, ModalAction } from '../types';
@@ -7,6 +7,7 @@ import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useTranslation } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { itemManagementService, ViewerData } from '../services/ItemManagementService';
+import { useVideoPlayback } from '../hooks/useVideoPlayback';
 
 // This context is provided by the parent gallery component (Lessons or Figures)
 interface GalleryContext {
@@ -39,6 +40,9 @@ const PlayerScreen: React.FC = () => {
   const currentId = lessonId || figureId;
   const itemType = lessonId ? 'lesson' : 'figure';
   const baseRoute = location.pathname.startsWith('/lessons/') ? '/lessons' : '/figures';
+
+  const item = viewerData?.item;
+  useVideoPlayback({ videoRef, item });
 
   const navigateToItem = (direction: 'next' | 'prev') => {
     if (!itemIds || !currentId) return;
@@ -184,12 +188,6 @@ const PlayerScreen: React.FC = () => {
     const video = videoRef.current;
     if (!video || !viewerData) return;
     setCurrentTimeMs(video.currentTime * 1000);
-    const startTimeSec = (viewerData.item.startTime || 0) / 1000;
-    const endTimeSec = viewerData.item.endTime / 1000;
-    if (endTimeSec > startTimeSec && video.currentTime >= endTimeSec - 0.1) {
-      video.currentTime = startTimeSec;
-      video.play().catch(e => console.warn("Loop playback failed", e));
-    }
   };
 
   const handleSliderChange = (newTimeMs: number) => {
@@ -223,7 +221,6 @@ const PlayerScreen: React.FC = () => {
     }
   };
 
-  const item = viewerData?.item;
   const modalTitle = item ? ('uploadDate' in item ? t('player.titleLesson', { date: new Date(item.uploadDate).toLocaleDateString(locale) }) : item.name) : t('common.loading');
     
   const primaryAction: ModalAction | undefined = item ? { label: t('common.edit'), onClick: handleEdit, disabled: isDeleting } : undefined;
