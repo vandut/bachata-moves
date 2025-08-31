@@ -60,7 +60,9 @@ const LessonGrid: React.FC<{
     onRefresh: () => void;
     baseRoute: string;
     allLessonIds: string[];
-}> = ({ lessons, lessonCategories, schools, instructors, onRefresh, baseRoute, allLessonIds }) => {
+    thumbnailUrls: Map<string, string | null>;
+    videoUrls: Map<string, string | null>;
+}> = ({ lessons, lessonCategories, schools, instructors, onRefresh, baseRoute, allLessonIds, thumbnailUrls, videoUrls }) => {
     const gridClass = useMediaQuery('(max-width: 768px)') ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]";
     return (
         <div className={`grid ${gridClass} gap-6`}>
@@ -68,6 +70,8 @@ const LessonGrid: React.FC<{
                 <LessonCard 
                     key={`${lesson.id}-${lesson.modifiedTime || ''}`} 
                     lesson={lesson}
+                    thumbnailUrl={thumbnailUrls.get(lesson.id) || null}
+                    videoUrl={videoUrls.get(lesson.videoId) || null}
                     lessonCategories={lessonCategories}
                     schools={schools}
                     instructors={instructors}
@@ -214,12 +218,14 @@ const LessonsGallery: React.FC = () => {
         <div className="pt-2 pb-6">
           <LessonGrid 
             lessons={galleryData.allItems}
-            lessonCategories={galleryData.allCategories}
+            lessonCategories={galleryData.allCategories as LessonCategory[]}
             schools={galleryData.allSchools}
             instructors={galleryData.allInstructors}
             onRefresh={refreshGallery}
             baseRoute='/lessons'
             allLessonIds={galleryData.allItemIds}
+            thumbnailUrls={galleryData.thumbnailUrls}
+            videoUrls={galleryData.videoUrls}
           />
         </div>
       );
@@ -240,12 +246,14 @@ const LessonsGallery: React.FC = () => {
                 {group.items.length > 0 ? (
                   <LessonGrid 
                     lessons={group.items}
-                    lessonCategories={galleryData.allCategories}
+                    lessonCategories={galleryData.allCategories as LessonCategory[]}
                     schools={galleryData.allSchools}
                     instructors={galleryData.allInstructors}
                     onRefresh={refreshGallery}
                     baseRoute='/lessons'
                     allLessonIds={galleryData.allItemIds}
+                    thumbnailUrls={galleryData.thumbnailUrls}
+                    videoUrls={galleryData.videoUrls}
                   />
                 ) : <EmptyCategoryMessage />}
               </div>

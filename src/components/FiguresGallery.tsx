@@ -61,22 +61,29 @@ const FigureGrid: React.FC<{
     onRefresh: () => void;
     baseRoute: string;
     allFigureIds: string[];
-}> = ({ figures, lessonsMap, figureCategories, schools, instructors, onRefresh, baseRoute, allFigureIds }) => {
+    thumbnailUrls: Map<string, string | null>;
+    videoUrls: Map<string, string | null>;
+}> = ({ figures, lessonsMap, figureCategories, schools, instructors, onRefresh, baseRoute, allFigureIds, thumbnailUrls, videoUrls }) => {
     return (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
-            {figures.map((figure) => (
-                <FigureCard 
-                    key={`${figure.id}-${figure.modifiedTime || ''}`} 
-                    figure={figure} 
-                    parentLesson={lessonsMap.get(figure.lessonId)} 
-                    figureCategories={figureCategories}
-                    schools={schools}
-                    instructors={instructors}
-                    onRefresh={onRefresh}
-                    itemIds={allFigureIds}
-                    baseRoute={baseRoute}
-                />
-            ))}
+            {figures.map((figure) => {
+                const parentLesson = lessonsMap.get(figure.lessonId);
+                return (
+                    <FigureCard 
+                        key={`${figure.id}-${figure.modifiedTime || ''}`} 
+                        figure={figure} 
+                        parentLesson={parentLesson} 
+                        thumbnailUrl={thumbnailUrls.get(figure.id) || null}
+                        videoUrl={parentLesson ? videoUrls.get(parentLesson.videoId) : null}
+                        figureCategories={figureCategories}
+                        schools={schools}
+                        instructors={instructors}
+                        onRefresh={onRefresh}
+                        itemIds={allFigureIds}
+                        baseRoute={baseRoute}
+                    />
+                );
+            })}
         </div>
     );
 };
@@ -218,12 +225,14 @@ const FiguresGallery: React.FC = () => {
           <FigureGrid
             figures={galleryData.allItems}
             lessonsMap={galleryData.lessonsMap!}
-            figureCategories={galleryData.allCategories}
+            figureCategories={galleryData.allCategories as FigureCategory[]}
             schools={galleryData.allSchools}
             instructors={galleryData.allInstructors}
             onRefresh={refreshGallery}
             baseRoute='/figures'
             allFigureIds={galleryData.allItemIds}
+            thumbnailUrls={galleryData.thumbnailUrls}
+            videoUrls={galleryData.videoUrls}
           />
         </div>
       );
@@ -245,12 +254,14 @@ const FiguresGallery: React.FC = () => {
                   <FigureGrid
                     figures={group.items}
                     lessonsMap={galleryData.lessonsMap!}
-                    figureCategories={galleryData.allCategories}
+                    figureCategories={galleryData.allCategories as FigureCategory[]}
                     schools={galleryData.allSchools}
                     instructors={galleryData.allInstructors}
                     onRefresh={refreshGallery}
                     baseRoute='/figures'
                     allFigureIds={galleryData.allItemIds}
+                    thumbnailUrls={galleryData.thumbnailUrls}
+                    videoUrls={galleryData.videoUrls}
                   />
                 ) : <EmptyCategoryMessage />}
               </div>

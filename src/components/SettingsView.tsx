@@ -1,36 +1,32 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
 import { useTranslation } from '../contexts/I18nContext';
-import { backupService } from '../services/BackupService';
 import GoogleDriveSync from './GoogleDriveSync';
 import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { isDev } from '../utils/logger';
 import { useSettings } from '../contexts/SettingsContext';
 import { APP_VERSION } from '../version';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
-
-type Status = { type: 'success' | 'error'; message: string } | null;
+import { backupOrchestrationService, useBackupStatus } from '../services/BackupOrchestrationService';
 
 const SettingsView: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
   const { t } = useTranslation();
-  const { settings, updateSettings, reloadAllData } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { isSignedIn } = useGoogleDrive();
   const devMode = isDev();
   
-  const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [progress, setProgress] = useState<number | null>(null);
-  const [statusMessage, setStatusMessage] = useState('');
-  
-  const [dataManagementStatus, setDataManagementStatus] = useState<Status>(null);
-  const [showImportConfirm, setShowImportConfirm] = useState(false);
-  const [fileToImport, setFileToImport] = useState<File | null>(null);
-
-
+  const backupStatus = useBackupStatus();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    // If the service requests a file, click the hidden input.
+    if (backupStatus.status === 'awaiting-file') {
+      fileInputRef.current?.click();
+    }
+  }, [backupStatus.status]);
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = e.target.value as 'english' | 'polish';
@@ -41,87 +37,26 @@ const SettingsView: React.FC = () => {
     updateSettings({ autoplayGalleryVideos: !settings.autoplayGalleryVideos })
       .catch(err => {
         console.error("Failed to save autoplay setting", err);
-        // Not showing an error to user per current design
       });
   };
   
-  const handleExport = async () => {
-    setIsExporting(true);
-    setProgress(0);
-    setStatusMessage(t('settings.exporting'));
-    setDataManagementStatus(null);
-    try {
-        const onStatusUpdate = (key: string, params?: { item: string }) => {
-            setStatusMessage(t(key, params));
-        };
-        const dataBlob = await backupService.exportAllData(setProgress, onStatusUpdate);
-        
-        // If dataBlob is null, the streaming API was used and the user handled the download.
-        // If dataBlob is returned, we are on the fallback path and must trigger the download.
-        if (dataBlob) {
-          const url = URL.createObjectURL(dataBlob);
-          const a = document.createElement('a');
-          const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
-          a.href = url;
-          a.download = `bachata-moves-export-${timestamp}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-
-        setDataManagementStatus({ type: 'success', message: t('settings.exportSuccess') });
-    } catch (err: any) {
-        console.error("Export failed", err);
-        // Don't show an error if the user just cancelled the save dialog
-        if (err.name !== 'AbortError') {
-          setDataManagementStatus({ type: 'error', message: t('settings.exportError') });
-        }
-    } finally {
-        setIsExporting(false);
-        setProgress(null);
-        setStatusMessage('');
-    }
+  const handleExport = () => {
+    backupOrchestrationService.exportData();
   };
 
   const handleImportClick = () => {
-      setDataManagementStatus(null);
-      fileInputRef.current?.click();
+    backupOrchestrationService.requestImport();
   };
 
   const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (!file) return;
-
-      setFileToImport(file);
-      setShowImportConfirm(true);
-  };
-
-  const handleConfirmImport = async () => {
-    if (!fileToImport) return;
-
-    setShowImportConfirm(false);
-    setIsImporting(true);
-    setStatusMessage(t('settings.importing'));
-    setDataManagementStatus(null);
-    
-    try {
-        const onStatusUpdate = (key: string, params?: { item: string }) => {
-            setStatusMessage(t(key, params));
-        };
-        await backupService.importData(fileToImport, onStatusUpdate);
-        setDataManagementStatus({ type: 'success', message: t('settings.importSuccess')});
-        reloadAllData();
-    } catch (err) {
-        console.error("Import failed", err);
-        const errorMessage = (err instanceof Error && err.message) ? err.message : t('settings.importErrorGeneral');
-        setDataManagementStatus({ type: 'error', message: `${t('settings.importError')}: ${errorMessage}`});
-    } finally {
-        setIsImporting(false);
-        setFileToImport(null);
-        setStatusMessage('');
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    }
+      if (!file) {
+        backupOrchestrationService.cancelImport(); // User cancelled the file picker
+        return;
+      }
+      backupOrchestrationService.handleFileSelected(file);
+      // Reset file input so the same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const LANGUAGES = [
@@ -130,7 +65,7 @@ const SettingsView: React.FC = () => {
   ];
   
   const pageTitle = t('settings.title');
-  const isActionInProgress = isExporting || isImporting;
+  const isActionInProgress = backupStatus.status === 'exporting' || backupStatus.status === 'importing';
 
   return (
     <>
@@ -200,10 +135,10 @@ const SettingsView: React.FC = () => {
                 <p className="text-gray-500 mt-1">{t('settings.dataManagementDesc')}</p>
                 <div className="mt-4 space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
                     <button onClick={handleExport} disabled={isActionInProgress} className="w-full sm:w-auto bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
-                        {isExporting ? t('settings.exporting') : t('settings.exportData')}
+                        {backupStatus.status === 'exporting' ? t('settings.exporting') : t('settings.exportData')}
                     </button>
                     <button onClick={handleImportClick} disabled={isActionInProgress} className="w-full sm:w-auto bg-green-500 text-white font-bold py-2 px-4 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
-                        {isImporting ? t('settings.importing') : t('settings.importData')}
+                        {backupStatus.status === 'importing' ? t('settings.importing') : t('settings.importData')}
                     </button>
                     <input type="file" ref={fileInputRef} onChange={handleFileSelected} className="sr-only" accept=".json" />
                 </div>
@@ -211,21 +146,21 @@ const SettingsView: React.FC = () => {
                     <div className="mt-4">
                         <div className="flex items-center justify-center text-sm text-gray-600 mb-2">
                             <i className="material-icons text-blue-600 animate-spin-reverse">sync</i>
-                            <span className="ml-2">{statusMessage}</span>
+                            <span className="ml-2">{t(backupStatus.statusMessage)}</span>
                         </div>
-                        {isExporting && progress !== null && (
+                        {backupStatus.status === 'exporting' && backupStatus.progress !== null && (
                             <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
                                 <div
                                     className="bg-blue-600 h-2.5 rounded-full transition-all duration-200 ease-linear"
-                                    style={{ width: `${progress * 100}%` }}
+                                    style={{ width: `${(backupStatus.progress || 0) * 100}%` }}
                                 ></div>
                             </div>
                         )}
                     </div>
                 )}
-                {dataManagementStatus && (
-                    <p className={`text-sm mt-4 text-center ${dataManagementStatus.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                        {dataManagementStatus.message}
+                {backupStatus.actionMessage && (
+                    <p className={`text-sm mt-4 text-center ${backupStatus.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                        {backupStatus.actionMessage}
                     </p>
                 )}
               </div>
@@ -235,10 +170,10 @@ const SettingsView: React.FC = () => {
         </div>
       </div>
       <ConfirmDeleteModal
-        isOpen={showImportConfirm}
-        onClose={() => setShowImportConfirm(false)}
-        onConfirm={handleConfirmImport}
-        isDeleting={isImporting}
+        isOpen={backupStatus.showImportConfirm}
+        onClose={() => backupOrchestrationService.cancelImport()}
+        onConfirm={() => backupOrchestrationService.confirmImport()}
+        isDeleting={backupStatus.status === 'importing'}
         title={t('settings.importConfirmTitle')}
       >
         <p>{t('settings.importConfirmBody')}</p>

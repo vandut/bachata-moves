@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 // FIX: Changed ContextMenuAction to be a type import, as it's only used for type annotations.
 import type { Figure, Lesson, FigureCategory, School, Instructor } from '../types';
-import { dataService } from '../services/DataService';
 import { useTranslation } from '../contexts/I18nContext';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
@@ -16,6 +15,8 @@ import { itemManagementService } from '../services/ItemManagementService';
 interface FigureCardProps {
   figure: Figure;
   parentLesson?: Lesson;
+  thumbnailUrl: string | null;
+  videoUrl: string | null;
   figureCategories: FigureCategory[];
   schools: School[];
   instructors: Instructor[];
@@ -25,11 +26,9 @@ interface FigureCardProps {
   onForceDelete?: (item: Figure) => Promise<void>;
 }
 
-const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
+const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, thumbnailUrl, videoUrl, figureCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isHovering, setIsHovering] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -48,45 +47,10 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
 
   const shouldPlay = (settings.autoplayGalleryVideos && isVisible) || isHovering;
 
-  // Effect to load the thumbnail
+  // Effect to clear errors when figure changes
   useEffect(() => {
-    let isCancelled = false;
-    setThumbnailUrl(null);
-    setError(null); // Clear previous errors when figure changes
-
-    dataService.getFigureThumbnailUrl(figure.id)
-      .then(url => {
-        if (!isCancelled && url) {
-          setThumbnailUrl(url);
-        }
-      })
-      .catch(err => {
-        console.warn(`Could not get thumbnail for figure ${figure.id}:`, err.message);
-        if (!isCancelled) {
-            setError(t('card.thumbNotAvailable'));
-        }
-      });
-    
-    return () => { isCancelled = true; };
-  }, [figure.id, figure.thumbTime, t]);
-
-  // Effect to load video URL
-  useEffect(() => {
-    let isCancelled = false;
-    if (shouldPlay && !videoUrl && parentLesson) {
-      dataService.getVideoObjectUrl(parentLesson)
-        .then(url => {
-          if (!isCancelled) setVideoUrl(url);
-        })
-        .catch(err => {
-          if (!isCancelled) {
-            console.error(`Could not load video for figure ${figure.id}:`, err);
-            setError(t('card.videoNotLoaded'));
-          }
-        });
-    }
-    return () => { isCancelled = true; };
-  }, [shouldPlay, videoUrl, parentLesson, figure.id, t]);
+    setError(null);
+  }, [figure.id]);
 
   // Effect to set the final playing state
   useEffect(() => {
@@ -157,15 +121,11 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
   const handleMouseEnter = () => setIsHovering(true);
   const handleMouseLeave = () => setIsHovering(false);
   
-  const handleExitFullscreen = () => {
-    setVideoUrl(null);
-  };
-  
   const handleOpen = () => {
     playInFullscreen({
         item: figure,
         parentLesson,
-        onExit: handleExitFullscreen,
+        onExit: () => {}, // The video URL is now managed by the gallery, no local state to clear
         itemIds,
         baseRoute,
         settings,

@@ -7,22 +7,12 @@ import { useTranslation } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { thumbnailService } from '../services/ThumbnailService';
 import { itemManagementService, EditorData } from '../services/ItemManagementService';
+import { msToSecondsString, secondsStringToMs } from '../utils/formatters';
 
 interface GalleryContext {
     refresh: () => void;
     isMobile: boolean;
 }
-
-const msToSecondsString = (ms: number): string => {
-    if (isNaN(ms) || ms < 0) return '0.00';
-    return (ms / 1000).toFixed(2);
-};
-
-const secondsStringToMs = (s: string): number => {
-    const parsed = parseFloat(s);
-    if (isNaN(parsed)) return 0;
-    return Math.round(parsed * 1000);
-};
 
 const useQuery = () => {
     const { search } = useLocation();

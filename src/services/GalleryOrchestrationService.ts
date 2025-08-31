@@ -1,5 +1,6 @@
 import { localDatabaseService, LocalDatabaseService } from './LocalDatabaseService';
 import { settingsService, SettingsService } from './SettingsService';
+import { dataService, DataService } from './DataService';
 import type { AppSettings } from '../contexts/SettingsContext';
 import type { Lesson, LessonSortOrder, LessonCategory, School, Instructor, Figure, FigureSortOrder, FigureCategory } from '../types';
 
@@ -20,6 +21,8 @@ export interface ProcessedGalleryData<T> {
   allItems: T[];
   allItemIds: string[];
   totalItemCount: number;
+  thumbnailUrls: Map<string, string | null>;
+  videoUrls: Map<string, string | null>;
   filterOptions: {
     years: string[];
     categories: (LessonCategory | FigureCategory)[];
@@ -92,10 +95,12 @@ const sortFigures = (figuresToSort: Figure[], lessonDataMap: Map<string, Lesson>
 class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
     private localDBSvc: LocalDatabaseService;
     private settingsSvc: SettingsService;
+    private dataSvc: DataService;
 
-    constructor(localDBSvc: LocalDatabaseService, settingsSvc: SettingsService) {
+    constructor(localDBSvc: LocalDatabaseService, settingsSvc: SettingsService, dataSvc: DataService) {
         this.localDBSvc = localDBSvc;
         this.settingsSvc = settingsSvc;
+        this.dataSvc = dataSvc;
     }
 
     public async getProcessedLessons(settings: AppSettings, locale: string): Promise<ProcessedGalleryData<Lesson>> {
@@ -120,7 +125,7 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
         const groups: GalleryGroup<Lesson>[] = [];
 
         if (settings.lessonGrouping === 'none') {
-            // No groups, but we can return the flat list if needed. For now, empty array.
+            // No groups
         } else if (settings.lessonGrouping === 'byMonth' || settings.lessonGrouping === 'byYear') {
             const groupedMap = new Map<string, { header: string; lessons: Lesson[] }>();
             for (const lesson of allSortedLessons) {
@@ -178,9 +183,23 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
         }
 
         const years = [...new Set(lessons.map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a, b) => b.localeCompare(a));
+        
+        // Pre-fetch URLs
+        const thumbnailUrls = new Map<string, string | null>();
+        const videoUrls = new Map<string, string | null>();
+        const urlPromises = allSortedLessons.map(async (lesson) => {
+            const [thumbUrl, videoUrl] = await Promise.all([
+                this.dataSvc.getLessonThumbnailUrl(lesson.id),
+                this.dataSvc.getVideoObjectUrl(lesson).catch(() => null)
+            ]);
+            thumbnailUrls.set(lesson.id, thumbUrl);
+            videoUrls.set(lesson.videoId, videoUrl);
+        });
+        await Promise.all(urlPromises);
 
         return {
             groups, allItems: allSortedLessons, allItemIds: allSortedLessons.map(l => l.id), totalItemCount: lessons.length,
+            thumbnailUrls, videoUrls,
             allCategories: categories, allSchools: schools, allInstructors: instructors,
             filterOptions: { years: years.length > 0 ? years : [new Date().getFullYear().toString()], categories, schools, instructors }
         };
@@ -269,8 +288,24 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
 
         const years = [...new Set(lessons.map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a, b) => b.localeCompare(a));
         
+        // Pre-fetch URLs
+        const thumbnailUrls = new Map<string, string | null>();
+        const videoUrls = new Map<string, string | null>();
+        const urlPromises = allSortedFigures.map(async (figure) => {
+            const [thumbUrl, videoUrl] = await Promise.all([
+                this.dataSvc.getFigureThumbnailUrl(figure.id),
+                lessonsMap.has(figure.lessonId) ? this.dataSvc.getVideoObjectUrl(lessonsMap.get(figure.lessonId)!).catch(() => null) : Promise.resolve(null)
+            ]);
+            thumbnailUrls.set(figure.id, thumbUrl);
+            if (lessonsMap.has(figure.lessonId)) {
+                videoUrls.set(lessonsMap.get(figure.lessonId)!.videoId, videoUrl);
+            }
+        });
+        await Promise.all(urlPromises);
+
         return {
             groups, allItems: allSortedFigures, allItemIds: allSortedFigures.map(f => f.id), totalItemCount: figures.length, lessonsMap,
+            thumbnailUrls, videoUrls,
             allCategories: categories, allSchools: schools, allInstructors: instructors,
             filterOptions: { years: years.length > 0 ? years : [new Date().getFullYear().toString()], categories, schools, instructors }
         };
@@ -279,5 +314,6 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
 
 export const galleryOrchestrationService: GalleryOrchestrationService = new GalleryOrchestrationServiceImpl(
     localDatabaseService,
-    settingsService
+    settingsService,
+    dataService,
 );

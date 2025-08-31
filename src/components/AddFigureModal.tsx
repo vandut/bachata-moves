@@ -4,28 +4,19 @@ import BaseModal from './BaseModal';
 import type { ModalAction, Lesson } from '../types';
 import { useTranslation } from '../contexts/I18nContext';
 import { useGoogleDrive } from '../contexts/GoogleDriveContext';
-import { dataService } from '../services/DataService';
 import { itemManagementService } from '../services/ItemManagementService';
 
 // --- SELECTABLE LESSON CARD ---
 
 interface SelectableLessonCardProps {
   lesson: Lesson;
+  thumbnailUrl: string | null;
   onSelect: (lessonId: string) => void;
   isSelected: boolean;
 }
 
-const SelectableLessonCard: React.FC<SelectableLessonCardProps> = ({ lesson, onSelect, isSelected }) => {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+const SelectableLessonCard: React.FC<SelectableLessonCardProps> = ({ lesson, thumbnailUrl, onSelect, isSelected }) => {
   const { locale } = useTranslation();
-
-  useEffect(() => {
-    let isCancelled = false;
-    dataService.getLessonThumbnailUrl(lesson.id).then(url => {
-      if (!isCancelled && url) setThumbnailUrl(url);
-    });
-    return () => { isCancelled = true; };
-  }, [lesson.id]);
 
   const formattedDate = new Date(lesson.uploadDate).toLocaleDateString(locale, {
     year: 'numeric', month: 'long', day: 'numeric',
@@ -71,13 +62,17 @@ const AddFigureModal: React.FC = () => {
     const { isSignedIn } = useGoogleDrive();
     const [error, setError] = useState<string | null>(null);
     const [lessons, setLessons] = useState<Lesson[]>([]);
+    const [thumbnailUrls, setThumbnailUrls] = useState<Map<string, string>>(new Map());
     const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
     const [isLoadingLessons, setIsLoadingLessons] = useState(true);
 
     useEffect(() => {
         setIsLoadingLessons(true);
         itemManagementService.getLessonsForNewFigure()
-            .then(lessons => setLessons(lessons))
+            .then(({ lessons: fetchedLessons, thumbnailUrls: fetchedUrls }) => {
+                setLessons(fetchedLessons);
+                setThumbnailUrls(fetchedUrls as Map<string, string>);
+            })
             .catch(err => setError(err.message))
             .finally(() => setIsLoadingLessons(false));
     }, []);
@@ -127,7 +122,8 @@ const AddFigureModal: React.FC = () => {
                         {lessons.map(lesson => (
                             <SelectableLessonCard 
                                 key={lesson.id} 
-                                lesson={lesson} 
+                                lesson={lesson}
+                                thumbnailUrl={thumbnailUrls.get(lesson.id) || null}
                                 onSelect={setSelectedLessonId} 
                                 isSelected={selectedLessonId === lesson.id} 
                             />

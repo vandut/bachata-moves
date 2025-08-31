@@ -59,7 +59,7 @@ export interface ItemManagementService {
         data: Partial<Lesson & Figure>, 
         options: { videoFile?: File, isNew: boolean }
     ): Promise<void>;
-    getLessonsForNewFigure(): Promise<Lesson[]>;
+    getLessonsForNewFigure(): Promise<{ lessons: Lesson[], thumbnailUrls: Map<string, string | null> }>;
     getGroupingEditorData(type: 'lesson' | 'figure'): Promise<GroupingEditorData>;
     saveGroupingConfiguration(type: 'lesson' | 'figure', config: GroupingSaveConfiguration): Promise<void>;
 }
@@ -192,9 +192,18 @@ class ItemManagementServiceImpl implements ItemManagementService {
         return this._getEditorData(newItem, lesson);
     }
     
-    public async getLessonsForNewFigure(): Promise<Lesson[]> {
+    public async getLessonsForNewFigure(): Promise<{ lessons: Lesson[], thumbnailUrls: Map<string, string | null> }> {
         const lessons = await this.localDBSvc.getLessons();
-        return lessons.sort((a,b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+        const sortedLessons = lessons.sort((a,b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime());
+        
+        const thumbnailUrls = new Map<string, string | null>();
+        const urlPromises = sortedLessons.map(async lesson => {
+            const url = await this.dataSvc.getLessonThumbnailUrl(lesson.id);
+            thumbnailUrls.set(lesson.id, url);
+        });
+        await Promise.all(urlPromises);
+
+        return { lessons: sortedLessons, thumbnailUrls };
     }
 
     public async saveItem(
