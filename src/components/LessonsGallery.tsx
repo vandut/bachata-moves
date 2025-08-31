@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { localDatabaseService } from '../services/LocalDatabaseService';
 import type { Lesson, LessonSortOrder, LessonCategory, School, Instructor } from '../types';
 import LessonCard from './LessonCard';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -8,11 +7,10 @@ import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
 import { useTranslation } from '../contexts/I18nContext';
 import EmptyState from './EmptyState';
-import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import GalleryActionBar from './GalleryActionBar';
 import { GroupingOption } from './GroupingControl';
 import { useSettings } from '../contexts/SettingsContext';
-import { galleryOrchestrationService, ProcessedGalleryData } from '../services/GalleryOrchestrationService';
+import { useGalleryProcessor } from '../hooks/useGalleryProcessor';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 const UNASSIGNED_ID = '__unassigned__';
@@ -86,43 +84,13 @@ const LessonGrid: React.FC<{
 
 
 const LessonsGallery: React.FC = () => {
-  const { t, locale, language } = useTranslation();
+  const { t, language } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { isSignedIn, addTask } = useGoogleDrive();
-
-  const [galleryData, setGalleryData] = useState<ProcessedGalleryData<Lesson> | null>(null);
-  const [dataVersion, setDataVersion] = useState(0);
-  const [filterOptions, setFilterOptions] = useState({ years: [], categories: [], schools: [], instructors: [] });
-  const [isLoading, setIsLoading] = useState(true);
-  const isMobile = useMediaQuery('(max-width: 768px)');
   const location = useLocation();
   const navigate = useNavigate();
-
-  const refreshGallery = useCallback(() => {
-    setDataVersion(v => v + 1);
-  }, []);
-
-  // Effect for initial load, sync, and data processing
-  useEffect(() => {
-    setIsLoading(true);
-    galleryOrchestrationService.getProcessedLessons(settings, locale)
-      .then(processedData => {
-        setGalleryData(processedData);
-        setFilterOptions(processedData.filterOptions);
-        if(processedData.totalItemCount > 0 && location.pathname === '/lessons' && isSignedIn && !location.state?.skipSync) {
-            addTask('sync-grouping-config', { type: 'lesson' }, true);
-            addTask('sync-gallery', { type: 'lesson' });
-        }
-      })
-      .catch(console.error)
-      .finally(() => setIsLoading(false));
-  }, [settings, dataVersion, locale, location.pathname, isSignedIn, location.state, addTask]);
+  const isMobile = useMediaQuery('(max-width: 768px)');
   
-  // Effect for live updates from database
-  useEffect(() => {
-    const unsubscribe = localDatabaseService.subscribe(refreshGallery);
-    return () => unsubscribe();
-  }, [refreshGallery]);
+  const { galleryData, isLoading, filterOptions, refreshGallery } = useGalleryProcessor<Lesson>('lesson');
 
   const SORT_OPTIONS = useMemo(() => [
     { value: 'newest', label: t('sort.newest') },

@@ -83,7 +83,8 @@ class BackupOrchestrationServiceImpl implements BackupOrchestrationService {
     public async confirmImport(): Promise<void> {
         if (!this.state.fileToImport) return;
         
-        const { reloadAllData } = useSettings.getState();
+        // FIX: Cast `useSettings` to `any` to resolve TypeScript error. The `getState` method is a custom, dynamically attached property for a specific use case, and casting allows access without broader type modifications.
+        const { reloadAllData } = (useSettings as any).getState();
 
         this.setState({ status: 'importing', showImportConfirm: false, statusMessage: 'settings.importing' });
         try {
@@ -115,7 +116,8 @@ const useSettingsSubscriber = () => {
     _useSettingsState = useSettings();
     return null;
 };
-useSettings.getState = () => _useSettingsState;
+// FIX: Cast `useSettings` to `any` to allow attaching a custom `getState` property, resolving the TypeScript error.
+(useSettings as any).getState = () => _useSettingsState;
 
 
 export const useBackupStatus = (): BackupStatus => {
