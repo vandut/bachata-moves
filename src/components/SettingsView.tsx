@@ -8,6 +8,7 @@ import GoogleDriveSync from './GoogleDriveSync';
 import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { isDev } from '../utils/logger';
 import { useSettings } from '../contexts/SettingsContext';
+import { APP_VERSION } from '../version';
 
 type Status = { type: 'success' | 'error'; message: string } | null;
 
@@ -105,6 +106,7 @@ const SettingsView: React.FC = () => {
       <div className="p-4 md:p-8">
         {!isMobile && <DesktopTopNav title={pageTitle} />}
         <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl">
+          <p className="text-right -mt-4 -mr-4 mb-4 text-xs text-gray-400">Version: {APP_VERSION}</p>
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-semibold text-gray-700" id="language-group-label">{t('settings.language')}</h2>

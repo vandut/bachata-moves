@@ -9,3 +9,12 @@ This file defines the top-level contract between an AI agent and the human user.
     *   Files containing a React hook should be named after the hook (e.g., `useMediaQuery.ts`).
 
 3.  **File Deletion**: When files should be deleted, inform about all files to be deleted at the end of each response. List all files separately.
+
+4.  **Application Versioning**:
+    *   The application version is managed in `src/version.ts`.
+    *   For every requested code change, you **must** increment the `APP_VERSION` string.
+    *   Use Semantic Versioning (MAJOR.MINOR.PATCH):
+        *   Increment **PATCH** for backward-compatible bug fixes.
+        *   Increment **MINOR** for new, backward-compatible features.
+        *   Increment **MAJOR** for breaking changes.
+    *   This current change is a new feature, so the version has been incremented accordingly.
