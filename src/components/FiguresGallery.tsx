@@ -236,8 +236,8 @@ const FiguresGallery: React.FC = () => {
       localDatabaseService.getFigures(),
       localDatabaseService.getLessons(),
       localDatabaseService.getFigureCategories(),
-      localDatabaseService.getSchools(),
-      localDatabaseService.getInstructors(),
+      localDatabaseService.getFigureSchools(),
+      localDatabaseService.getFigureInstructors(),
     ]).then(([fetchedFigures, fetchedLessons, fetchedCategories, fetchedSchools, fetchedInstructors]) => {
       const lessonIdMap = new Map(fetchedLessons.map(lesson => [lesson.id, lesson]));
       setFigures(fetchedFigures);

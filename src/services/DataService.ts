@@ -1,5 +1,3 @@
-
-
 import type { Lesson, Figure } from '../types';
 import { localDatabaseService } from './LocalDatabaseService';
 import { thumbnailService } from './ThumbnailService';
@@ -24,8 +22,10 @@ export interface DataService {
   // Categories & Groupings
   deleteFigureCategory(categoryId: string): Promise<string | null>;
   deleteLessonCategory(categoryId: string): Promise<string | null>;
-  deleteSchool(schoolId: string): Promise<string | null>;
-  deleteInstructor(instructorId: string): Promise<string | null>;
+  deleteLessonSchool(schoolId: string): Promise<string | null>;
+  deleteFigureSchool(schoolId: string): Promise<string | null>;
+  deleteLessonInstructor(instructorId: string): Promise<string | null>;
+  deleteFigureInstructor(instructorId: string): Promise<string | null>;
 
   // File Handling
   getVideoObjectUrl(lesson: Lesson): Promise<string>;
@@ -179,9 +179,9 @@ class DataServiceImpl implements DataService {
     return category.driveId || null;
   }
 
-  public async deleteSchool(schoolId: string): Promise<string | null> {
-    logger.info(`Deleting school ${schoolId} and un-assigning items (DataService)`);
-    const schools = await localDatabaseService.getSchools();
+  public async deleteLessonSchool(schoolId: string): Promise<string | null> {
+    logger.info(`Deleting lesson school ${schoolId} and un-assigning items (DataService)`);
+    const schools = await localDatabaseService.getLessonSchools();
     const school = schools.find(s => s.id === schoolId);
     if (!school) return null;
     
@@ -190,6 +190,16 @@ class DataServiceImpl implements DataService {
     for (const lesson of lessonsToUpdate) {
       await localDatabaseService.updateLesson(lesson.id, { schoolId: null });
     }
+
+    await localDatabaseService.deleteLessonSchool(schoolId);
+    return school.driveId || null;
+  }
+
+  public async deleteFigureSchool(schoolId: string): Promise<string | null> {
+    logger.info(`Deleting figure school ${schoolId} and un-assigning items (DataService)`);
+    const schools = await localDatabaseService.getFigureSchools();
+    const school = schools.find(s => s.id === schoolId);
+    if (!school) return null;
     
     const figures = await localDatabaseService.getFigures();
     const figuresToUpdate = figures.filter(f => f.schoolId === schoolId);
@@ -197,13 +207,13 @@ class DataServiceImpl implements DataService {
       await localDatabaseService.updateFigure(figure.id, { schoolId: null });
     }
 
-    await localDatabaseService.deleteSchool(schoolId);
+    await localDatabaseService.deleteFigureSchool(schoolId);
     return school.driveId || null;
   }
 
-  public async deleteInstructor(instructorId: string): Promise<string | null> {
-    logger.info(`Deleting instructor ${instructorId} and un-assigning items (DataService)`);
-    const instructors = await localDatabaseService.getInstructors();
+  public async deleteLessonInstructor(instructorId: string): Promise<string | null> {
+    logger.info(`Deleting lesson instructor ${instructorId} and un-assigning items (DataService)`);
+    const instructors = await localDatabaseService.getLessonInstructors();
     const instructor = instructors.find(i => i.id === instructorId);
     if (!instructor) return null;
 
@@ -213,13 +223,23 @@ class DataServiceImpl implements DataService {
       await localDatabaseService.updateLesson(lesson.id, { instructorId: null });
     }
     
+    await localDatabaseService.deleteLessonInstructor(instructorId);
+    return instructor.driveId || null;
+  }
+
+  public async deleteFigureInstructor(instructorId: string): Promise<string | null> {
+    logger.info(`Deleting figure instructor ${instructorId} and un-assigning items (DataService)`);
+    const instructors = await localDatabaseService.getFigureInstructors();
+    const instructor = instructors.find(i => i.id === instructorId);
+    if (!instructor) return null;
+
     const figures = await localDatabaseService.getFigures();
     const figuresToUpdate = figures.filter(f => f.instructorId === instructorId);
     for (const figure of figuresToUpdate) {
       await localDatabaseService.updateFigure(figure.id, { instructorId: null });
     }
     
-    await localDatabaseService.deleteInstructor(instructorId);
+    await localDatabaseService.deleteFigureInstructor(instructorId);
     return instructor.driveId || null;
   }
 

@@ -6,8 +6,10 @@ import {
     FIGURES_STORE,
     FIGURE_CATEGORIES_STORE,
     LESSON_CATEGORIES_STORE,
-    SCHOOLS_STORE,
-    INSTRUCTORS_STORE,
+    LESSON_SCHOOLS_STORE,
+    FIGURE_SCHOOLS_STORE,
+    LESSON_INSTRUCTORS_STORE,
+    FIGURE_INSTRUCTORS_STORE,
     SETTINGS_STORE,
     VIDEO_FILES_STORE,
     LESSON_THUMBNAILS_STORE,
@@ -81,14 +83,17 @@ class BackupServiceImpl implements BackupService {
         logger.info('Fetching metadata from IndexedDB...');
         onStatusUpdate?.('settings.exportStatusFetching');
         const [
-          lessons, figures, figureCategories, lessonCategories, schools, instructors, syncSettings
+          lessons, figures, figureCategories, lessonCategories, 
+          lessonSchools, lessonInstructors, figureSchools, figureInstructors,
+          syncSettings
         ] = await Promise.all([
           db.getAll(LESSONS_STORE), db.getAll(FIGURES_STORE),
           db.getAll(FIGURE_CATEGORIES_STORE), db.getAll(LESSON_CATEGORIES_STORE),
-          db.getAll(SCHOOLS_STORE), db.getAll(INSTRUCTORS_STORE),
+          db.getAll(LESSON_SCHOOLS_STORE), db.getAll(LESSON_INSTRUCTORS_STORE),
+          db.getAll(FIGURE_SCHOOLS_STORE), db.getAll(FIGURE_INSTRUCTORS_STORE),
           db.get(SETTINGS_STORE, SYNC_SETTINGS_KEY)
         ]);
-        logger.info(`Metadata fetched: ${lessons.length} lessons, ${figures.length} figures, ${schools.length} schools, etc.`);
+        logger.info(`Metadata fetched: ${lessons.length} lessons, ${figures.length} figures, etc.`);
         onProgress?.(0.10);
 
         // Streaming implementation
@@ -103,9 +108,9 @@ class BackupServiceImpl implements BackupService {
             const writable = await fileHandle.createWritable();
             const encoder = new TextEncoder();
 
-            await writable.write(encoder.encode('{"__BACHATA_MOVES_EXPORT__":true,"version":3,"exportDate":"' + new Date().toISOString() + '","data":{'));
+            await writable.write(encoder.encode('{"__BACHATA_MOVES_EXPORT__":true,"version":4,"exportDate":"' + new Date().toISOString() + '","data":{'));
 
-            const metadata = { lessons, figures, figureCategories, lessonCategories, schools, instructors, settings: syncSettings };
+            const metadata = { lessons, figures, figureCategories, lessonCategories, lessonSchools, lessonInstructors, figureSchools, figureInstructors, settings: syncSettings };
             const metadataKeys = Object.keys(metadata) as (keyof typeof metadata)[];
 
             for (let i = 0; i < metadataKeys.length; i++) {
@@ -182,8 +187,8 @@ class BackupServiceImpl implements BackupService {
         onProgress?.(0.90);
         
         const exportObject = {
-            '__BACHATA_MOVES_EXPORT__': true, 'version': 3, 'exportDate': new Date().toISOString(),
-            'data': { lessons, figures, figureCategories, lessonCategories, schools, instructors, settings: syncSettings, videos: videoFiles, thumbnails, figureThumbnails },
+            '__BACHATA_MOVES_EXPORT__': true, 'version': 4, 'exportDate': new Date().toISOString(),
+            'data': { lessons, figures, figureCategories, lessonCategories, lessonSchools, lessonInstructors, figureSchools, figureInstructors, settings: syncSettings, videos: videoFiles, lesson_thumbnails: thumbnails, figure_thumbnails: figureThumbnails },
         };
     
         onProgress?.(0.95);
@@ -206,6 +211,7 @@ class BackupServiceImpl implements BackupService {
             const writePromises: Promise<any>[] = [];
             let db: IDBPDatabase;
             let cleared = false;
+            let fileVersion = 3;
             const counters = { lessons: 0, figures: 0, videos: 0, lesson_thumbnails: 0, figure_thumbnails: 0, schools: 0, instructors: 0 };
         
             const getDb = async () => {
@@ -243,7 +249,8 @@ class BackupServiceImpl implements BackupService {
                 logger.info('Backup file format validated.');
               })
               .node('!.version', (value) => {
-                if (value !== 3) {
+                fileVersion = value;
+                if (value > 4) {
                   oboeInstance.abort();
                   reject(new Error(`Unsupported import file version: ${value}.`));
                   return oboe.drop;
@@ -281,12 +288,20 @@ class BackupServiceImpl implements BackupService {
               
               .on('path', 'data.lessonCategories', () => onStatusUpdate?.('settings.importStatusImporting', { item: 'Lesson Categories' }))
               .node('data.lessonCategories.*', (item) => { writePromises.push(getDb().then(d => d.put(LESSON_CATEGORIES_STORE, item))); return oboe.drop; })
-              
-              .on('path', 'data.schools', () => { logger.info('Found "schools" array.'); onStatusUpdate?.('settings.importStatusImporting', { item: 'Schools' }); })
-              .node('data.schools.*', (item) => { counters.schools++; writePromises.push(getDb().then(d => d.put(SCHOOLS_STORE, item))); return oboe.drop; })
-              
-              .on('path', 'data.instructors', () => { logger.info('Found "instructors" array.'); onStatusUpdate?.('settings.importStatusImporting', { item: 'Instructors' }); })
-              .node('data.instructors.*', (item) => { counters.instructors++; writePromises.push(getDb().then(d => d.put(INSTRUCTORS_STORE, item))); return oboe.drop; })
+
+              // Legacy School/Instructor import
+              .node('data.schools.*', (item) => { if (fileVersion < 4) { counters.schools++; writePromises.push(getDb().then(d => Promise.all([d.put(LESSON_SCHOOLS_STORE, item), d.put(FIGURE_SCHOOLS_STORE, item)]))); } return oboe.drop; })
+              .node('data.instructors.*', (item) => { if (fileVersion < 4) { counters.instructors++; writePromises.push(getDb().then(d => Promise.all([d.put(LESSON_INSTRUCTORS_STORE, item), d.put(FIGURE_INSTRUCTORS_STORE, item)]))); } return oboe.drop; })
+
+              // New School/Instructor import
+              .on('path', 'data.lessonSchools', () => onStatusUpdate?.('settings.importStatusImporting', { item: 'Lesson Schools' }))
+              .node('data.lessonSchools.*', (item) => { writePromises.push(getDb().then(d => d.put(LESSON_SCHOOLS_STORE, item))); return oboe.drop; })
+              .on('path', 'data.figureSchools', () => onStatusUpdate?.('settings.importStatusImporting', { item: 'Figure Schools' }))
+              .node('data.figureSchools.*', (item) => { writePromises.push(getDb().then(d => d.put(FIGURE_SCHOOLS_STORE, item))); return oboe.drop; })
+              .on('path', 'data.lessonInstructors', () => onStatusUpdate?.('settings.importStatusImporting', { item: 'Lesson Instructors' }))
+              .node('data.lessonInstructors.*', (item) => { writePromises.push(getDb().then(d => d.put(LESSON_INSTRUCTORS_STORE, item))); return oboe.drop; })
+              .on('path', 'data.figureInstructors', () => onStatusUpdate?.('settings.importStatusImporting', { item: 'Figure Instructors' }))
+              .node('data.figureInstructors.*', (item) => { writePromises.push(getDb().then(d => d.put(FIGURE_INSTRUCTORS_STORE, item))); return oboe.drop; })
               
               .on('path', 'data.settings', (item) => { onStatusUpdate?.('settings.importStatusImporting', { item: 'Settings' }); writePromises.push(getDb().then(d => d.put(SETTINGS_STORE, item, SYNC_SETTINGS_KEY))); return oboe.drop; })
               

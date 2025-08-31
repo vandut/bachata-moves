@@ -33,16 +33,24 @@ export interface LocalDatabaseService {
   deleteLessonCategory(categoryId: string): Promise<void>;
 
   // Schools
-  getSchools(): Promise<School[]>;
-  addSchool(name: string, driveId?: string): Promise<School>;
-  updateSchool(id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School>;
-  deleteSchool(id: string): Promise<void>;
+  getLessonSchools(): Promise<School[]>;
+  addLessonSchool(name: string, driveId?: string): Promise<School>;
+  updateLessonSchool(id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School>;
+  deleteLessonSchool(id: string): Promise<void>;
+  getFigureSchools(): Promise<School[]>;
+  addFigureSchool(name: string, driveId?: string): Promise<School>;
+  updateFigureSchool(id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School>;
+  deleteFigureSchool(id: string): Promise<void>;
   
   // Instructors
-  getInstructors(): Promise<Instructor[]>;
-  addInstructor(name: string, driveId?: string): Promise<Instructor>;
-  updateInstructor(id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor>;
-  deleteInstructor(id: string): Promise<void>;
+  getLessonInstructors(): Promise<Instructor[]>;
+  addLessonInstructor(name: string, driveId?: string): Promise<Instructor>;
+  updateLessonInstructor(id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor>;
+  deleteLessonInstructor(id: string): Promise<void>;
+  getFigureInstructors(): Promise<Instructor[]>;
+  addFigureInstructor(name: string, driveId?: string): Promise<Instructor>;
+  updateFigureInstructor(id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor>;
+  deleteFigureInstructor(id: string): Promise<void>;
 
   // Settings
   getRawSettings(): Promise<{ device: Partial<AppSettings> | undefined; sync: Partial<AppSettings> | undefined; }>;
@@ -76,13 +84,15 @@ const generateId = (): string => `${Date.now()}-${Math.random().toString(36).sub
 
 // --- IndexedDB Configuration ---
 const DB_NAME = 'bachata-moves-db';
-const DB_VERSION = 13; // Incremented for tombstone store
+const DB_VERSION = 14; // Incremented for separate schools/instructors stores
 export const LESSONS_STORE = 'lessons';
 export const FIGURES_STORE = 'figures';
 export const FIGURE_CATEGORIES_STORE = 'figure_categories';
 export const LESSON_CATEGORIES_STORE = 'lesson_categories';
-export const SCHOOLS_STORE = 'schools';
-export const INSTRUCTORS_STORE = 'instructors';
+export const LESSON_SCHOOLS_STORE = 'lesson_schools';
+export const FIGURE_SCHOOLS_STORE = 'figure_schools';
+export const LESSON_INSTRUCTORS_STORE = 'lesson_instructors';
+export const FIGURE_INSTRUCTORS_STORE = 'figure_instructors';
 export const SETTINGS_STORE = 'settings';
 export const VIDEO_FILES_STORE = 'video_files';
 export const LESSON_THUMBNAILS_STORE = 'lesson_thumbnails';
@@ -95,6 +105,8 @@ export const SYNC_SETTINGS_KEY = 'sync-settings';
 
 const LEGACY_VIDEOS_STORE = 'videos';
 const DELETED_DRIVE_IDS_STORE = 'deleted_drive_ids'; // Legacy, will be removed
+const SCHOOLS_STORE = 'schools'; // Legacy
+const INSTRUCTORS_STORE = 'instructors'; // Legacy
 
 export async function openBachataDB(): Promise<IDBPDatabase> {
   return openDB(DB_NAME, DB_VERSION, {
@@ -111,12 +123,6 @@ export async function openBachataDB(): Promise<IDBPDatabase> {
       }
       if (!db.objectStoreNames.contains(LESSON_CATEGORIES_STORE)) {
         db.createObjectStore(LESSON_CATEGORIES_STORE, { keyPath: 'id' });
-      }
-       if (!db.objectStoreNames.contains(SCHOOLS_STORE)) {
-        db.createObjectStore(SCHOOLS_STORE, { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains(INSTRUCTORS_STORE)) {
-        db.createObjectStore(INSTRUCTORS_STORE, { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
         db.createObjectStore(SETTINGS_STORE);
@@ -157,17 +163,53 @@ export async function openBachataDB(): Promise<IDBPDatabase> {
       if (!figuresStore.indexNames.contains('driveId')) figuresStore.createIndex('driveId', 'driveId', { unique: true, multiEntry: false });
 
       // Version-based Migrations
-      if (oldVersion < 12) {
-          const storesWithSync = [SCHOOLS_STORE, INSTRUCTORS_STORE];
-          for (const storeName of storesWithSync) {
-              const store = tx.objectStore(storeName as any);
-              if (!store.indexNames.contains('driveId')) {
-                  store.createIndex('driveId', 'driveId', { unique: false });
-              }
-               if (!store.indexNames.contains('modifiedTime')) {
-                  store.createIndex('modifiedTime', 'modifiedTime', { unique: false });
-              }
+      if (oldVersion < 14) {
+        logger.info('Running DB migration for v14: Separating schools and instructors stores...');
+        
+        const newStores = [
+          LESSON_SCHOOLS_STORE, LESSON_INSTRUCTORS_STORE,
+          FIGURE_SCHOOLS_STORE, FIGURE_INSTRUCTORS_STORE
+        ];
+        for (const storeName of newStores) {
+          if (!db.objectStoreNames.contains(storeName)) {
+            const store = db.createObjectStore(storeName, { keyPath: 'id' });
+            store.createIndex('driveId', 'driveId', { unique: false });
           }
+        }
+        
+        if (tx.objectStoreNames.contains(SCHOOLS_STORE)) {
+          logger.info('Migrating data from old SCHOOLS_STORE...');
+          const schools = await tx.objectStore(SCHOOLS_STORE).getAll();
+          const lessonSchoolsStore = tx.objectStore(LESSON_SCHOOLS_STORE);
+          const figureSchoolsStore = tx.objectStore(FIGURE_SCHOOLS_STORE);
+          for (const school of schools) {
+            await Promise.all([
+              lessonSchoolsStore.put(school),
+              figureSchoolsStore.put(school)
+            ]);
+          }
+        }
+        if (tx.objectStoreNames.contains(INSTRUCTORS_STORE)) {
+          logger.info('Migrating data from old INSTRUCTORS_STORE...');
+          const instructors = await tx.objectStore(INSTRUCTORS_STORE).getAll();
+          const lessonInstructorsStore = tx.objectStore(LESSON_INSTRUCTORS_STORE);
+          const figureInstructorsStore = tx.objectStore(FIGURE_INSTRUCTORS_STORE);
+          for (const instructor of instructors) {
+             await Promise.all([
+                lessonInstructorsStore.put(instructor),
+                figureInstructorsStore.put(instructor)
+             ]);
+          }
+        }
+
+        if (db.objectStoreNames.contains(SCHOOLS_STORE)) {
+            db.deleteObjectStore(SCHOOLS_STORE);
+            logger.info('Deleted old SCHOOLS_STORE.');
+        }
+        if (db.objectStoreNames.contains(INSTRUCTORS_STORE)) {
+            db.deleteObjectStore(INSTRUCTORS_STORE);
+            logger.info('Deleted old INSTRUCTORS_STORE.');
+        }
       }
     },
   });
@@ -461,77 +503,111 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     this.notify();
   }
 
-  // --- Schools ---
-  public getSchools = async (): Promise<School[]> => {
+  // --- Schools (Lesson) ---
+  public getLessonSchools = async (): Promise<School[]> => {
     const db = await openBachataDB();
-    return await db.getAll(SCHOOLS_STORE);
+    return await db.getAll(LESSON_SCHOOLS_STORE);
   }
-
-  public addSchool = async (name: string, driveId?: string): Promise<School> => {
+  public addLessonSchool = async (name: string, driveId?: string): Promise<School> => {
     const db = await openBachataDB();
-    const newSchool: School = { 
-      id: generateId(), 
-      name, 
-      driveId, 
-    };
-    await db.put(SCHOOLS_STORE, newSchool);
+    const newSchool: School = { id: generateId(), name, driveId };
+    await db.put(LESSON_SCHOOLS_STORE, newSchool);
     this.notify();
     return newSchool;
   }
-
-  public updateSchool = async (id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School> => {
+  public updateLessonSchool = async (id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School> => {
     const db = await openBachataDB();
-    const school = await db.get(SCHOOLS_STORE, id);
-    if (!school) throw new Error(`School with id "${id}" not found.`);
-    const updatedSchool = { 
-        ...school, 
-        ...updateData, 
-    };
-    await db.put(SCHOOLS_STORE, updatedSchool);
+    const school = await db.get(LESSON_SCHOOLS_STORE, id);
+    if (!school) throw new Error(`Lesson School with id "${id}" not found.`);
+    const updatedSchool = { ...school, ...updateData };
+    await db.put(LESSON_SCHOOLS_STORE, updatedSchool);
     this.notify();
     return updatedSchool;
   }
-
-  public deleteSchool = async (id: string): Promise<void> => {
+  public deleteLessonSchool = async (id: string): Promise<void> => {
     const db = await openBachataDB();
-    await db.delete(SCHOOLS_STORE, id);
+    await db.delete(LESSON_SCHOOLS_STORE, id);
     this.notify();
   }
 
-  // --- Instructors ---
-  public getInstructors = async (): Promise<Instructor[]> => {
+  // --- Schools (Figure) ---
+  public getFigureSchools = async (): Promise<School[]> => {
     const db = await openBachataDB();
-    return await db.getAll(INSTRUCTORS_STORE);
+    return await db.getAll(FIGURE_SCHOOLS_STORE);
+  }
+  public addFigureSchool = async (name: string, driveId?: string): Promise<School> => {
+    const db = await openBachataDB();
+    const newSchool: School = { id: generateId(), name, driveId };
+    await db.put(FIGURE_SCHOOLS_STORE, newSchool);
+    this.notify();
+    return newSchool;
+  }
+  public updateFigureSchool = async (id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School> => {
+    const db = await openBachataDB();
+    const school = await db.get(FIGURE_SCHOOLS_STORE, id);
+    if (!school) throw new Error(`Figure School with id "${id}" not found.`);
+    const updatedSchool = { ...school, ...updateData };
+    await db.put(FIGURE_SCHOOLS_STORE, updatedSchool);
+    this.notify();
+    return updatedSchool;
+  }
+  public deleteFigureSchool = async (id: string): Promise<void> => {
+    const db = await openBachataDB();
+    await db.delete(FIGURE_SCHOOLS_STORE, id);
+    this.notify();
   }
 
-  public addInstructor = async (name: string, driveId?: string): Promise<Instructor> => {
+  // --- Instructors (Lesson) ---
+  public getLessonInstructors = async (): Promise<Instructor[]> => {
     const db = await openBachataDB();
-    const newInstructor: Instructor = { 
-      id: generateId(), 
-      name, 
-      driveId, 
-    };
-    await db.put(INSTRUCTORS_STORE, newInstructor);
+    return await db.getAll(LESSON_INSTRUCTORS_STORE);
+  }
+  public addLessonInstructor = async (name: string, driveId?: string): Promise<Instructor> => {
+    const db = await openBachataDB();
+    const newInstructor: Instructor = { id: generateId(), name, driveId };
+    await db.put(LESSON_INSTRUCTORS_STORE, newInstructor);
     this.notify();
     return newInstructor;
   }
-
-  public updateInstructor = async (id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor> => {
+  public updateLessonInstructor = async (id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor> => {
     const db = await openBachataDB();
-    const instructor = await db.get(INSTRUCTORS_STORE, id);
-    if (!instructor) throw new Error(`Instructor with id "${id}" not found.`);
-    const updatedInstructor = { 
-        ...instructor, 
-        ...updateData, 
-    };
-    await db.put(INSTRUCTORS_STORE, updatedInstructor);
+    const instructor = await db.get(LESSON_INSTRUCTORS_STORE, id);
+    if (!instructor) throw new Error(`Lesson Instructor with id "${id}" not found.`);
+    const updatedInstructor = { ...instructor, ...updateData };
+    await db.put(LESSON_INSTRUCTORS_STORE, updatedInstructor);
     this.notify();
     return updatedInstructor;
   }
-
-  public deleteInstructor = async (id: string): Promise<void> => {
+  public deleteLessonInstructor = async (id: string): Promise<void> => {
     const db = await openBachataDB();
-    await db.delete(INSTRUCTORS_STORE, id);
+    await db.delete(LESSON_INSTRUCTORS_STORE, id);
+    this.notify();
+  }
+
+  // --- Instructors (Figure) ---
+  public getFigureInstructors = async (): Promise<Instructor[]> => {
+    const db = await openBachataDB();
+    return await db.getAll(FIGURE_INSTRUCTORS_STORE);
+  }
+  public addFigureInstructor = async (name: string, driveId?: string): Promise<Instructor> => {
+    const db = await openBachataDB();
+    const newInstructor: Instructor = { id: generateId(), name, driveId };
+    await db.put(FIGURE_INSTRUCTORS_STORE, newInstructor);
+    this.notify();
+    return newInstructor;
+  }
+  public updateFigureInstructor = async (id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor> => {
+    const db = await openBachataDB();
+    const instructor = await db.get(FIGURE_INSTRUCTORS_STORE, id);
+    if (!instructor) throw new Error(`Figure Instructor with id "${id}" not found.`);
+    const updatedInstructor = { ...instructor, ...updateData };
+    await db.put(FIGURE_INSTRUCTORS_STORE, updatedInstructor);
+    this.notify();
+    return updatedInstructor;
+  }
+  public deleteFigureInstructor = async (id: string): Promise<void> => {
+    const db = await openBachataDB();
+    await db.delete(FIGURE_INSTRUCTORS_STORE, id);
     this.notify();
   }
 

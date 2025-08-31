@@ -49,13 +49,13 @@ const CustomizeGroupingScreen: React.FC = () => {
         return type === 'lesson'
             ? {
                 getCategories: localDatabaseService.getLessonCategories, addCategory: localDatabaseService.addLessonCategory, updateCategory: localDatabaseService.updateLessonCategory, deleteCategory: dataService.deleteLessonCategory,
-                getSchools: localDatabaseService.getSchools, addSchool: localDatabaseService.addSchool, updateSchool: localDatabaseService.updateSchool, deleteSchool: dataService.deleteSchool,
-                getInstructors: localDatabaseService.getInstructors, addInstructor: localDatabaseService.addInstructor, updateInstructor: localDatabaseService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
+                getSchools: localDatabaseService.getLessonSchools, addSchool: localDatabaseService.addLessonSchool, updateSchool: localDatabaseService.updateLessonSchool, deleteSchool: dataService.deleteLessonSchool,
+                getInstructors: localDatabaseService.getLessonInstructors, addInstructor: localDatabaseService.addLessonInstructor, updateInstructor: localDatabaseService.updateLessonInstructor, deleteInstructor: dataService.deleteLessonInstructor,
             }
             : {
                 getCategories: localDatabaseService.getFigureCategories, addCategory: localDatabaseService.addFigureCategory, updateCategory: localDatabaseService.updateFigureCategory, deleteCategory: dataService.deleteFigureCategory,
-                getSchools: localDatabaseService.getSchools, addSchool: localDatabaseService.addSchool, updateSchool: localDatabaseService.updateSchool, deleteSchool: dataService.deleteSchool,
-                getInstructors: localDatabaseService.getInstructors, addInstructor: localDatabaseService.addInstructor, updateInstructor: localDatabaseService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
+                getSchools: localDatabaseService.getFigureSchools, addSchool: localDatabaseService.addFigureSchool, updateSchool: localDatabaseService.updateFigureSchool, deleteSchool: dataService.deleteFigureSchool,
+                getInstructors: localDatabaseService.getFigureInstructors, addInstructor: localDatabaseService.addFigureInstructor, updateInstructor: localDatabaseService.updateFigureInstructor, deleteInstructor: dataService.deleteFigureInstructor,
             };
     }, [type]);
 

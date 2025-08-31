@@ -290,8 +290,8 @@ class SettingsServiceImpl implements SettingsService {
     const syncSettingsInDb = await this.localDB.getRawSettings().then(s => s.sync);
 
     const [dbCategories, dbSchools, dbInstructors] = await Promise.all(type === 'lesson' 
-      ? [this.localDB.getLessonCategories(), this.localDB.getSchools(), this.localDB.getInstructors()]
-      : [this.localDB.getFigureCategories(), this.localDB.getSchools(), this.localDB.getInstructors()]
+      ? [this.localDB.getLessonCategories(), this.localDB.getLessonSchools(), this.localDB.getLessonInstructors()]
+      : [this.localDB.getFigureCategories(), this.localDB.getFigureSchools(), this.localDB.getFigureInstructors()]
     );
 
     const uncategorizedItem: RemoteGroupingItem = { id: UNCATEGORIZED_ID, name: 'Uncategorized' };
@@ -374,12 +374,18 @@ class SettingsServiceImpl implements SettingsService {
                     await updateItem(localItem.id, { name: remoteItem.name, driveId: remoteItem.driveId });
                 }
             } else {
-                await addItem(remoteItem.name, remoteItem.driveId);
+                // If a local item exists with the same name, assume it's the same and update its ID.
+                const localItemByName = localItems.find(li => li.name === remoteItem.name);
+                if (localItemByName) {
+                     await updateItem(localItemByName.id, { name: remoteItem.name, driveId: remoteItem.driveId });
+                } else {
+                    await addItem(remoteItem.name, remoteItem.driveId);
+                }
             }
         }
         // Delete
         for (const localItem of localItems) {
-            if (!remoteMap.has(localItem.id)) {
+            if (!remoteMap.has(localItem.id) && !remoteItems.some(ri => ri.name === localItem.name)) {
                 await deleteItem(localItem.id);
             }
         }
@@ -387,11 +393,13 @@ class SettingsServiceImpl implements SettingsService {
 
     if (type === 'lesson') {
         await syncItems(categories, this.localDB.getLessonCategories, this.localDB.addLessonCategory, this.localDB.updateLessonCategory, this.localDB.deleteLessonCategory);
+        await syncItems(schools, this.localDB.getLessonSchools, this.localDB.addLessonSchool, this.localDB.updateLessonSchool, this.localDB.deleteLessonSchool);
+        await syncItems(instructors, this.localDB.getLessonInstructors, this.localDB.addLessonInstructor, this.localDB.updateLessonInstructor, this.localDB.deleteLessonInstructor);
     } else {
         await syncItems(categories, this.localDB.getFigureCategories, this.localDB.addFigureCategory, this.localDB.updateFigureCategory, this.localDB.deleteFigureCategory);
+        await syncItems(schools, this.localDB.getFigureSchools, this.localDB.addFigureSchool, this.localDB.updateFigureSchool, this.localDB.deleteFigureSchool);
+        await syncItems(instructors, this.localDB.getFigureInstructors, this.localDB.addFigureInstructor, this.localDB.updateFigureInstructor, this.localDB.deleteFigureInstructor);
     }
-    await syncItems(schools, this.localDB.getSchools, this.localDB.addSchool, this.localDB.updateSchool, this.localDB.deleteSchool);
-    await syncItems(instructors, this.localDB.getInstructors, this.localDB.addInstructor, this.localDB.updateInstructor, this.localDB.deleteInstructor);
 
     const settingsUpdate: Partial<AppSettings> = type === 'lesson'
         ? {

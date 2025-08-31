@@ -119,9 +119,11 @@ const EditorScreen: React.FC = () => {
                 let videoLessonSource: Lesson | undefined;
                 let thumbPromise: Promise<string | null> | null = null;
                 
+                // FIX: Replaced calls to deprecated `localDatabaseService.getSchools()` and `getInstructors()`
+                // with context-aware calls to `getLessonSchools`/`getFigureSchools` etc. based on the editing context.
                 const [fetchedSchools, fetchedInstructors] = await Promise.all([
-                    localDatabaseService.getSchools(),
-                    localDatabaseService.getInstructors(),
+                    isEditingLesson ? localDatabaseService.getLessonSchools() : localDatabaseService.getFigureSchools(),
+                    isEditingLesson ? localDatabaseService.getLessonInstructors() : localDatabaseService.getFigureInstructors(),
                 ]);
                 if (isCancelled) return;
                 setSchools(fetchedSchools);

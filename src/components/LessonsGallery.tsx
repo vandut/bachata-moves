@@ -207,8 +207,8 @@ const LessonsGallery: React.FC = () => {
     Promise.all([
         localDatabaseService.getLessons(),
         localDatabaseService.getLessonCategories(),
-        localDatabaseService.getSchools(),
-        localDatabaseService.getInstructors(),
+        localDatabaseService.getLessonSchools(),
+        localDatabaseService.getLessonInstructors(),
     ]).then(([fetchedLessons, fetchedCategories, fetchedSchools, fetchedInstructors]) => {
         setLessons(fetchedLessons);
         setLessonCategories(fetchedCategories);
