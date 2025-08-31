@@ -20,9 +20,13 @@ const SyncStatus: React.FC = () => {
     }, []);
 
     const getTaskName = (task: SyncTask) => {
-        if (task.type === 'sync-settings') {
+        if (task.type === 'sync-gallery') {
             const typeName = t(`sync.type_${task.payload.type}`);
-            return t('sync.task_sync_settings', { type: typeName });
+            return t('sync.task_sync_gallery', { type: typeName });
+        }
+        if (task.type === 'sync-grouping-config') {
+            const typeName = t(`sync.type_${task.payload.type}`);
+            return t('sync.task_sync_grouping_config', { type: typeName });
         }
         return task.type;
     };

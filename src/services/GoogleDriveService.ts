@@ -32,6 +32,8 @@ export interface GoogleDriveService {
   signOut(): void;
   listFiles(folderPath: string): Promise<DriveFile[]>;
   readJsonFile<T>(filePath: string): Promise<T | null>;
+  readJsonFileWithMetadata<T>(filePath: string): Promise<{ content: T, metadata: DriveFile } | null>;
+  readJsonFileWithMetadataById<T>(fileId: string): Promise<{ content: T, metadata: DriveFile } | null>;
   readBinaryFile(filePath: string): Promise<Blob | null>;
   readJsonFileById<T>(fileId: string): Promise<T | null>;
   readBinaryFileById(fileId: string): Promise<Blob | null>;
@@ -124,6 +126,24 @@ class GoogleDriveServiceImpl implements GoogleDriveService {
   public async readBinaryFileById(fileId: string): Promise<Blob | null> {
     if (!this.api) throw new Error("Not signed in.");
     return this.api.downloadBlob(fileId);
+  }
+
+  public async readJsonFileWithMetadata<T>(filePath: string): Promise<{ content: T; metadata: DriveFile; } | null> {
+      if (!this.api) throw new Error("Not signed in.");
+      const file = await this._getFile(filePath);
+      if (!file) return null;
+      const content = await this.api.downloadJson<T>(file.id);
+      if (content === null) return null;
+      return { content, metadata: file };
+  }
+
+  public async readJsonFileWithMetadataById<T>(fileId: string): Promise<{ content: T; metadata: DriveFile; } | null> {
+      if (!this.api) throw new Error("Not signed in.");
+      const file = await this.api.getFile(fileId);
+      if (!file) return null;
+      const content = await this.api.downloadJson<T>(file.id);
+      if (content === null) return null;
+      return { content, metadata: file };
   }
 
   public async writeFile(filePath: string, content: string | Blob, mimeType: string): Promise<DriveFile> {

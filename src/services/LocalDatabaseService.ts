@@ -22,25 +22,25 @@ export interface LocalDatabaseService {
 
   // Figure Categories
   getFigureCategories(): Promise<FigureCategory[]>;
-  addFigureCategory(categoryName: string): Promise<FigureCategory>;
+  addFigureCategory(categoryName: string, driveId?: string): Promise<FigureCategory>;
   updateFigureCategory(categoryId: string, categoryUpdateData: Partial<Omit<FigureCategory, 'id'>>): Promise<FigureCategory>;
   deleteFigureCategory(categoryId: string): Promise<void>;
   
   // Lesson Categories
   getLessonCategories(): Promise<LessonCategory[]>;
-  addLessonCategory(categoryName: string): Promise<LessonCategory>;
+  addLessonCategory(categoryName: string, driveId?: string): Promise<LessonCategory>;
   updateLessonCategory(categoryId: string, categoryUpdateData: Partial<Omit<LessonCategory, 'id'>>): Promise<LessonCategory>;
   deleteLessonCategory(categoryId: string): Promise<void>;
 
   // Schools
   getSchools(): Promise<School[]>;
-  addSchool(name: string): Promise<School>;
+  addSchool(name: string, driveId?: string): Promise<School>;
   updateSchool(id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School>;
   deleteSchool(id: string): Promise<void>;
   
   // Instructors
   getInstructors(): Promise<Instructor[]>;
-  addInstructor(name: string): Promise<Instructor>;
+  addInstructor(name: string, driveId?: string): Promise<Instructor>;
   updateInstructor(id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor>;
   deleteInstructor(id: string): Promise<void>;
 
@@ -391,12 +391,12 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     return await db.getAll(FIGURE_CATEGORIES_STORE);
   }
   
-  public addFigureCategory = async (categoryName: string): Promise<FigureCategory> => {
+  public addFigureCategory = async (categoryName: string, driveId?: string): Promise<FigureCategory> => {
     const db = await openBachataDB();
     const newCategory: FigureCategory = {
       id: generateId(),
       name: categoryName,
-      modifiedTime: new Date().toISOString(),
+      driveId: driveId,
     };
     await db.put(FIGURE_CATEGORIES_STORE, newCategory);
     this.notify();
@@ -411,7 +411,6 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const updatedCategory = { 
         ...category, 
         ...categoryUpdateData, 
-        modifiedTime: categoryUpdateData.modifiedTime || new Date().toISOString() 
     };
     await db.put(FIGURE_CATEGORIES_STORE, updatedCategory);
     this.notify();
@@ -430,12 +429,12 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     return await db.getAll(LESSON_CATEGORIES_STORE);
   }
   
-  public addLessonCategory = async (categoryName: string): Promise<LessonCategory> => {
+  public addLessonCategory = async (categoryName: string, driveId?: string): Promise<LessonCategory> => {
     const db = await openBachataDB();
     const newCategory: LessonCategory = {
       id: generateId(),
       name: categoryName,
-      modifiedTime: new Date().toISOString(),
+      driveId: driveId,
     };
     await db.put(LESSON_CATEGORIES_STORE, newCategory);
     this.notify();
@@ -450,7 +449,6 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const updatedCategory = { 
         ...category, 
         ...categoryUpdateData, 
-        modifiedTime: categoryUpdateData.modifiedTime || new Date().toISOString() 
     };
     await db.put(LESSON_CATEGORIES_STORE, updatedCategory);
     this.notify();
@@ -469,9 +467,13 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     return await db.getAll(SCHOOLS_STORE);
   }
 
-  public addSchool = async (name: string): Promise<School> => {
+  public addSchool = async (name: string, driveId?: string): Promise<School> => {
     const db = await openBachataDB();
-    const newSchool: School = { id: generateId(), name, modifiedTime: new Date().toISOString() };
+    const newSchool: School = { 
+      id: generateId(), 
+      name, 
+      driveId, 
+    };
     await db.put(SCHOOLS_STORE, newSchool);
     this.notify();
     return newSchool;
@@ -484,7 +486,6 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const updatedSchool = { 
         ...school, 
         ...updateData, 
-        modifiedTime: updateData.modifiedTime || new Date().toISOString() 
     };
     await db.put(SCHOOLS_STORE, updatedSchool);
     this.notify();
@@ -503,9 +504,13 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     return await db.getAll(INSTRUCTORS_STORE);
   }
 
-  public addInstructor = async (name: string): Promise<Instructor> => {
+  public addInstructor = async (name: string, driveId?: string): Promise<Instructor> => {
     const db = await openBachataDB();
-    const newInstructor: Instructor = { id: generateId(), name, modifiedTime: new Date().toISOString() };
+    const newInstructor: Instructor = { 
+      id: generateId(), 
+      name, 
+      driveId, 
+    };
     await db.put(INSTRUCTORS_STORE, newInstructor);
     this.notify();
     return newInstructor;
@@ -518,7 +523,6 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const updatedInstructor = { 
         ...instructor, 
         ...updateData, 
-        modifiedTime: updateData.modifiedTime || new Date().toISOString() 
     };
     await db.put(INSTRUCTORS_STORE, updatedInstructor);
     this.notify();

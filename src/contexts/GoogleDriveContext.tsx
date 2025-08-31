@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, createContext, useContext, ReactNode, useMemo } from 'react';
 import type { UserProfile } from '../api/GoogleIdentityAPI';
-import type { FigureCategory, LessonCategory, School, Instructor } from '../types';
-import { syncQueueService, type SyncTask } from '../services/SyncQueueService';
+import { syncQueueService, type SyncTask, type SyncTaskType } from '../services/SyncQueueService';
 import { googleDriveService, type AuthState } from '../services/GoogleDriveService';
 
 interface GoogleDriveContextType {
@@ -14,11 +13,7 @@ interface GoogleDriveContextType {
   syncQueue: SyncTask[];
   isSyncActive: boolean;
   initiateSync: (type: 'lesson' | 'figure') => void;
-  forceUploadGroupingConfig: (type: 'lesson' | 'figure') => Promise<void>;
-  forceAddItem: (itemData: any, type: 'lesson' | 'figure', options?: any) => Promise<any>;
-  forceUpdateItem: (itemId: string, itemData: any, type: 'lesson' | 'figure') => Promise<any>;
-  forceDeleteItem: (item: any) => Promise<void>;
-  forceDeleteGroupingItem(item: FigureCategory | LessonCategory | School | Instructor, itemType: 'category' | 'school' | 'instructor', galleryType: 'lesson' | 'figure'): Promise<void>;
+  addTask: (type: SyncTaskType, payload?: any, isPriority?: boolean) => void;
 }
 
 const GoogleDriveContext = createContext<GoogleDriveContextType | undefined>(undefined);
@@ -58,7 +53,6 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
   }, [authState.isSignedIn]);
 
   const value = useMemo(() => ({
-    // FIX: Explicitly map properties from authState to the context type, renaming 'error' to 'syncError'.
     isGisReady: authState.isGisReady,
     isSignedIn: authState.isSignedIn,
     userProfile: authState.userProfile,
@@ -68,11 +62,7 @@ export const GoogleDriveProvider: React.FC<{ children: ReactNode }> = ({ childre
     syncQueue,
     isSyncActive: syncQueueService.getIsActive(),
     initiateSync,
-    forceUploadGroupingConfig: syncQueueService.forceUploadGroupingConfig,
-    forceAddItem: syncQueueService.forceAddItem,
-    forceUpdateItem: syncQueueService.forceUpdateItem,
-    forceDeleteItem: syncQueueService.forceDeleteItem,
-    forceDeleteGroupingItem: syncQueueService.forceDeleteGroupingItem,
+    addTask: syncQueueService.addTask,
   }), [authState, syncQueue, initiateSync]);
 
   return React.createElement(GoogleDriveContext.Provider, { value }, children);

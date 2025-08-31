@@ -50,8 +50,10 @@
       display: none !important;
     }
 
-    /* Fix for date picker icon color on some browsers */
-    input[type="date"] {
+    /* Force light theme on form controls to avoid dark OS theme issues */
+    input,
+    select,
+    textarea {
       color-scheme: light;
     }
 
@@ -79,7 +81,8 @@
     "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
     "react/": "https://esm.sh/react@^19.1.0/",
     "react-router-dom": "https://esm.sh/react-router-dom@^7.7.0",
-    "idb": "https://esm.sh/idb@8"
+    "idb": "https://esm.sh/idb@8",
+    "oboe": "https://esm.sh/oboe@2.1.6"
   }
 }
 </script>

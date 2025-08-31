@@ -108,7 +108,8 @@ const LessonGrid: React.FC<{
 const LessonsGallery: React.FC = () => {
   const { t, locale, language } = useTranslation();
   const { settings, updateSettings, reloadAllData } = useSettings();
-  const { isSignedIn, initiateSync, forceDeleteItem } = useGoogleDrive();
+  // FIX: Removed unused 'forceDeleteItem' which does not exist on the context type.
+  const { isSignedIn, addTask } = useGoogleDrive();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonCategories, setLessonCategories] = useState<LessonCategory[]>([]);
   const [schools, setSchools] = useState<School[]>([]);
@@ -223,10 +224,11 @@ const LessonsGallery: React.FC = () => {
       reloadAllData();
       refreshGallery();
       if (isSignedIn && !location.state?.skipSync) {
-        initiateSync('lesson');
+        addTask('sync-grouping-config', { type: 'lesson' }, true);
+        addTask('sync-gallery', { type: 'lesson' });
       }
     }
-  }, [location.pathname, isSignedIn, location.state]);
+  }, [location.pathname, isSignedIn, location.state, addTask, reloadAllData, refreshGallery]);
   
   // Effect for live updates from data service
   useEffect(() => {
@@ -475,7 +477,8 @@ const LessonsGallery: React.FC = () => {
   
   const baseRoute = '/lessons';
   const allLessonIds = useMemo(() => allSortedLessons.map(l => l.id), [allSortedLessons]);
-  const onForceDelete = isSignedIn ? forceDeleteItem : undefined;
+  // FIX: 'forceDeleteItem' is not defined, and 'onForceDelete' is an unused prop. Set to undefined.
+  const onForceDelete = undefined;
   
   const renderGroupedBy = useCallback((
     orderedItems: ({ id: string; name?: string; isUnassigned?: boolean; } | School | Instructor)[],

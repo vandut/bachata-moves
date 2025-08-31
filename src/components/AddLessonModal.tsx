@@ -15,7 +15,7 @@ const AddLessonModal: React.FC = () => {
   const { refresh, isMobile } = useOutletContext<GalleryContext>();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { isSignedIn, forceAddItem } = useGoogleDrive();
+  const { isSignedIn, addTask } = useGoogleDrive();
 
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -144,10 +144,10 @@ const AddLessonModal: React.FC = () => {
         endTime: videoDurationMs,
       };
       
+      await dataService.addLesson(lessonData, videoFile);
+      
       if (isSignedIn) {
-        await forceAddItem(lessonData, 'lesson', { videoFile });
-      } else {
-        await dataService.addLesson(lessonData, videoFile);
+        addTask('sync-gallery', { type: 'lesson' }, true);
       }
       
       if (refresh) {

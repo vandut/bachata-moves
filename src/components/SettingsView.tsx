@@ -9,6 +9,7 @@ import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { isDev } from '../utils/logger';
 import { useSettings } from '../contexts/SettingsContext';
 import { APP_VERSION } from '../version';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 type Status = { type: 'success' | 'error'; message: string } | null;
 
@@ -22,8 +23,12 @@ const SettingsView: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
+  const [statusMessage, setStatusMessage] = useState('');
   
   const [dataManagementStatus, setDataManagementStatus] = useState<Status>(null);
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+  const [fileToImport, setFileToImport] = useState<File | null>(null);
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,25 +48,39 @@ const SettingsView: React.FC = () => {
   const handleExport = async () => {
     setIsExporting(true);
     setProgress(0);
+    setStatusMessage(t('settings.exporting'));
     setDataManagementStatus(null);
     try {
-        const dataBlob = await backupService.exportAllData((p) => setProgress(p));
-        const url = URL.createObjectURL(dataBlob);
-        const a = document.createElement('a');
-        const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
-        a.href = url;
-        a.download = `bachata-moves-export-${timestamp}.bin`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        const onStatusUpdate = (key: string, params?: { item: string }) => {
+            setStatusMessage(t(key, params));
+        };
+        const dataBlob = await backupService.exportAllData(setProgress, onStatusUpdate);
+        
+        // If dataBlob is null, the streaming API was used and the user handled the download.
+        // If dataBlob is returned, we are on the fallback path and must trigger the download.
+        if (dataBlob) {
+          const url = URL.createObjectURL(dataBlob);
+          const a = document.createElement('a');
+          const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, 19);
+          a.href = url;
+          a.download = `bachata-moves-export-${timestamp}.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+
         setDataManagementStatus({ type: 'success', message: t('settings.exportSuccess') });
-    } catch (err) {
+    } catch (err: any) {
         console.error("Export failed", err);
-        setDataManagementStatus({ type: 'error', message: t('settings.exportError') });
+        // Don't show an error if the user just cancelled the save dialog
+        if (err.name !== 'AbortError') {
+          setDataManagementStatus({ type: 'error', message: t('settings.exportError') });
+        }
     } finally {
         setIsExporting(false);
         setProgress(null);
+        setStatusMessage('');
     }
   };
 
@@ -70,26 +89,39 @@ const SettingsView: React.FC = () => {
       fileInputRef.current?.click();
   };
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      setIsImporting(true);
-      setProgress(0);
-      setDataManagementStatus(null);
-      try {
-          await backupService.importData(file, (p) => setProgress(p));
-          setDataManagementStatus({ type: 'success', message: t('settings.importSuccess')});
-          reloadAllData();
+      setFileToImport(file);
+      setShowImportConfirm(true);
+  };
 
-      } catch (err) {
-          console.error("Import failed", err);
-          setDataManagementStatus({ type: 'error', message: t('settings.importError')});
-      } finally {
-          setIsImporting(false);
-          setProgress(null);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-      }
+  const handleConfirmImport = async () => {
+    if (!fileToImport) return;
+
+    setShowImportConfirm(false);
+    setIsImporting(true);
+    setStatusMessage(t('settings.importing'));
+    setDataManagementStatus(null);
+    
+    try {
+        const onStatusUpdate = (key: string, params?: { item: string }) => {
+            setStatusMessage(t(key, params));
+        };
+        await backupService.importData(fileToImport, onStatusUpdate);
+        setDataManagementStatus({ type: 'success', message: t('settings.importSuccess')});
+        reloadAllData();
+    } catch (err) {
+        console.error("Import failed", err);
+        const errorMessage = (err instanceof Error && err.message) ? err.message : t('settings.importErrorGeneral');
+        setDataManagementStatus({ type: 'error', message: `${t('settings.importError')}: ${errorMessage}`});
+    } finally {
+        setIsImporting(false);
+        setFileToImport(null);
+        setStatusMessage('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const LANGUAGES = [
@@ -173,20 +205,22 @@ const SettingsView: React.FC = () => {
                     <button onClick={handleImportClick} disabled={isActionInProgress} className="w-full sm:w-auto bg-green-500 text-white font-bold py-2 px-4 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
                         {isImporting ? t('settings.importing') : t('settings.importData')}
                     </button>
-                    <input type="file" ref={fileInputRef} onChange={handleFileSelected} className="sr-only" accept=".bin,application/json" />
+                    <input type="file" ref={fileInputRef} onChange={handleFileSelected} className="sr-only" accept=".json" />
                 </div>
-                {(isExporting || isImporting) && progress !== null && (
+                {isActionInProgress && (
                     <div className="mt-4">
-                        <div className="text-center text-sm text-gray-600 mb-1">
-                            <span>{isExporting ? t('settings.exporting') : t('settings.importing')}</span>
-                            <span className="font-semibold ml-2">{Math.round(progress * 100)}%</span>
+                        <div className="flex items-center justify-center text-sm text-gray-600 mb-2">
+                            <i className="material-icons text-blue-600 animate-spin-reverse">sync</i>
+                            <span className="ml-2">{statusMessage}</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                            <div
-                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-200 ease-linear"
-                                style={{ width: `${progress * 100}%` }}
-                            ></div>
-                        </div>
+                        {isExporting && progress !== null && (
+                            <div className="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                                <div
+                                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-200 ease-linear"
+                                    style={{ width: `${progress * 100}%` }}
+                                ></div>
+                            </div>
+                        )}
                     </div>
                 )}
                 {dataManagementStatus && (
@@ -200,6 +234,16 @@ const SettingsView: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmDeleteModal
+        isOpen={showImportConfirm}
+        onClose={() => setShowImportConfirm(false)}
+        onConfirm={handleConfirmImport}
+        isDeleting={isImporting}
+        title={t('settings.importConfirmTitle')}
+      >
+        <p>{t('settings.importConfirmBody')}</p>
+        <p className="mt-2 font-semibold">{t('deleteModal.warning')}</p>
+      </ConfirmDeleteModal>
     </>
   );
 };

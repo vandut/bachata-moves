@@ -1,32 +1,33 @@
-import type { Lesson, Figure, FigureCategory, LessonCategory, School, Instructor } from '../types';
-import type { AppSettings } from '../contexts/SettingsContext';
-import type { GroupingConfig } from './SettingsService';
+import type { Lesson, Figure } from '../types';
 import type { LocalDatabaseService } from './LocalDatabaseService';
-import type { GoogleDriveService } from './GoogleDriveService';
-import type { ExternalStorageService, RemoteItem } from './ExternalStorageService';
 import { localDatabaseService } from './LocalDatabaseService';
 import { dataService } from './DataService';
-import { externalStorageService } from './ExternalStorageService';
-import { googleDriveService } from './GoogleDriveService';
-import { settingsService } from './SettingsService';
+import { googleDriveService, GoogleDriveService } from './GoogleDriveService';
+import { settingsService, SettingsService, RemoteGroupingConfig } from './SettingsService';
 import { createLogger } from '../utils/logger';
+import { GoogleDriveSyncApiImpl, GoogleDriveSyncApi } from '../api/GoogleDriveSyncApi';
+import { GoogleDriveApi, DriveFile } from '../api/GoogleDriveApi';
+import { GoogleDriveApiImpl } from '../api/GoogleDriveApi';
+
 
 const logger = createLogger('SyncQueue');
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+// --- Constants ---
+const FOLDERS = {
+    lessons: 'lessons',
+    figures: 'figures',
+    videos: 'videos'
+};
+const FILES = {
+    lessonGroupingConfig: 'lesson_grouping_config.json',
+    figureGroupingConfig: 'figure_grouping_config.json',
+};
 
 // --- Types and Interface (Encapsulated) ---
 export type SyncTaskType = 
   | 'sync-gallery'
-  | 'sync-grouping-config'
-  | 'sync-settings'
-  | 'sync-deleted-log'
-  | 'upload-lesson'
-  | 'download-lesson'
-  | 'upload-figure'
-  | 'download-figure'
-  | 'delete-local'
-  | 'delete-remote';
+  | 'sync-grouping-config';
 
 export interface SyncTask {
   id: string;
@@ -35,6 +36,7 @@ export interface SyncTask {
   status: 'pending' | 'in-progress' | 'error';
   createdAt: number;
   error?: string;
+  priority: number;
 }
 
 export interface SyncQueueService {
@@ -44,11 +46,6 @@ export interface SyncQueueService {
     startProcessing(): void;
     stopProcessing(): void;
     addTask(type: SyncTaskType, payload?: any, isPriority?: boolean): void;
-    forceAddItem(itemData: any, type: 'lesson' | 'figure', options?: any): Promise<any>;
-    forceUpdateItem(itemId: string, itemData: any, type: 'lesson' | 'figure'): Promise<any>;
-    forceDeleteItem(item: any): Promise<void>;
-    forceDeleteGroupingItem(item: FigureCategory | LessonCategory | School | Instructor, itemType: 'category' | 'school' | 'instructor', galleryType: 'lesson' | 'figure'): Promise<void>;
-    forceUploadGroupingConfig(type: 'lesson' | 'figure'): Promise<void>;
 }
 
 
@@ -58,24 +55,33 @@ class SyncQueueServiceImpl implements SyncQueueService {
     private listeners: Set<() => void> = new Set();
     private isProcessing = false;
     private localDB: LocalDatabaseService;
-    private externalStorageService: ExternalStorageService;
     private driveService: GoogleDriveService;
+    private settingsSvc: SettingsService;
+    private syncApi: GoogleDriveSyncApi;
+    private gdriveApi: GoogleDriveApi | null = null;
 
-    constructor(localDB: LocalDatabaseService, externalStorageService: ExternalStorageService, driveService: GoogleDriveService) {
+    constructor(localDB: LocalDatabaseService, driveService: GoogleDriveService, settingsSvc: SettingsService) {
         this.localDB = localDB;
-        this.externalStorageService = externalStorageService;
         this.driveService = driveService;
+        this.settingsSvc = settingsSvc;
+        this.syncApi = new GoogleDriveSyncApiImpl();
+
+        this.driveService.onAuthStateChanged(state => {
+            if (state.isSignedIn) {
+                const storedToken = localStorage.getItem('google_access_token');
+                if (storedToken) {
+                    this.gdriveApi = new GoogleDriveApiImpl(storedToken);
+                }
+            } else {
+                this.gdriveApi = null;
+            }
+        });
     }
 
     // --- Public Interface ---
 
-    public getQueue = (): SyncTask[] => {
-        return this.queue;
-    }
-
-    public getIsActive = (): boolean => {
-        return this.queue.some(task => task.status === 'in-progress' || task.status === 'pending');
-    }
+    public getQueue = (): SyncTask[] => this.queue;
+    public getIsActive = (): boolean => this.queue.some(task => task.status === 'in-progress' || task.status === 'pending');
 
     public subscribe = (listener: () => void): () => void => {
         this.listeners.add(listener);
@@ -83,266 +89,210 @@ class SyncQueueServiceImpl implements SyncQueueService {
     }
 
     public startProcessing = (): void => {
+        const token = localStorage.getItem('google_access_token');
+        if (token) {
+            this.gdriveApi = new GoogleDriveApiImpl(token);
+        }
         this.processNext();
     }
 
     public stopProcessing = (): void => {
         this.isProcessing = false;
-        // Reset in-progress tasks to pending so they can be resumed on next sign-in
         this.queue = this.queue.map(task => 
             task.status === 'in-progress' ? { ...task, status: 'pending' } : task
         );
+        this.gdriveApi = null;
         this.notify();
     }
 
     public addTask = (type: SyncTaskType, payload?: any, isPriority = false): void => {
-        const uniquePayloadIdentifier = type === 'sync-gallery' || type === 'sync-grouping-config' 
-            ? payload?.type 
-            : (payload?.id || payload?.remoteItem?.externalId || payload?.externalId);
+        const uniquePayloadIdentifier = payload?.type;
         if (this.isDuplicate(type, uniquePayloadIdentifier)) {
             logger.info(`Skipping duplicate task: ${type}`, payload);
             return;
         }
 
         const newTask: SyncTask = {
-            id: generateId(),
-            type,
-            payload,
-            status: 'pending',
-            createdAt: Date.now(),
+            id: generateId(), type, payload, status: 'pending', createdAt: Date.now(), priority: isPriority ? 1 : 0
         };
 
-        if (isPriority) {
-            this.queue.unshift(newTask);
-            logger.info('Added PRIORITY task:', newTask);
-        } else {
-            this.queue.push(newTask);
-            logger.info('Added task:', newTask);
-        }
+        this.queue.push(newTask);
+        
+        this.queue.sort((a, b) => {
+            if (a.priority !== b.priority) {
+                return b.priority - a.priority; // Higher priority first
+            }
+            return a.createdAt - b.createdAt; // Then older tasks first
+        });
 
-        this.queue.sort((a, b) => a.createdAt - b.createdAt);
         this.notify();
         this.processNext();
     }
     
-    // --- UI-Blocking ("Force") Operations ---
-
-    public forceAddItem = async (
-        itemData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'> | Omit<Figure, 'id'| 'lessonId'>, 
-        type: 'lesson' | 'figure', 
-        options?: { videoFile?: File, lessonId?: string }
-    ): Promise<Lesson | Figure> => {
-        if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot add item while not signed in.");
-        logger.info(`--- UI-BLOCK: Forcing ADD for ${type} ---`);
-        let newItem: Lesson | Figure;
-
-        if (type === 'lesson') {
-            if (!options?.videoFile) throw new Error("Video file is required to add a lesson.");
-            newItem = await dataService.addLesson(itemData as Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, options.videoFile);
-            logger.info(' > Lesson added locally:', newItem.id);
-            newItem = await this.uploadLesson(newItem.id);
-        } else { // type === 'figure'
-            if (!options?.lessonId) throw new Error("Lesson ID is required to add a figure.");
-            newItem = await dataService.addFigure(options.lessonId, itemData as Omit<Figure, 'id' | 'lessonId'>);
-            logger.info(' > Figure added locally:', newItem.id);
-            newItem = await this.uploadFigure(newItem.id);
-        }
-        logger.info('✅ Force add complete.');
-        return newItem;
-    };
-
-    public forceUpdateItem = async (
-        itemId: string, 
-        itemData: Partial<Omit<Lesson, 'id'>> | Partial<Omit<Figure, 'id'>>, 
-        type: 'lesson' | 'figure'
-    ): Promise<Lesson | Figure> => {
-        if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot update item while not signed in.");
-        logger.info(`--- UI-BLOCK: Forcing UPDATE for ${type} ${itemId} ---`);
-        let updatedItem: Lesson | Figure;
-
-        if (type === 'lesson') {
-            updatedItem = await dataService.updateLesson(itemId, itemData as Partial<Omit<Lesson, 'id'>>);
-            updatedItem = await this.uploadLesson(updatedItem.id);
-        } else {
-            updatedItem = await dataService.updateFigure(itemId, itemData as Partial<Omit<Figure, 'id'>>);
-            updatedItem = await this.uploadFigure(updatedItem.id);
-        }
-        logger.info('✅ Force update complete.');
-        return updatedItem;
-    };
-
-    public forceDeleteItem = async (item: Lesson | Figure): Promise<void> => {
-        if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot delete item while not signed in.");
-        const itemType = 'uploadDate' in item ? 'lesson' : 'figure';
-        logger.info(`--- UI-BLOCK: Forcing DELETE for ${itemType} ${item.id} ---`);
-
-        const driveIdsToDelete = itemType === 'lesson'
-            ? await dataService.deleteLesson(item.id)
-            : [await dataService.deleteFigure(item.id)].filter((id): id is string => !!id);
-
-        if (driveIdsToDelete.length > 0) {
-            await this.localDB.addTombstones(driveIdsToDelete);
-            this.addTask('sync-deleted-log', {}, true);
-        }
-        
-        logger.info(`✅ Force delete for ${itemType} ${item.id} processed locally. Sync queued.`);
-    };
-
-    public forceDeleteGroupingItem = async (item: FigureCategory | LessonCategory | School | Instructor, itemType: 'category' | 'school' | 'instructor', galleryType: 'lesson' | 'figure'): Promise<void> => {
-        if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot delete grouping item while not signed in.");
-        logger.info(`--- UI-BLOCK: Forcing DELETE for grouping item ${item.id} ---`);
-
-        let driveId: string | null = null;
-        if (itemType === 'category') {
-            driveId = galleryType === 'lesson'
-                ? await dataService.deleteLessonCategory(item.id)
-                : await dataService.deleteFigureCategory(item.id);
-        } else if (itemType === 'school') {
-            driveId = await dataService.deleteSchool(item.id);
-        } else if (itemType === 'instructor') {
-            driveId = await dataService.deleteInstructor(item.id);
-        }
-
-        if (driveId) {
-            await this.localDB.addTombstones([driveId]);
-            this.addTask('sync-deleted-log', {}, true);
-        }
-    }
-    
-    public forceUploadGroupingConfig = async (type: 'lesson' | 'figure'): Promise<void> => {
-        if (!this.driveService.getAuthState().isSignedIn) throw new Error("Cannot upload config while not signed in.");
-        logger.info(`--- UI-BLOCK: Forcing UPLOAD of grouping config for ${type} ---`);
-        await this.syncGroupingConfig(type);
-    };
-
     // --- Task Implementations ---
-    private syncGallery = async (type: 'lesson' | 'figure'): Promise<void> => {
+    private async syncGallery(type: 'lesson' | 'figure'): Promise<void> {
+        if (!this.gdriveApi) throw new Error("Not authenticated");
         logger.info(`--- Syncing Gallery: ${type.toUpperCase()} ---`);
-
-        const [remoteItems, localItems, tombstones] = await Promise.all([
-            this.externalStorageService.listRemoteItems(type),
+        
+        const folderName = type === 'lesson' ? FOLDERS.lessons : FOLDERS.figures;
+        
+        const [remoteJsonFiles, localItems, tombstones] = await Promise.all([
+            this.driveService.listFiles(`/${folderName}`),
             type === 'lesson' ? this.localDB.getLessons() : this.localDB.getFigures(),
             this.localDB.getTombstones()
         ]);
+        
+        const localFilesForPlan = localItems.map(item => ({
+            name: `${item.id}.json`,
+            modifiedTime: item.modifiedTime || '1970-01-01T00:00:00.000Z'
+        }));
+        
+        const plan = this.syncApi.planDirectorySync(localFilesForPlan, remoteJsonFiles, tombstones);
 
-        const remoteItemMap = new Map<string, RemoteItem>();
-        for (const remoteItem of remoteItems) {
-            if (remoteItem.name.endsWith('.json')) {
-                const localId = remoteItem.name.replace('.json', '');
-                remoteItemMap.set(localId, remoteItem);
-            }
+        // Execute Plan
+        for (const file of plan.filesToDelete) {
+            logger.info(`Deleting remote item by ID: ${file.id}`);
+            await this.deleteItemByJsonId(file.id, type);
+            await this.localDB.removeTombstones([file.id]);
+        }
+
+        for (const file of plan.filesToDownload) {
+            logger.info(`Downloading remote item: ${file.name}`);
+            if (type === 'lesson') await this.downloadLesson(file.id);
+            else await this.downloadFigure(file.id);
+        }
+
+        for (const file of plan.filesToUpload) {
+            logger.info(`Uploading local item: ${file.name}`);
+            const localId = file.name.replace('.json', '');
+            if (type === 'lesson') await this.uploadLesson(localId);
+            else await this.uploadFigure(localId);
         }
         
-        // FIX: Explicitly type the result of the map function to a tuple `[string, Lesson | Figure]`
-        // to ensure TypeScript correctly infers the type for the Map constructor.
-        const localItemMap = new Map<string, Lesson | Figure>(localItems.map((item: Lesson | Figure): [string, Lesson | Figure] => [item.id, item]));
-
-        // Check remote items against local
-        for (const remoteItem of remoteItems) {
-            if (!remoteItem.name.endsWith('.json')) continue;
-            
-            if (tombstones.includes(remoteItem.externalId)) {
-                this.addTask('delete-remote', { externalId: remoteItem.externalId });
-                continue;
-            }
-
-            const localId = remoteItem.name.replace('.json', '');
-            const localItem = localItemMap.get(localId);
-            if (!localItem || new Date(remoteItem.modifiedTime) > new Date(localItem.modifiedTime || 0)) {
-                this.addTask(type === 'lesson' ? 'download-lesson' : 'download-figure', { remoteItem });
-            }
-        }
-
-        // Check local items against remote
-        for (const localItem of localItems) {
-            const remoteItem = remoteItemMap.get(localItem.id);
-            if (!remoteItem || (localItem.modifiedTime && new Date(localItem.modifiedTime) > new Date(remoteItem.modifiedTime))) {
-                this.addTask(type === 'lesson' ? 'upload-lesson' : 'upload-figure', { id: localItem.id });
-            }
-        }
-        logger.info(`--- Gallery Sync Queued: ${type.toUpperCase()} ---`);
+        logger.info(`--- Gallery Sync Complete: ${type.toUpperCase()} ---`);
     }
 
-    private syncGroupingConfig = async (type: 'lesson' | 'figure'): Promise<void> => {
+    private async syncGroupingConfig(type: 'lesson' | 'figure'): Promise<void> {
+        if (!this.gdriveApi) throw new Error("Not authenticated");
         logger.info(`--- Syncing Grouping Config: ${type.toUpperCase()} ---`);
         
-        const [remoteConfig, localConfig] = await Promise.all([
-            this.externalStorageService.getRemoteGroupingConfig(type),
-            this.getLocalGroupingConfig(type)
-        ]);
+        const configFileName = type === 'lesson' ? FILES.lessonGroupingConfig : FILES.figureGroupingConfig;
+        const remoteFile = await this.driveService.readJsonFileWithMetadata<RemoteGroupingConfig>(`/${configFileName}`).then(r => r?.metadata || null);
+        const { content, modifiedTime } = await this.settingsSvc.getGroupingConfigForUpload(type);
         
-        if (!remoteConfig) {
-            logger.info('No remote grouping config found. Uploading local config.');
-            await this.externalStorageService.uploadGroupingConfig(type, localConfig);
-            return;
-        }
+        const localFile = {
+            name: configFileName,
+            content: new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' }),
+            modifiedTime: modifiedTime,
+        };
+        
+        const result = await this.syncApi.syncFile(localFile, remoteFile, this.gdriveApi, 'appDataFolder');
 
-        const remoteTime = new Date(remoteConfig.modifiedTime).getTime();
-        const localTime = new Date(localConfig.modifiedTime).getTime();
-
-        if (remoteTime > localTime) {
-            logger.info('Remote grouping config is newer. Applying remote changes locally.');
-            await this.applyRemoteGroupingConfig(remoteConfig, type);
-        } else if (localTime > remoteTime) {
-            logger.info('Local grouping config is newer. Uploading local changes.');
-            await this.externalStorageService.uploadGroupingConfig(type, localConfig);
+        if (result.outcome === 'downloaded' && result.downloadedContent && result.newTimestamp) {
+            logger.info(`Downloaded newer grouping config for ${type}. Applying.`);
+            const remoteContent = JSON.parse(await result.downloadedContent.text());
+            const remoteConfig: RemoteGroupingConfig = remoteContent;
+            await this.settingsSvc.applyRemoteGroupingConfig(type, remoteConfig, result.newTimestamp);
+        } else if (result.outcome === 'uploaded' && result.newTimestamp) {
+            logger.info(`Uploaded local grouping config for ${type}.`);
+            await this.settingsSvc.applyRemoteSettings({}, result.newTimestamp);
         } else {
-            logger.info('Grouping configs are in sync.');
+            logger.info(`Grouping config for ${type} is in sync.`);
         }
     }
 
-    private uploadLesson = async (lessonId: string): Promise<Lesson> => {
+    // --- Private Domain Logic Helpers ---
+    private async deleteItemByJsonId(jsonId: string, type: 'lesson' | 'figure'): Promise<void> {
+        if (type === 'lesson') {
+            const lessonData = await this.driveService.readJsonFileById<Lesson>(jsonId);
+            if (lessonData?.videoDriveId) {
+                await this.driveService.deleteFileById(lessonData.videoDriveId);
+            }
+        }
+        await this.driveService.deleteFileById(jsonId);
+    }
+    
+    private async downloadLesson(jsonId: string): Promise<void> {
+        const result = await this.driveService.readJsonFileWithMetadataById<Lesson>(jsonId);
+        if (!result) {
+            logger.warn(`Could not download lesson JSON and metadata for ID ${jsonId}`);
+            return;
+        }
+        const { content: lessonData, metadata } = result;
+    
+        if (lessonData?.videoDriveId) {
+            const videoBlob = await this.driveService.readBinaryFileById(lessonData.videoDriveId);
+            if (videoBlob) {
+                const lessonToSave = { ...lessonData, modifiedTime: metadata.modifiedTime };
+                await dataService.saveDownloadedLesson(lessonToSave, videoBlob);
+            } else {
+                logger.warn(`Could not download video blob for lesson ${lessonData.id}`);
+            }
+        } else {
+            logger.warn(`Lesson JSON ${jsonId} downloaded but had no videoDriveId.`);
+        }
+    }
+
+    private async downloadFigure(jsonId: string): Promise<void> {
+        const result = await this.driveService.readJsonFileWithMetadataById<Figure>(jsonId);
+        if (!result) {
+            logger.warn(`Could not download figure JSON and metadata for ID ${jsonId}`);
+            return;
+        }
+        const { content: figureData, metadata } = result;
+    
+        if (figureData) {
+            const figureToSave = { ...figureData, modifiedTime: metadata.modifiedTime };
+            await dataService.saveDownloadedFigure(figureToSave);
+        }
+    }
+    
+    private async uploadLesson(lessonId: string): Promise<void> {
         const lesson = await this.localDB.getLessons().then(l => l.find(x => x.id === lessonId));
         if (!lesson) throw new Error(`Cannot upload lesson ${lessonId}: not found in local DB.`);
         const videoFile = await dataService.getVideoFile(lesson.id);
         if (!videoFile) throw new Error(`Cannot upload lesson ${lessonId}: video file not found.`);
+        
+        const videoDriveFile = await this.driveService.writeFile(`/${FOLDERS.videos}/${lesson.id}.mp4`, videoFile, videoFile.type);
+        
+        const lessonWithVideoId: Lesson = { ...lesson, videoDriveId: videoDriveFile.id };
+        const updatedLessonJson = JSON.stringify(lessonWithVideoId);
+        
+        const lessonDriveFile = await this.driveService.writeFile(`/${FOLDERS.lessons}/${lesson.id}.json`, updatedLessonJson, 'application/json');
 
-        const { lessonMetadata, videoMetadata } = await this.externalStorageService.uploadLesson(lesson, videoFile);
-
-        const updatedLessonData = { driveId: lessonMetadata.externalId, videoDriveId: videoMetadata.externalId, modifiedTime: lessonMetadata.modifiedTime };
-        return dataService.updateLesson(lesson.id, updatedLessonData);
+        await dataService.updateLesson(lesson.id, { 
+            driveId: lessonDriveFile.id,
+            videoDriveId: videoDriveFile.id, 
+            modifiedTime: lessonDriveFile.modifiedTime 
+        });
     }
 
-    private uploadFigure = async (figureId: string): Promise<Figure> => {
+    private async uploadFigure(figureId: string): Promise<void> {
         const figure = await this.localDB.getFigures().then(f => f.find(x => x.id === figureId));
         if (!figure) throw new Error(`Cannot upload figure ${figureId}: not found in local DB.`);
-        
-        const figureMetadata = await this.externalStorageService.uploadFigure(figure);
-        
-        const updatedFigureData = { driveId: figureMetadata.externalId, modifiedTime: figureMetadata.modifiedTime };
-        return dataService.updateFigure(figure.id, updatedFigureData);
-    }
 
-    private downloadLesson = async (remoteItem: RemoteItem): Promise<void> => {
-        const downloaded = await this.externalStorageService.downloadLesson(remoteItem);
-        if (downloaded) {
-            await dataService.saveDownloadedLesson(downloaded.lesson, downloaded.video);
-        }
-    }
+        const figureJson = JSON.stringify(figure);
+        const figureDriveFile = await this.driveService.writeFile(`/${FOLDERS.figures}/${figure.id}.json`, figureJson, 'application/json');
 
-    private downloadFigure = async (remoteItem: RemoteItem): Promise<void> => {
-        const figureData = await this.externalStorageService.downloadFigure(remoteItem);
-        if (figureData) {
-            await dataService.saveDownloadedFigure(figureData);
-        }
+        await dataService.updateFigure(figure.id, { driveId: figureDriveFile.id, modifiedTime: figureDriveFile.modifiedTime });
     }
+    
 
-    private deleteRemoteItem = async (externalId: string): Promise<void> => {
-        await this.externalStorageService.deleteRemoteItemById(externalId);
-        await this.localDB.removeTombstones([externalId]);
-    }
-
-    // --- Private Methods ---
+    // --- Private Queue Management Methods ---
     private notify = (): void => this.listeners.forEach(listener => listener());
 
     private isDuplicate = (type: SyncTaskType, payloadIdentifier: any): boolean => {
         if (!payloadIdentifier) return false;
+        const now = Date.now();
+        // Debounce gallery syncs for 2 seconds to catch rapid changes
+        const debounceMs = 2000;
         return this.queue.some(task => {
-            if (task.type !== type) return false;
-            const taskIdentifier = (type === 'sync-gallery' || type === 'sync-grouping-config') 
-                ? task.payload?.type 
-                : (task.payload?.id || task.payload?.remoteItem?.externalId || task.payload?.externalId);
-            return taskIdentifier === payloadIdentifier;
+            if (task.type !== type || task.payload?.type !== payloadIdentifier) return false;
+            // If a task is already running, it's a duplicate.
+            if (task.status === 'in-progress') return true;
+            // If a pending task was added very recently, debounce.
+            if ((now - task.createdAt) < debounceMs) return true;
+            return false;
         });
     }
     
@@ -361,7 +311,7 @@ class SyncQueueServiceImpl implements SyncQueueService {
     }
 
     private processNext = async (): Promise<void> => {
-        if (this.isProcessing || !this.driveService.getAuthState().isSignedIn) return;
+        if (this.isProcessing || !this.driveService.getAuthState().isSignedIn || !this.gdriveApi) return;
         const task = this.queue.find(t => t.status === 'pending');
         if (!task) return;
 
@@ -373,11 +323,6 @@ class SyncQueueServiceImpl implements SyncQueueService {
             switch (task.type) {
                 case 'sync-gallery': await this.syncGallery(task.payload.type); break;
                 case 'sync-grouping-config': await this.syncGroupingConfig(task.payload.type); break;
-                case 'upload-lesson': await this.uploadLesson(task.payload.id); break;
-                case 'upload-figure': await this.uploadFigure(task.payload.id); break;
-                case 'download-lesson': await this.downloadLesson(task.payload.remoteItem); break;
-                case 'download-figure': await this.downloadFigure(task.payload.remoteItem); break;
-                case 'delete-remote': await this.deleteRemoteItem(task.payload.externalId); break;
                 default: logger.warn(`Unknown task type: ${task.type}`);
             }
             logger.info(`✅ Task completed: ${task.type}`);
@@ -387,82 +332,10 @@ class SyncQueueServiceImpl implements SyncQueueService {
             this.updateTaskStatus(task.id, 'error', e.message || 'An unknown error occurred.');
         } finally {
             this.isProcessing = false;
-            this.processNext();
+            setTimeout(() => this.processNext(), 1000); // Small delay before next task
         }
-    }
-
-    private getLocalGroupingConfig = async (type: 'lesson' | 'figure'): Promise<GroupingConfig> => {
-        // Fetch all data in parallel
-        const [categories, schools, instructors, settings, rawSettings] = await Promise.all([
-            type === 'lesson' ? this.localDB.getLessonCategories() : this.localDB.getFigureCategories(),
-            this.localDB.getSchools(),
-            this.localDB.getInstructors(),
-            settingsService.getSettings(),
-            this.localDB.getRawSettings() // Fetch raw settings to get the sync object's modifiedTime
-        ]);
-
-        // The timestamp for the config is stored on the sync-settings object itself
-        const modifiedTime = (rawSettings.sync as any)?.modifiedTime || '1970-01-01T00:00:00.000Z';
-
-        return {
-            modifiedTime: modifiedTime,
-            categories,
-            schools,
-            instructors,
-            showEmpty: type === 'lesson' ? settings.showEmptyLessonCategoriesInGroupedView : settings.showEmptyFigureCategoriesInGroupedView,
-            showCount: type === 'lesson' ? settings.showLessonCountInGroupHeaders : settings.showFigureCountInGroupHeaders,
-            // Include the order arrays in the config
-            categoryOrder: type === 'lesson' ? settings.lessonCategoryOrder : settings.figureCategoryOrder,
-            schoolOrder: type === 'lesson' ? settings.lessonSchoolOrder : settings.figureSchoolOrder,
-            instructorOrder: type === 'lesson' ? settings.lessonInstructorOrder : settings.figureInstructorOrder,
-        };
-    }
-
-    private applyRemoteGroupingConfig = async (remoteConfig: GroupingConfig, type: 'lesson' | 'figure'): Promise<void> => {
-        // Destructure all properties from the remote config, including new order arrays
-        const { categories, schools, instructors, showEmpty, showCount, categoryOrder, schoolOrder, instructorOrder } = remoteConfig;
-
-        type SyncableConfigItem = (LessonCategory | FigureCategory | School | Instructor);
-
-        const syncItems = async (localItems: SyncableConfigItem[], remoteItems: SyncableConfigItem[], addFn: any, updateFn: any) => {
-            const localDriveIdMap = new Map<string, SyncableConfigItem>(localItems.filter(i => i.driveId).map(i => [i.driveId!, i]));
-            for (const remoteItem of remoteItems) {
-                const existingByDriveId = localDriveIdMap.get(remoteItem.id); 
-                if (existingByDriveId) {
-                    if (new Date(remoteItem.modifiedTime!) > new Date(existingByDriveId.modifiedTime!)) {
-                        await updateFn(existingByDriveId.id, { name: remoteItem.name, modifiedTime: remoteItem.modifiedTime, driveId: remoteItem.id });
-                    }
-                } else {
-                    await addFn(remoteItem.name, remoteItem.id, remoteItem.modifiedTime);
-                }
-            }
-        };
-
-        if (type === 'lesson') await syncItems(await this.localDB.getLessonCategories(), categories as LessonCategory[], this.localDB.addLessonCategory, this.localDB.updateLessonCategory);
-        else await syncItems(await this.localDB.getFigureCategories(), categories as FigureCategory[], this.localDB.addFigureCategory, this.localDB.updateFigureCategory);
-        
-        await syncItems(await this.localDB.getSchools(), schools, this.localDB.addSchool, this.localDB.updateSchool);
-        await syncItems(await this.localDB.getInstructors(), instructors, this.localDB.addInstructor, this.localDB.updateInstructor);
-
-        // Create the settings update object with the new order arrays
-        const settingsUpdate: Partial<AppSettings> = type === 'lesson' ? {
-            showEmptyLessonCategoriesInGroupedView: showEmpty,
-            showLessonCountInGroupHeaders: showCount,
-            lessonCategoryOrder: categoryOrder,
-            lessonSchoolOrder: schoolOrder,
-            lessonInstructorOrder: instructorOrder,
-        } : {
-            showEmptyFigureCategoriesInGroupedView: showEmpty,
-            showFigureCountInGroupHeaders: showCount,
-            figureCategoryOrder: categoryOrder,
-            figureSchoolOrder: schoolOrder,
-            figureInstructorOrder: instructorOrder,
-        };
-        
-        // Use the new service method to preserve the timestamp from the remote data.
-        await settingsService.applyRemoteSettings(settingsUpdate, remoteConfig.modifiedTime);
     }
 }
 
 // --- Singleton Instance ---
-export const syncQueueService: SyncQueueService = new SyncQueueServiceImpl(localDatabaseService, externalStorageService, googleDriveService);
+export const syncQueueService: SyncQueueService = new SyncQueueServiceImpl(localDatabaseService, googleDriveService, settingsService);

@@ -12,6 +12,7 @@ import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { localDatabaseService } from '../services/LocalDatabaseService';
 
 interface FigureCardProps {
   figure: Figure;
@@ -28,7 +29,7 @@ interface FigureCardProps {
 const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { isSignedIn, initiateSync } = useGoogleDrive();
+  const { isSignedIn, addTask } = useGoogleDrive();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -186,7 +187,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
     try {
         await dataService.updateFigure(figure.id, { [key]: value });
         if (isSignedIn) {
-            initiateSync('figure');
+            addTask('sync-gallery', { type: 'figure' }, true);
         }
         onRefresh();
     } catch (err) {
@@ -197,13 +198,13 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
-      if (onForceDelete) {
-        await onForceDelete(figure);
-      } else {
-        await dataService.deleteFigure(figure.id);
+      const driveId = await dataService.deleteFigure(figure.id);
+      if (isSignedIn && driveId) {
+        await localDatabaseService.addTombstones([driveId]);
+        addTask('sync-gallery', { type: 'figure' }, true);
       }
       setShowDeleteConfirm(false);
-      onRefresh(); // Refresh the gallery to reflect the change.
+      onRefresh();
     } catch (err) {
       console.error("Failed to delete figure:", err);
     } finally {

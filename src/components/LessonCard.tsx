@@ -12,6 +12,7 @@ import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { localDatabaseService } from '../services/LocalDatabaseService';
 
 interface LessonCardProps {
   lesson: Lesson;
@@ -27,7 +28,7 @@ interface LessonCardProps {
 const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
   const { t, locale } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { isSignedIn, initiateSync } = useGoogleDrive();
+  const { isSignedIn, addTask } = useGoogleDrive();
 
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -185,7 +186,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schoo
     try {
         await dataService.updateLesson(lesson.id, { [key]: value });
         if (isSignedIn) {
-            initiateSync('lesson');
+            addTask('sync-gallery', { type: 'lesson' }, true);
         }
         onRefresh();
     } catch (err) {
@@ -196,16 +197,15 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, lessonCategories, schoo
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
     try {
-      if (onForceDelete) {
-        await onForceDelete(lesson);
-      } else {
-        await dataService.deleteLesson(lesson.id);
+      const driveIdsToDelete = await dataService.deleteLesson(lesson.id);
+      if (isSignedIn && driveIdsToDelete.length > 0) {
+        await localDatabaseService.addTombstones(driveIdsToDelete);
+        addTask('sync-gallery', { type: 'lesson' }, true);
       }
       setShowDeleteConfirm(false);
-      onRefresh(); // Refresh the gallery to reflect the change.
+      onRefresh();
     } catch (err) {
       console.error("Failed to delete lesson:", err);
-      // In a real app, you might want to show an error toast to the user
     } finally {
       setIsDeleting(false);
     }

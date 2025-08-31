@@ -24,7 +24,7 @@ const PlayerScreen: React.FC = () => {
   const { isMobile, refresh, itemIds } = useOutletContext<GalleryContext>();
   const { t, locale } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { forceDeleteItem } = useGoogleDrive();
+  const { isSignedIn, addTask } = useGoogleDrive();
   const { isMuted, volume } = settings;
 
   const [item, setItem] = useState<Lesson | Figure | null>(null);
@@ -243,7 +243,16 @@ const PlayerScreen: React.FC = () => {
     setIsDeleting(true);
     setError(null);
     try {
-      await forceDeleteItem(item);
+      const driveIdsToDelete = itemType === 'lesson'
+        ? await dataService.deleteLesson(item.id)
+        : [await dataService.deleteFigure(item.id)].filter((id): id is string => !!id);
+
+      if (isSignedIn && driveIdsToDelete.length > 0) {
+        await localDatabaseService.addTombstones(driveIdsToDelete);
+        // FIX: 'sync-deleted-log' is not a valid task type. Use 'sync-gallery' to process tombstones.
+        addTask('sync-gallery', { type: itemType }, true);
+      }
+      
       if (refresh) refresh();
       handleClose();
     } catch (e) {

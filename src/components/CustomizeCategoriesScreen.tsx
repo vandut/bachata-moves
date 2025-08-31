@@ -8,7 +8,6 @@ import { dataService } from '../services/DataService';
 import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { settingsService, GroupingConfiguration } from '../services/SettingsService';
-// FIX: Import `useSettings` hook to access settings context.
 import { useSettings } from '../contexts/SettingsContext';
 
 interface GalleryContext {
@@ -28,10 +27,9 @@ const CustomizeGroupingScreen: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { isMobile } = useOutletContext<GalleryContext>();
-    // FIX: `settings` and `reloadAllData` come from `useSettings`, not `useTranslation`.
     const { t } = useTranslation();
     const { settings, reloadAllData } = useSettings();
-    const { isSignedIn, forceUploadGroupingConfig, forceDeleteGroupingItem } = useGoogleDrive();
+    const { isSignedIn, addTask } = useGoogleDrive();
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);
 
@@ -43,6 +41,7 @@ const CustomizeGroupingScreen: React.FC = () => {
     const [showCount, setShowCount] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string; type: 'category' | 'school' | 'instructor'} | null>(null);
 
@@ -118,7 +117,7 @@ const CustomizeGroupingScreen: React.FC = () => {
     }, [type, t, config, settings]);
 
 
-    const handleClose = () => navigate(type === 'lesson' ? '/lessons' : '/figures');
+    const handleClose = () => navigate(type === 'lesson' ? '/lessons' : '/figures', { state: { skipSync: true } });
     
     const handleSave = async () => {
         setError(null);
@@ -128,41 +127,42 @@ const CustomizeGroupingScreen: React.FC = () => {
         }
         setIsSaving(true);
         try {
-            const initialCategories = await config.getCategories();
-            const initialSchools = await config.getSchools();
-            const initialInstructors = await config.getInstructors();
+            const processItems = async <T extends GenericCategory>(
+                initialItems: T[], 
+                localItems: T[], 
+                addFn: (name: string) => Promise<T>, 
+                updateFn: (id: string, data: { name: string }) => Promise<T>, 
+                deleteFn: (id: string) => Promise<string | null>
+            ) => {
+                const localIdSet = new Set(localItems.map(i => i.id));
 
-            const createUpdateDelete = async (initialItems: any[], localItems: any[], addFn: any, updateFn: any) => {
-                const localIds = new Set(localItems.map(i => i.id));
-                const toDelete = initialItems.filter(i => !localIds.has(i.id));
-                for(const item of toDelete) {
-                    if (item.id.includes('category')) await config.deleteCategory(item.id);
-                    else if (item.id.includes('school')) await config.deleteSchool(item.id);
-                    else if (item.id.includes('instructor')) await config.deleteInstructor(item.id);
-                }
+                const toDelete = initialItems.filter(item => !item.isSpecial && !localIdSet.has(item.id));
+                const toAdd = localItems.filter(item => item.isNew);
+                const toUpdate = localItems.filter(item => !item.isNew && item.isDirty);
 
-                const toAdd = localItems.filter(i => i.isNew).map(i => addFn(i.name.trim()));
-                const toUpdate = localItems.filter(i => !i.isNew && i.isDirty).map(i => updateFn(i.id, { name: i.name.trim() }));
-                const newItems = await Promise.all(toAdd);
-                await Promise.all(toUpdate);
-                return newItems;
+                const deletedDriveIds = (await Promise.all(toDelete.map(item => deleteFn(item.id)))).filter((id): id is string => !!id);
+                
+                await Promise.all(toUpdate.map(item => updateFn(item.id, { name: item.name.trim() })));
+                const newItemsFromDb = await Promise.all(toAdd.map(item => addFn(item.name.trim())));
+
+                const newIdMap = new Map<string, string>();
+                toAdd.forEach((item, index) => {
+                    newIdMap.set(item.id, newItemsFromDb[index].id);
+                });
+                
+                const finalOrder = localItems.map(item => newIdMap.get(item.id) || item.id);
+                return { finalOrder, deletedDriveIds };
             };
             
-            const newCats = await createUpdateDelete(initialCategories, categories.filter(c => !c.isSpecial), config.addCategory, config.updateCategory);
-            const newSchools = await createUpdateDelete(initialSchools, schools.filter(s => !s.isSpecial), config.addSchool, config.updateSchool);
-            const newInstructors = await createUpdateDelete(initialInstructors, instructors.filter(i => !i.isNew), config.addInstructor, config.updateInstructor);
-            
-            const newCatIdMap = new Map<string, string>();
-            categories.filter(c => c.isNew).forEach((c, index) => { newCatIdMap.set(c.id, newCats[index].id); });
-            const finalCategoryOrder = categories.map(item => newCatIdMap.get(item.id) || item.id);
+            const [initialCategories, initialSchools, initialInstructors] = await Promise.all([
+                config.getCategories(),
+                config.getSchools(),
+                config.getInstructors(),
+            ]);
 
-            const newSchoolIdMap = new Map<string, string>();
-            schools.filter(s => s.isNew).forEach((s, index) => { newSchoolIdMap.set(s.id, newSchools[index].id); });
-            const finalSchoolOrder = schools.map(item => newSchoolIdMap.get(item.id) || item.id);
-
-            const newInstructorIdMap = new Map<string, string>();
-            instructors.filter(i => i.isNew).forEach((i, index) => { newInstructorIdMap.set(i.id, newInstructors[index].id); });
-            const finalInstructorOrder = instructors.map(item => newInstructorIdMap.get(item.id) || item.id);
+            const { finalOrder: finalCategoryOrder, deletedDriveIds: deletedCategoryIds } = await processItems(initialCategories, categories, config.addCategory, config.updateCategory, config.deleteCategory);
+            const { finalOrder: finalSchoolOrder, deletedDriveIds: deletedSchoolIds } = await processItems(initialSchools, schools, config.addSchool, config.updateSchool, config.deleteSchool);
+            const { finalOrder: finalInstructorOrder, deletedDriveIds: deletedInstructorIds } = await processItems(initialInstructors, instructors, config.addInstructor, config.updateInstructor, config.deleteInstructor);
             
             const groupingConfig: GroupingConfiguration = {
                 categoryOrder: finalCategoryOrder,
@@ -171,10 +171,18 @@ const CustomizeGroupingScreen: React.FC = () => {
                 showEmpty: showEmpty,
                 showCount: showCount,
             };
+
             await settingsService.saveGroupingConfiguration(type, groupingConfig);
             
             if (isSignedIn) {
-                await forceUploadGroupingConfig(type);
+                const allDeletedIds = [...deletedCategoryIds, ...deletedSchoolIds, ...deletedInstructorIds];
+                if (allDeletedIds.length > 0) {
+                    await localDatabaseService.addTombstones(allDeletedIds);
+                }
+                addTask('sync-grouping-config', { type }, true);
+                if (allDeletedIds.length > 0) {
+                    addTask('sync-gallery', { type }, true);
+                }
             }
             reloadAllData();
             handleClose();
@@ -202,7 +210,13 @@ const CustomizeGroupingScreen: React.FC = () => {
         };
         const handleNameChange = (id: string, newName: string) => setItems(prev => prev.map(i => i.id === id ? { ...i, name: newName, isDirty: true } : i));
         const handleAddNew = () => setItems(prev => [...prev, { id: `new-${options.type}-${Date.now()}`, name: '', isNew: true }]);
-        const handleDelete = (id: string, name: string) => setItemToDelete({ id, name, type: options.type });
+        const handleDelete = (id: string, name: string) => {
+            if (id.startsWith('new-')) {
+                setItems(prev => prev.filter(item => item.id !== id));
+            } else {
+                setItemToDelete({ id, name, type: options.type });
+            }
+        };
         
         return (
             <div>
@@ -233,40 +247,24 @@ const CustomizeGroupingScreen: React.FC = () => {
         );
     };
     
-    const handleConfirmDelete = async () => {
-        if (!itemToDelete) return;
-        const { id, type: itemType } = itemToDelete;
+    const handleConfirmDelete = () => {
+      if (!itemToDelete) return;
 
-        const stateUpdaterMap = {
-            category: setCategories,
-            school: setSchools,
-            instructor: setInstructors,
-        };
-        const stateItemsMap = {
-            category: categories,
-            school: schools,
-            instructor: instructors,
-        };
+      setIsDeleting(true);
+      setError(null);
 
-        const itemToDeleteObject = stateItemsMap[itemType].find(item => item.id === id);
-        if (!itemToDeleteObject) return;
-        
-        try {
-            if (isSignedIn) {
-                await forceDeleteGroupingItem(itemToDeleteObject, itemType, type);
-            } else {
-                if (itemType === 'category') await config.deleteCategory(id);
-                else if (itemType === 'school') await config.deleteSchool(id);
-                else if (itemType === 'instructor') await config.deleteInstructor(id);
-            }
-            // Optimistic UI update
-            stateUpdaterMap[itemType](prev => prev.filter(item => item.id !== id));
-        } catch (err) {
-            console.error("Failed to delete item:", err);
-            setError(err instanceof Error ? err.message : "Failed to delete");
-        }
-        
-        setItemToDelete(null);
+      const { id, type: itemType } = itemToDelete;
+      const stateUpdaterMap = {
+          category: setCategories,
+          school: setSchools,
+          instructor: setInstructors,
+      };
+
+      // Only update local component state. `handleSave` will persist the deletion.
+      stateUpdaterMap[itemType](prev => prev.filter(item => item.id !== id));
+
+      setItemToDelete(null);
+      setIsDeleting(false);
     };
 
     const renderContent = () => {
@@ -314,7 +312,7 @@ const CustomizeGroupingScreen: React.FC = () => {
             isOpen={!!itemToDelete}
             onClose={() => setItemToDelete(null)}
             onConfirm={handleConfirmDelete}
-            isDeleting={false}
+            isDeleting={isDeleting}
             title={itemToDelete?.type === 'category' ? t('customizeCategories.deleteConfirmTitle') : itemToDelete?.type === 'school' ? t('customizeCategories.deleteSchoolConfirmTitle') : t('customizeCategories.deleteInstructorConfirmTitle')}
         >
             {itemToDelete && <p>{itemToDelete?.type === 'category' ? t('customizeCategories.deleteConfirmBody', { name: itemToDelete.name }) : itemToDelete?.type === 'school' ? t('customizeCategories.deleteSchoolConfirmBody', { name: itemToDelete.name }) : t('customizeCategories.deleteInstructorConfirmBody', { name: itemToDelete.name })}</p>}

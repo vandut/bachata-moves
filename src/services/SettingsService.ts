@@ -64,17 +64,20 @@ const defaultSyncSettings: Partial<AppSettings> = {
 
 
 // --- Interface ---
-export interface GroupingConfig {
-    modifiedTime: string;
-    categories: FigureCategory[] | LessonCategory[];
-    schools: School[];
-    instructors: Instructor[];
+interface RemoteGroupingItem {
+    id: string;
+    name: string;
+    driveId?: string;
+}
+
+export interface RemoteGroupingConfig {
+    categories: RemoteGroupingItem[];
+    schools: RemoteGroupingItem[];
+    instructors: RemoteGroupingItem[];
     showEmpty: boolean;
     showCount: boolean;
-    categoryOrder: string[];
-    schoolOrder: string[];
-    instructorOrder: string[];
 }
+
 export interface GroupingConfiguration {
   categoryOrder: string[];
   schoolOrder: string[];
@@ -84,6 +87,7 @@ export interface GroupingConfiguration {
 }
 export interface SettingsService {
   getSettings(): Promise<AppSettings>;
+  reloadSettings(): Promise<AppSettings>;
   updateSettings(updates: Partial<AppSettings>, options?: { silent?: boolean }): Promise<void>;
   applyRemoteSettings(updates: Partial<AppSettings>, modifiedTime: string): Promise<void>;
   subscribe(callback: (settings: AppSettings) => void): () => void;
@@ -107,6 +111,8 @@ export interface SettingsService {
 
   // New method for saving grouping configuration
   saveGroupingConfiguration(type: 'lesson' | 'figure', config: GroupingConfiguration): Promise<void>;
+  getGroupingConfigForUpload(type: 'lesson' | 'figure'): Promise<{ content: RemoteGroupingConfig, modifiedTime: string }>;
+  applyRemoteGroupingConfig(type: 'lesson' | 'figure', config: RemoteGroupingConfig, modifiedTime: string): Promise<void>;
 }
 
 // --- Implementation ---
@@ -153,6 +159,12 @@ class SettingsServiceImpl implements SettingsService {
         this.loadingPromise = null;
     });
     return this.loadingPromise;
+  }
+  
+  public async reloadSettings(): Promise<AppSettings> {
+      this.settings = null;
+      this.loadingPromise = null;
+      return this.getSettings();
   }
 
   public async updateSettings(updates: Partial<AppSettings>, options?: { silent?: boolean }): Promise<void> {
@@ -268,6 +280,116 @@ class SettingsServiceImpl implements SettingsService {
           };
     
     await this.updateSettings(settingsUpdate);
+  }
+
+  public async getGroupingConfigForUpload(type: 'lesson' | 'figure'): Promise<{ content: RemoteGroupingConfig; modifiedTime: string; }> {
+    const allSettings = await this.getSettings();
+    const syncSettingsInDb = await this.localDB.getRawSettings().then(s => s.sync);
+
+    const [categories, schools, instructors] = await Promise.all(type === 'lesson' 
+      ? [this.localDB.getLessonCategories(), this.localDB.getSchools(), this.localDB.getInstructors()]
+      : [this.localDB.getFigureCategories(), this.localDB.getSchools(), this.localDB.getInstructors()]
+    );
+
+    const sortItems = <T extends { id: string }>(items: T[], order: string[]): T[] => {
+        const orderMap = new Map(order.map((id, index) => [id, index]));
+        return [...items].sort((a, b) => {
+            const indexA = orderMap.get(a.id);
+            const indexB = orderMap.get(b.id);
+            if (indexA !== undefined && indexB !== undefined) return indexA - indexB;
+            if (indexA !== undefined) return -1;
+            if (indexB !== undefined) return 1;
+            return 0; // or some other default sort
+        });
+    };
+
+    const content: RemoteGroupingConfig = type === 'lesson'
+        ? {
+            categories: sortItems(categories, allSettings.lessonCategoryOrder),
+            schools: sortItems(schools, allSettings.lessonSchoolOrder),
+            instructors: sortItems(instructors, allSettings.lessonInstructorOrder),
+            showEmpty: allSettings.showEmptyLessonCategoriesInGroupedView,
+            showCount: allSettings.showLessonCountInGroupHeaders,
+        } : {
+            categories: sortItems(categories, allSettings.figureCategoryOrder),
+            schools: sortItems(schools, allSettings.figureSchoolOrder),
+            instructors: sortItems(instructors, allSettings.figureInstructorOrder),
+            showEmpty: allSettings.showEmptyFigureCategoriesInGroupedView,
+            showCount: allSettings.showFigureCountInGroupHeaders,
+        };
+          
+    const modifiedTime = (syncSettingsInDb as any)?.modifiedTime || new Date(0).toISOString();
+
+    return { content, modifiedTime };
+  }
+
+  public async applyRemoteGroupingConfig(type: 'lesson' | 'figure', remoteConfig: RemoteGroupingConfig, modifiedTime: string): Promise<void> {
+    logger.info(`Applying remote grouping config for ${type}`);
+
+    // FIX: Destructure with default empty arrays to prevent crash if remote config is malformed.
+    const { 
+        categories = [], 
+        schools = [], 
+        instructors = [],
+        showEmpty = false,
+        showCount = false
+    } = remoteConfig || {};
+
+    const syncItems = async <T extends { id: string; name: string; driveId?: string; }>(
+        remoteItems: RemoteGroupingItem[],
+        getLocalItems: () => Promise<T[]>,
+        addItem: (name: string, driveId?: string) => Promise<T>,
+        updateItem: (id: string, data: { name: string; driveId?: string }) => Promise<T>,
+        deleteItem: (id: string) => Promise<void>
+    ) => {
+        const localItems = await getLocalItems();
+        const localMap = new Map(localItems.map(item => [item.id, item]));
+        const remoteMap = new Map(remoteItems.map(item => [item.id, item]));
+
+        // Add/Update
+        for (const remoteItem of remoteItems) {
+            const localItem = localMap.get(remoteItem.id);
+            if (localItem) {
+                if (localItem.name !== remoteItem.name || localItem.driveId !== remoteItem.driveId) {
+                    await updateItem(localItem.id, { name: remoteItem.name, driveId: remoteItem.driveId });
+                }
+            } else {
+                await addItem(remoteItem.name, remoteItem.driveId);
+            }
+        }
+        // Delete
+        for (const localItem of localItems) {
+            if (!remoteMap.has(localItem.id)) {
+                await deleteItem(localItem.id);
+            }
+        }
+    };
+
+    if (type === 'lesson') {
+        await syncItems(categories, this.localDB.getLessonCategories, this.localDB.addLessonCategory, this.localDB.updateLessonCategory, this.localDB.deleteLessonCategory);
+    } else {
+        await syncItems(categories, this.localDB.getFigureCategories, this.localDB.addFigureCategory, this.localDB.updateFigureCategory, this.localDB.deleteFigureCategory);
+    }
+    await syncItems(schools, this.localDB.getSchools, this.localDB.addSchool, this.localDB.updateSchool, this.localDB.deleteSchool);
+    await syncItems(instructors, this.localDB.getInstructors, this.localDB.addInstructor, this.localDB.updateInstructor, this.localDB.deleteInstructor);
+
+    const settingsUpdate: Partial<AppSettings> = type === 'lesson'
+        ? {
+            lessonCategoryOrder: categories.map(c => c.id),
+            lessonSchoolOrder: schools.map(s => s.id),
+            lessonInstructorOrder: instructors.map(i => i.id),
+            showEmptyLessonCategoriesInGroupedView: showEmpty,
+            showLessonCountInGroupHeaders: showCount,
+        } : {
+            figureCategoryOrder: categories.map(c => c.id),
+            figureSchoolOrder: schools.map(s => s.id),
+            figureInstructorOrder: instructors.map(i => i.id),
+            showEmptyFigureCategoriesInGroupedView: showEmpty,
+            showFigureCountInGroupHeaders: showCount,
+        };
+        
+    await this.applyRemoteSettings(settingsUpdate, modifiedTime);
+    this.localDB.notifyListeners(); // Force galleries to update with new data
   }
 }
 

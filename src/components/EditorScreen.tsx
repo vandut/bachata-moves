@@ -78,7 +78,7 @@ const EditorScreen: React.FC = () => {
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
     const { t, locale } = useTranslation();
     const { settings, updateSettings } = useSettings();
-    const { isSignedIn, forceAddItem, forceUpdateItem } = useGoogleDrive();
+    const { isSignedIn, addTask } = useGoogleDrive();
     const { isMuted, volume } = settings;
     const query = useQuery();
 
@@ -105,7 +105,6 @@ const EditorScreen: React.FC = () => {
     const isCreatingFigure = !!lessonIdForNewFigure;
     const isEditingFigure = !!figureId;
     const isEditingLesson = !!lessonIdParam && !isEditingFigure;
-    const shouldForceCreate = query.get('forceCreate') === 'true' && isSignedIn;
 
     const baseNavPath = isEditingLesson ? '/lessons' : '/figures';
 
@@ -379,28 +378,23 @@ const EditorScreen: React.FC = () => {
         };
 
         try {
-            const useForceMethod = isSignedIn && (shouldForceCreate || isEditingFigure || isEditingLesson);
-            
             if (isCreatingFigure && lessonIdForNewFigure) {
                 const figureData = { ...commonData, name: formData.name };
-                if (useForceMethod) {
-                    await forceAddItem(figureData, 'figure', { lessonId: lessonIdForNewFigure });
-                } else {
-                    await dataService.addFigure(lessonIdForNewFigure, figureData);
+                await dataService.addFigure(lessonIdForNewFigure, figureData);
+                if (isSignedIn) {
+                    addTask('sync-gallery', { type: 'figure' }, true);
                 }
             } else if (isEditingFigure && figureId) {
                 const updateData = { ...commonData, name: formData.name };
-                if (useForceMethod) {
-                    await forceUpdateItem(figureId, updateData, 'figure');
-                } else {
-                    await dataService.updateFigure(figureId, updateData);
+                await dataService.updateFigure(figureId, updateData);
+                 if (isSignedIn) {
+                    addTask('sync-gallery', { type: 'figure' }, true);
                 }
             } else if (isEditingLesson && lessonIdParam) {
                 const updateData = { ...commonData, uploadDate: new Date(formData.uploadDate).toISOString() };
-                if (useForceMethod) {
-                    await forceUpdateItem(lessonIdParam, updateData, 'lesson');
-                } else {
-                    await dataService.updateLesson(lessonIdParam, updateData);
+                await dataService.updateLesson(lessonIdParam, updateData);
+                if (isSignedIn) {
+                    addTask('sync-gallery', { type: 'lesson' }, true);
                 }
             }
             if (refresh) refresh();
