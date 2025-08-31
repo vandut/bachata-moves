@@ -3,56 +3,15 @@ import { useNavigate, useLocation, useOutletContext, useParams } from 'react-rou
 import BaseModal from './BaseModal';
 import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure, School, Instructor } from '../types';
-import { localDatabaseService } from '../services/LocalDatabaseService';
-import { dataService } from '../services/DataService';
 import { useTranslation } from '../contexts/I18nContext';
-import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { thumbnailService } from '../services/ThumbnailService';
+import { itemManagementService, EditorData } from '../services/ItemManagementService';
 
 interface GalleryContext {
     refresh: () => void;
     isMobile: boolean;
 }
-
-// --- Helper Functions ---
-const generateThumbnailPreview = (file: File, timeSeconds: number): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      const videoUrl = URL.createObjectURL(file);
-
-      if (!context) {
-        URL.revokeObjectURL(videoUrl);
-        return reject(new Error('Canvas 2D context is not available.'));
-      }
-
-      video.addEventListener('loadedmetadata', () => {
-        video.width = video.videoWidth;
-        video.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        video.currentTime = timeSeconds;
-      });
-
-      video.addEventListener('seeked', () => {
-        context.drawImage(video, 0, 0, video.width, video.height);
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        URL.revokeObjectURL(videoUrl);
-        resolve(dataUrl);
-      });
-
-      video.addEventListener('error', (err) => {
-        URL.revokeObjectURL(videoUrl);
-        console.error("Video thumbnail generation error:", err);
-        reject(new Error('Failed to load video for thumbnail generation.'));
-      });
-
-      video.preload = 'metadata';
-      video.src = videoUrl;
-      video.load();
-    });
-};
 
 const msToSecondsString = (ms: number): string => {
     if (isNaN(ms) || ms < 0) return '0.00';
@@ -78,23 +37,17 @@ const EditorScreen: React.FC = () => {
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
     const { t, locale } = useTranslation();
     const { settings, updateSettings } = useSettings();
-    const { isSignedIn, addTask } = useGoogleDrive();
     const { isMuted, volume } = settings;
     const query = useQuery();
 
     // --- State ---
-    const [item, setItem] = useState<Lesson | Figure | null>(null);
+    const [editorData, setEditorData] = useState<EditorData | null>(null);
     const [title, setTitle] = useState('Editor');
-    const [videoUrl, setVideoUrl] = useState<string | null>(null);
-    const [schools, setSchools] = useState<School[]>([]);
-    const [instructors, setInstructors] = useState<Instructor[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [formData, setFormData] = useState({ name: '', description: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
+    const [formData, setFormData] = useState({ id: '', name: '', description: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
     const [newThumbnailUrl, setNewThumbnailUrl] = useState<string | null>(null);
-    const [originalThumbnailUrl, setOriginalThumbnailUrl] = useState<string | null>(null);
-    const [videoDurationMs, setVideoDurationMs] = useState(0);
     const [currentTimeMs, setCurrentTimeMs] = useState(0);
     const [draggingElement, setDraggingElement] = useState<'start' | 'end' | 'scrub' | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -115,96 +68,50 @@ const EditorScreen: React.FC = () => {
             setIsLoading(true);
             setError(null);
             try {
-                let loadedItem: Lesson | Figure | null = null;
-                let videoLessonSource: Lesson | undefined;
-                let thumbPromise: Promise<string | null> | null = null;
-                
-                // FIX: Replaced calls to deprecated `localDatabaseService.getSchools()` and `getInstructors()`
-                // with context-aware calls to `getLessonSchools`/`getFigureSchools` etc. based on the editing context.
-                const [fetchedSchools, fetchedInstructors] = await Promise.all([
-                    isEditingLesson ? localDatabaseService.getLessonSchools() : localDatabaseService.getFigureSchools(),
-                    isEditingLesson ? localDatabaseService.getLessonInstructors() : localDatabaseService.getFigureInstructors(),
-                ]);
-                if (isCancelled) return;
-                setSchools(fetchedSchools);
-                setInstructors(fetchedInstructors);
-
+                let data;
                 if (isCreatingFigure && lessonIdForNewFigure) {
-                    const lesson = (await localDatabaseService.getLessons()).find(l => l.id === lessonIdForNewFigure);
-                    if (!lesson) throw new Error("Source lesson for new figure not found.");
-                    videoLessonSource = lesson;
-                    // Pre-populate figure from lesson data
-                    loadedItem = {
-                        id: 'new',
-                        lessonId: lesson.id,
-                        name: '',
-                        description: null, // Start with empty description for new figures
-                        // Copy timings and assignments from parent lesson as a starting point
-                        startTime: lesson.startTime,
-                        endTime: lesson.endTime,
-                        thumbTime: lesson.thumbTime,
-                        categoryId: lesson.categoryId,
-                        schoolId: lesson.schoolId,
-                        instructorId: lesson.instructorId,
-                    } as Figure;
-                    thumbPromise = dataService.getLessonThumbnailUrl(lesson.id);
-                } else { // Editing
-                    const itemId = figureId || lessonIdParam;
-                    const type = figureId ? 'figure' : 'lesson';
-                    if (!itemId) throw new Error("Item ID not specified for editing.");
-
-                    const items = type === 'figure' ? await localDatabaseService.getFigures() : await localDatabaseService.getLessons();
-                    loadedItem = items.find(i => i.id === itemId) || null;
-                    
-                    if (!loadedItem) throw new Error("Item to edit not found.");
-                    
-                    if ('lessonId' in loadedItem) { // Figure
-                        videoLessonSource = (await localDatabaseService.getLessons()).find(l => l.id === (loadedItem as Figure).lessonId);
-                        thumbPromise = dataService.getFigureThumbnailUrl(loadedItem.id);
-                    } else { // Lesson
-                        videoLessonSource = loadedItem as Lesson;
-                        thumbPromise = dataService.getLessonThumbnailUrl(loadedItem.id);
-                    }
+                    data = await itemManagementService.getItemForNewFigure(lessonIdForNewFigure);
+                } else {
+                    const id = figureId || lessonIdParam;
+                    if (!id) throw new Error("Item ID not specified for editing.");
+                    const type = isEditingFigure ? 'figure' : 'lesson';
+                    data = await itemManagementService.getItemForEditor(type, id);
                 }
-                
-                if (isCancelled) return;
-                if (!loadedItem || !videoLessonSource) throw new Error("Item or its video source could not be found.");
-                
-                setItem(loadedItem);
-                setFormData({
-                    name: (loadedItem as Figure).name || '',
-                    description: loadedItem.description || '',
-                    uploadDate: (loadedItem as Lesson).uploadDate ? new Date((loadedItem as Lesson).uploadDate).toISOString().split('T')[0] : '',
-                    startTime: loadedItem.startTime || 0,
-                    endTime: loadedItem.endTime,
-                    thumbTime: loadedItem.thumbTime,
-                    schoolId: loadedItem.schoolId || '',
-                    instructorId: loadedItem.instructorId || '',
-                });
-                setCurrentTimeMs(loadedItem.startTime || 0);
 
-                const [url, thumbUrl] = await Promise.all([ dataService.getVideoObjectUrl(videoLessonSource), thumbPromise ]);
                 if (isCancelled) return;
-                setVideoUrl(url);
-                setOriginalThumbnailUrl(thumbUrl);
+
+                setEditorData(data);
+                const { item } = data;
+                setFormData({
+                    id: item.id,
+                    name: (item as Figure).name || '',
+                    description: item.description || '',
+                    uploadDate: (item as Lesson).uploadDate ? new Date((item as Lesson).uploadDate).toISOString().split('T')[0] : '',
+                    startTime: item.startTime || 0,
+                    endTime: item.endTime,
+                    thumbTime: item.thumbTime,
+                    schoolId: item.schoolId || '',
+                    instructorId: item.instructorId || '',
+                });
+                setCurrentTimeMs(item.startTime || 0);
 
             } catch (e) {
                 if (isCancelled) return;
                 console.error("Failed to load editor data:", e);
-                setError(e instanceof Error ? e.message : 'An unknown error occurred.');
+                setError(e instanceof Error ? e.message : t('editor.itemNotFound'));
             } finally {
                 if (!isCancelled) setIsLoading(false);
             }
         };
         loadData();
         return () => { isCancelled = true; };
-    }, [lessonIdParam, figureId, lessonIdForNewFigure, isCreatingFigure, isEditingFigure, isEditingLesson]);
+    }, [lessonIdParam, figureId, lessonIdForNewFigure, isCreatingFigure, isEditingFigure, isEditingLesson, t]);
 
     // --- Dynamic Title Effect ---
     useEffect(() => {
         const getStaticTitle = () => {
             if (isLoading) return t('editor.loading');
-            if (error && !item) return t('editor.error');
+            if (error && !editorData) return t('editor.error');
             if (isCreatingFigure) return t('editor.createFigureTitle');
             if (isEditingFigure) return t('editor.editFigureTitle');
             if (isEditingLesson) {
@@ -216,7 +123,7 @@ const EditorScreen: React.FC = () => {
             return 'Editor';
         };
         setTitle(getStaticTitle());
-    }, [isLoading, error, item, isCreatingFigure, isEditingFigure, isEditingLesson, formData.uploadDate, t, locale]);
+    }, [isLoading, error, editorData, isCreatingFigure, isEditingFigure, isEditingLesson, formData.uploadDate, t, locale]);
 
     // --- Callbacks for BaseEditor ---
     const handleClose = () => {
@@ -233,7 +140,7 @@ const EditorScreen: React.FC = () => {
             video.muted = isMuted;
             video.volume = volume;
         }
-    }, [isMuted, volume, videoUrl]);
+    }, [isMuted, volume, editorData?.videoUrl]);
 
     const handleVolumeChange = () => {
         const video = videoRef.current;
@@ -244,8 +151,7 @@ const EditorScreen: React.FC = () => {
 
     const handleLoadedMetadata = () => {
         const video = videoRef.current;
-        if (!video) return;
-        setVideoDurationMs(video.duration * 1000);
+        if (!video || !editorData) return;
         video.currentTime = (formData.startTime || 0) / 1000;
     };
 
@@ -260,8 +166,6 @@ const EditorScreen: React.FC = () => {
         const startTimeSec = (formData.startTime || 0) / 1000;
         const endTimeSec = formData.endTime / 1000;
 
-        // If the video is playing and reaches the end of the trim range, loop back.
-        // A small buffer (0.1s) helps prevent overshooting due to timeupdate event frequency.
         if (!video.paused && endTimeSec > startTimeSec && video.currentTime >= endTimeSec - 0.1) {
             video.currentTime = startTimeSec;
             video.play().catch(e => console.warn("Editor loop playback failed", e));
@@ -277,7 +181,7 @@ const EditorScreen: React.FC = () => {
                 finalTimeMs = Math.max(0, Math.min(newTimeMs, formData.endTime));
                 setFormData(prev => ({ ...prev, startTime: finalTimeMs }));
             } else { // endTime
-                finalTimeMs = Math.max(formData.startTime, Math.min(newTimeMs, videoDurationMs));
+                finalTimeMs = Math.max(formData.startTime, Math.min(newTimeMs, editorData?.videoDurationMs || 0));
                 setFormData(prev => ({ ...prev, endTime: finalTimeMs }));
             }
             if (videoRef.current && !isNaN(finalTimeMs)) {
@@ -290,20 +194,11 @@ const EditorScreen: React.FC = () => {
     };
     
     const handleSetThumbnail = async () => {
-        if (!item || !videoRef.current) return;
+        if (!editorData?.item || !videoRef.current) return;
         
-        const currentTimeSeconds = videoRef.current.currentTime;
         try {
-            let lessonIdForVideo: string;
-            if ('lessonId' in item) { // item is Figure
-                lessonIdForVideo = (item as Figure).lessonId;
-            } else { // item is Lesson
-                lessonIdForVideo = item.id;
-            }
-            const videoFile = await dataService.getVideoFile(lessonIdForVideo);
-            if (!videoFile) throw new Error("Could not retrieve video file.");
-            
-            const dataUrl = await generateThumbnailPreview(videoFile, currentTimeSeconds);
+            const currentTimeSeconds = videoRef.current.currentTime;
+            const { dataUrl } = await thumbnailService.generateThumbnail(editorData.videoFile, currentTimeSeconds);
             setNewThumbnailUrl(dataUrl);
             setFormData(prev => ({ ...prev, thumbTime: Math.round(currentTimeSeconds * 1000) }));
         } catch (err) {
@@ -312,14 +207,14 @@ const EditorScreen: React.FC = () => {
     };
     
     const getTimeFromPosition = useCallback((clientX: number) => {
-        if (!timelineRef.current || videoDurationMs === 0) return 0;
+        if (!timelineRef.current || !editorData || editorData.videoDurationMs === 0) return 0;
         const rect = timelineRef.current.getBoundingClientRect();
         const offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
-        return (offsetX / rect.width) * videoDurationMs;
-    }, [videoDurationMs]);
+        return (offsetX / rect.width) * editorData.videoDurationMs;
+    }, [editorData]);
 
     const handleDragMove = useCallback((clientX: number, element: 'start' | 'end' | 'scrub') => {
-        if (!videoRef.current) return;
+        if (!videoRef.current || !editorData) return;
         const newTimeMs = getTimeFromPosition(clientX);
         
         const seekVideoTo = (timeMs: number) => {
@@ -337,11 +232,11 @@ const EditorScreen: React.FC = () => {
             setFormData(prev => ({ ...prev, startTime: clampedTime }));
             seekVideoTo(clampedTime);
         } else if (element === 'end') {
-            const clampedTime = Math.max(formData.startTime, Math.min(newTimeMs, videoDurationMs));
+            const clampedTime = Math.max(formData.startTime, Math.min(newTimeMs, editorData.videoDurationMs));
             setFormData(prev => ({ ...prev, endTime: clampedTime }));
             seekVideoTo(clampedTime);
         }
-    }, [getTimeFromPosition, formData.startTime, formData.endTime, videoDurationMs]);
+    }, [getTimeFromPosition, formData.startTime, formData.endTime, editorData]);
     
     const handleDragEnd = useCallback(() => setDraggingElement(null), []);
 
@@ -363,42 +258,18 @@ const EditorScreen: React.FC = () => {
     const handleHandleMouseDown = (e: React.MouseEvent, h: 'start' | 'end') => { e.stopPropagation(); setDraggingElement(h); };
     
     const handleSave = async () => {
-        if ((isCreatingFigure || isEditingFigure) && !formData.name) {
+        if ((isCreatingFigure || isEditingFigure) && !formData.name.trim()) {
             setError(t('editor.nameRequiredError'));
             return;
         }
         setIsSaving(true);
         setError(null);
 
-        const commonData = {
-            description: formData.description,
-            startTime: formData.startTime,
-            endTime: formData.endTime,
-            thumbTime: formData.thumbTime,
-            schoolId: formData.schoolId || null,
-            instructorId: formData.instructorId || null,
-        };
+        const type = isEditingLesson ? 'lesson' : 'figure';
+        const isNew = isCreatingFigure;
 
         try {
-            if (isCreatingFigure && lessonIdForNewFigure) {
-                const figureData = { ...commonData, name: formData.name };
-                await dataService.addFigure(lessonIdForNewFigure, figureData);
-                if (isSignedIn) {
-                    addTask('sync-gallery', { type: 'figure' }, true);
-                }
-            } else if (isEditingFigure && figureId) {
-                const updateData = { ...commonData, name: formData.name };
-                await dataService.updateFigure(figureId, updateData);
-                 if (isSignedIn) {
-                    addTask('sync-gallery', { type: 'figure' }, true);
-                }
-            } else if (isEditingLesson && lessonIdParam) {
-                const updateData = { ...commonData, uploadDate: new Date(formData.uploadDate).toISOString() };
-                await dataService.updateLesson(lessonIdParam, updateData);
-                if (isSignedIn) {
-                    addTask('sync-gallery', { type: 'lesson' }, true);
-                }
-            }
+            await itemManagementService.saveItem(type, formData, { isNew });
             if (refresh) refresh();
             navigate(baseNavPath, { state: { skipSync: true } });
         } catch (err) {
@@ -425,11 +296,11 @@ const EditorScreen: React.FC = () => {
     const primaryAction: ModalAction = { label: t('common.save'), loadingLabel: t('common.saving'), onClick: handleSave, isLoading: isSaving, disabled: isSaveDisabled };
     
     const renderContent = () => {
-        if (isLoading) {
+        if (isLoading || !editorData) {
             return <div className="flex items-center justify-center h-[60vh]"><i className="material-icons text-5xl text-gray-400 animate-spin-reverse">sync</i><span className="ml-4 text-xl text-gray-600">{t('editor.loading')}</span></div>;
         }
 
-        if (!item) {
+        if (error && !editorData) {
             return (
                 <div className="flex flex-col items-center justify-center h-[60vh] bg-gray-50 rounded-lg p-4 text-center">
                     <i className="material-icons text-6xl text-red-400">error_outline</i>
@@ -441,13 +312,13 @@ const EditorScreen: React.FC = () => {
 
         return (
             <>
-                {error && (
+                {error && !isSaving && (
                     <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-md">
                         <p>{error}</p>
                     </div>
                 )}
                 <BaseEditor
-                    videoUrl={videoUrl}
+                    videoUrl={editorData.videoUrl}
                     videoRef={videoRef}
                     timelineRef={timelineRef}
                     onLoadedMetadata={handleLoadedMetadata}
@@ -455,18 +326,18 @@ const EditorScreen: React.FC = () => {
                     onVolumeChange={handleVolumeChange}
                     formData={formData}
                     onFormChange={handleFormChange}
-                    videoDurationMs={videoDurationMs}
+                    videoDurationMs={editorData.videoDurationMs}
                     currentTimeMs={currentTimeMs}
                     draggingElement={draggingElement}
                     onHandleMouseDown={handleHandleMouseDown}
                     onTimelineMouseDown={handleTimelineMouseDown}
                     onSetThumbnail={handleSetThumbnail}
                     isSaving={isSaving}
-                    thumbnailPreviewUrl={newThumbnailUrl || originalThumbnailUrl}
+                    thumbnailPreviewUrl={newThumbnailUrl || editorData.originalThumbnailUrl}
                     headerContent={renderHeaderContent()}
                     msToSecondsString={msToSecondsString}
-                    schools={schools}
-                    instructors={instructors}
+                    schools={editorData.schools}
+                    instructors={editorData.instructors}
                 />
             </>
         );
@@ -479,7 +350,7 @@ const EditorScreen: React.FC = () => {
             isMobile={isMobile} 
             primaryAction={primaryAction} 
             desktopWidth="max-w-6xl" 
-            error={null}
+            error={isSaving ? error : null} // Only show modal-level error when saving
         >
             {renderContent()}
         </BaseModal>

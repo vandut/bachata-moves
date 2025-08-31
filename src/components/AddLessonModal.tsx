@@ -3,8 +3,9 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../contexts/I18nContext';
-import { useGoogleDrive } from '../contexts/GoogleDriveContext';
-import { dataService } from '../services/DataService';
+import { thumbnailService } from '../services/ThumbnailService';
+import { itemManagementService } from '../services/ItemManagementService';
+
 
 interface GalleryContext {
     refresh: () => void;
@@ -15,7 +16,6 @@ const AddLessonModal: React.FC = () => {
   const { refresh, isMobile } = useOutletContext<GalleryContext>();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { isSignedIn, addTask } = useGoogleDrive();
 
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -27,48 +27,6 @@ const AddLessonModal: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const generateThumbnail = (file: File): Promise<{ dataUrl: string, durationMs: number }> => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      const videoUrl = URL.createObjectURL(file);
-
-      if (!context) {
-        reject(new Error('Canvas 2D context is not available.'));
-        return;
-      }
-      
-      let durationMs = 0;
-
-      video.addEventListener('loadedmetadata', () => {
-        video.width = video.videoWidth;
-        video.height = video.videoHeight;
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        durationMs = video.duration * 1000;
-        video.currentTime = 0; // Seek to the first frame
-      });
-
-      video.addEventListener('seeked', () => {
-        context.drawImage(video, 0, 0, video.width, video.height);
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        URL.revokeObjectURL(videoUrl); // Clean up
-        resolve({ dataUrl, durationMs });
-      });
-
-      video.addEventListener('error', (err) => {
-        URL.revokeObjectURL(videoUrl); // Clean up on error
-        console.error("Video thumbnail generation error:", err);
-        reject(new Error('Failed to load video for thumbnail generation.'));
-      });
-
-      video.preload = 'metadata';
-      video.src = videoUrl;
-      video.load();
-    });
-  };
-
   const processFile = async (file: File | null | undefined) => {
     if (file && file.type.startsWith('video/')) {
       setError(null);
@@ -76,7 +34,7 @@ const AddLessonModal: React.FC = () => {
       setThumbnailUrl(null); // Reset thumbnail while generating new one
       setVideoDurationMs(0);
       try {
-        const { dataUrl, durationMs } = await generateThumbnail(file);
+        const { dataUrl, durationMs } = await thumbnailService.generateThumbnail(file, 0); // Use 0 for first frame
         setThumbnailUrl(dataUrl);
         setVideoDurationMs(durationMs);
       } catch (genError) {
@@ -137,18 +95,15 @@ const AddLessonModal: React.FC = () => {
     setError(null);
 
     try {
-      const lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime' | 'driveId' | 'videoDriveId' | 'modifiedTime'> = {
+      const lessonData: Partial<Lesson> = {
         uploadDate: new Date(date).toISOString(),
         description: description || null,
         startTime: 0,
         endTime: videoDurationMs,
+        thumbTime: 0, // Default to first frame
       };
       
-      await dataService.addLesson(lessonData, videoFile);
-      
-      if (isSignedIn) {
-        addTask('sync-gallery', { type: 'lesson' }, true);
-      }
+      await itemManagementService.saveItem('lesson', lessonData, { videoFile, isNew: true });
       
       if (refresh) {
         refresh();

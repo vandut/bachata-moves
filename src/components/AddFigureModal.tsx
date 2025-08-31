@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import type { ModalAction, Lesson } from '../types';
-import { localDatabaseService } from '../services/LocalDatabaseService';
 import { useTranslation } from '../contexts/I18nContext';
 import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { dataService } from '../services/DataService';
+import { itemManagementService } from '../services/ItemManagementService';
 
 // --- SELECTABLE LESSON CARD ---
 
@@ -76,8 +76,8 @@ const AddFigureModal: React.FC = () => {
 
     useEffect(() => {
         setIsLoadingLessons(true);
-        localDatabaseService.getLessons()
-            .then(lessons => setLessons(lessons.sort((a,b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())))
+        itemManagementService.getLessonsForNewFigure()
+            .then(lessons => setLessons(lessons))
             .catch(err => setError(err.message))
             .finally(() => setIsLoadingLessons(false));
     }, []);

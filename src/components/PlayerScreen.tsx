@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, 'react';
 import { useNavigate, useParams, useLocation, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
-import { localDatabaseService } from '../services/LocalDatabaseService';
-import { dataService } from '../services/DataService';
 import type { Lesson, Figure, ModalAction } from '../types';
 import CustomSlider from './CustomSlider';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useTranslation } from '../contexts/I18nContext';
-import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { itemManagementService, ViewerData } from '../services/ItemManagementService';
 
 // This context is provided by the parent gallery component (Lessons or Figures)
 interface GalleryContext {
@@ -24,23 +22,22 @@ const PlayerScreen: React.FC = () => {
   const { isMobile, refresh, itemIds } = useOutletContext<GalleryContext>();
   const { t, locale } = useTranslation();
   const { settings, updateSettings } = useSettings();
-  const { isSignedIn, addTask } = useGoogleDrive();
   const { isMuted, volume } = settings;
 
-  const [item, setItem] = useState<Lesson | Figure | null>(null);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null);
-  const [currentTimeMs, setCurrentTimeMs] = useState(0);
-  const [videoDurationMs, setVideoDurationMs] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [desktopModalStyle, setDesktopModalStyle] = useState<React.CSSProperties>({});
-  const [touchStart, setTouchStart] = useState<{ x: number, y: number } | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [viewerData, setViewerData] = React.useState<ViewerData | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [videoAspectRatio, setVideoAspectRatio] = React.useState<number | null>(null);
+  const [currentTimeMs, setCurrentTimeMs] = React.useState(0);
+  const [videoDurationMs, setVideoDurationMs] = React.useState(0);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [desktopModalStyle, setDesktopModalStyle] = React.useState<React.CSSProperties>({});
+  const [touchStart, setTouchStart] = React.useState<{ x: number, y: number } | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
   
   const currentId = lessonId || figureId;
+  const itemType = lessonId ? 'lesson' : 'figure';
   const baseRoute = location.pathname.startsWith('/lessons/') ? '/lessons' : '/figures';
 
   const navigateToItem = (direction: 'next' | 'prev') => {
@@ -56,65 +53,39 @@ const PlayerScreen: React.FC = () => {
     }
   };
 
-  useEffect(() => {
+  React.useEffect(() => {
     let isCancelled = false;
     const loadData = async () => {
+      if (!currentId) return;
       setIsLoading(true);
       setError(null);
-      setItem(null);
-      setVideoUrl(null);
+      setViewerData(null);
       setVideoAspectRatio(null);
       setCurrentTimeMs(0);
       setVideoDurationMs(0);
       setDesktopModalStyle({});
       try {
-        let loadedItem: Lesson | Figure | undefined;
-        let videoLessonSource: Lesson | undefined;
-
-        if (lessonId) {
-          const lessons = await localDatabaseService.getLessons();
-          if (isCancelled) return;
-          loadedItem = lessons.find(l => l.id === lessonId);
-          videoLessonSource = loadedItem as Lesson;
-        } else if (figureId) {
-          const [figures, lessons] = await Promise.all([
-            localDatabaseService.getFigures(),
-            localDatabaseService.getLessons(),
-          ]);
-          if (isCancelled) return;
-          loadedItem = figures.find(f => f.id === figureId);
-          if (loadedItem) {
-            videoLessonSource = lessons.find(l => l.id === (loadedItem as Figure).lessonId);
-          }
-        }
-
-        if (isCancelled) return;
-
-        if (loadedItem && videoLessonSource) {
-          setItem(loadedItem);
-          const url = await dataService.getVideoObjectUrl(videoLessonSource);
-          if (isCancelled) return;
-          setVideoUrl(url);
-        } else {
-          setError(t('player.itemNotFound'));
+        const data = await itemManagementService.getItemForViewer(itemType, currentId);
+        if (!isCancelled) {
+          setViewerData(data);
+          setCurrentTimeMs(data.item.startTime || 0);
         }
       } catch (e) {
-        if (isCancelled) return;
-        console.error("Failed to load player data:", e);
-        setError(e instanceof Error ? e.message : 'An unknown error occurred.');
-      } finally {
         if (!isCancelled) {
-          setIsLoading(false);
+          console.error("Failed to load player data:", e);
+          setError(e instanceof Error ? e.message : t('player.itemNotFound'));
         }
+      } finally {
+        if (!isCancelled) setIsLoading(false);
       }
     };
     loadData();
 
     return () => { isCancelled = true; }
-  }, [lessonId, figureId, t]);
+  }, [currentId, itemType, t]);
 
   // Effect for Keyboard Navigation
-  useEffect(() => {
+  React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't navigate if an input element is focused
       if (document.activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
@@ -130,9 +101,9 @@ const PlayerScreen: React.FC = () => {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [itemIds, currentId, navigate]);
+  }, [itemIds, currentId]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!isMobile && videoAspectRatio !== null) {
       const isVertical = videoAspectRatio < 1;
       if (isVertical) {
@@ -154,13 +125,13 @@ const PlayerScreen: React.FC = () => {
   }, [isMobile, videoAspectRatio]);
 
 
-  useEffect(() => {
+  React.useEffect(() => {
     const video = videoRef.current;
     if (video) {
       video.muted = isMuted;
       video.volume = volume;
     }
-  }, [isMuted, volume, videoUrl]);
+  }, [isMuted, volume, viewerData?.videoUrl]);
 
   const handleVolumeChange = () => {
     const video = videoRef.current;
@@ -199,23 +170,22 @@ const PlayerScreen: React.FC = () => {
   
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
-    if (!video || !item) return;
+    if (!video || !viewerData) return;
     if (video.videoHeight > 0) {
       setVideoAspectRatio(video.videoWidth / video.videoHeight);
     }
     setVideoDurationMs(video.duration * 1000);
-    const startTimeSec = (item.startTime || 0) / 1000;
+    const startTimeSec = (viewerData.item.startTime || 0) / 1000;
     video.currentTime = startTimeSec;
-    setCurrentTimeMs(item.startTime || 0);
     video.play().catch(e => console.warn("Autoplay was prevented:", e));
   };
 
   const handleTimeUpdate = () => {
     const video = videoRef.current;
-    if (!video || !item) return;
+    if (!video || !viewerData) return;
     setCurrentTimeMs(video.currentTime * 1000);
-    const startTimeSec = (item.startTime || 0) / 1000;
-    const endTimeSec = item.endTime / 1000;
+    const startTimeSec = (viewerData.item.startTime || 0) / 1000;
+    const endTimeSec = viewerData.item.endTime / 1000;
     if (endTimeSec > startTimeSec && video.currentTime >= endTimeSec - 0.1) {
       video.currentTime = startTimeSec;
       video.play().catch(e => console.warn("Loop playback failed", e));
@@ -237,22 +207,11 @@ const PlayerScreen: React.FC = () => {
   };
 
   const handleConfirmDelete = async () => {
-    if (!item) return;
-    const itemType = 'uploadDate' in item ? 'lesson' : 'figure';
-
+    if (!viewerData) return;
     setIsDeleting(true);
     setError(null);
     try {
-      const driveIdsToDelete = itemType === 'lesson'
-        ? await dataService.deleteLesson(item.id)
-        : [await dataService.deleteFigure(item.id)].filter((id): id is string => !!id);
-
-      if (isSignedIn && driveIdsToDelete.length > 0) {
-        await localDatabaseService.addTombstones(driveIdsToDelete);
-        // FIX: 'sync-deleted-log' is not a valid task type. Use 'sync-gallery' to process tombstones.
-        addTask('sync-gallery', { type: itemType }, true);
-      }
-      
+      await itemManagementService.deleteItem(itemType, viewerData.item.id);
       if (refresh) refresh();
       handleClose();
     } catch (e) {
@@ -264,6 +223,7 @@ const PlayerScreen: React.FC = () => {
     }
   };
 
+  const item = viewerData?.item;
   const modalTitle = item ? ('uploadDate' in item ? t('player.titleLesson', { date: new Date(item.uploadDate).toLocaleDateString(locale) }) : item.name) : t('common.loading');
     
   const primaryAction: ModalAction | undefined = item ? { label: t('common.edit'), onClick: handleEdit, disabled: isDeleting } : undefined;
@@ -291,12 +251,12 @@ const PlayerScreen: React.FC = () => {
           <div 
             className="bg-black flex-1 min-h-0 flex flex-col items-center justify-center"
           >
-            {videoUrl && item ? (
+            {viewerData?.videoUrl && item ? (
               <div className="w-full h-full flex flex-col justify-center">
                 <div className="relative flex-1 min-h-0 flex items-center justify-center group">
                     <video
                       ref={videoRef}
-                      src={videoUrl}
+                      src={viewerData.videoUrl}
                       onLoadedMetadata={handleLoadedMetadata}
                       onTimeUpdate={handleTimeUpdate}
                       onVolumeChange={handleVolumeChange}
