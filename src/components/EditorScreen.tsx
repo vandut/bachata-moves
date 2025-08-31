@@ -5,7 +5,6 @@ import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure, School, Instructor } from '../types';
 import { useTranslation } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { thumbnailService } from '../services/ThumbnailService';
 import { itemManagementService, EditorData } from '../services/ItemManagementService';
 import { msToSecondsString, secondsStringToMs } from '../utils/formatters';
 import { useVideoPlayback } from '../hooks/useVideoPlayback';
@@ -181,12 +180,12 @@ const EditorScreen: React.FC = () => {
     };
     
     const handleSetThumbnail = async () => {
-        if (!editorData?.item || !videoRef.current) return;
+        if (!editorData?.videoFile || !videoRef.current) return;
         
         try {
             const currentTimeSeconds = videoRef.current.currentTime;
-            const { dataUrl } = await thumbnailService.generateThumbnail(editorData.videoFile, currentTimeSeconds);
-            setNewThumbnailUrl(dataUrl);
+            const { thumbnailUrl } = await itemManagementService.generatePreviewForExistingItem(editorData.videoFile, currentTimeSeconds);
+            setNewThumbnailUrl(thumbnailUrl);
             setFormData(prev => ({ ...prev, thumbTime: Math.round(currentTimeSeconds * 1000) }));
         } catch (err) {
             setError(err instanceof Error ? err.message : t('editor.errorThumb'));

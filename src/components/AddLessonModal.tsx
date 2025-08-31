@@ -3,7 +3,6 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../contexts/I18nContext';
-import { thumbnailService } from '../services/ThumbnailService';
 import { itemManagementService } from '../services/ItemManagementService';
 
 
@@ -24,20 +23,24 @@ const AddLessonModal: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const processFile = async (file: File | null | undefined) => {
     if (file && file.type.startsWith('video/')) {
       setError(null);
       setVideoFile(file);
-      setThumbnailUrl(null); // Reset thumbnail while generating new one
+      setThumbnailUrl(null); // Reset thumbnail
+      setIsPreviewLoading(true); // Start loading
       try {
-        const { dataUrl } = await thumbnailService.generateThumbnail(file, 0); // Use 0 for first frame
-        setThumbnailUrl(dataUrl);
+        const { thumbnailUrl: newThumbnailUrl } = await itemManagementService.generatePreviewForNewLesson(file);
+        setThumbnailUrl(newThumbnailUrl);
       } catch (genError) {
         console.error(genError);
         setError(t('addLessonModal.errorThumb'));
         setThumbnailUrl(null);
+      } finally {
+        setIsPreviewLoading(false); // Stop loading
       }
     } else {
       setError(t('addLessonModal.errorFile'));
@@ -134,7 +137,11 @@ const AddLessonModal: React.FC = () => {
             onDragOver={handleDragOver}
             onDrop={handleDrop}
         >
-            {thumbnailUrl ? (
+            {isPreviewLoading ? (
+                <div className="flex items-center justify-center h-full">
+                    <i className="material-icons text-6xl text-gray-400 animate-spin-reverse">sync</i>
+                </div>
+            ) : thumbnailUrl ? (
                 <img src={thumbnailUrl} alt="Video thumbnail" className="absolute inset-0 w-full h-full object-contain bg-black" />
             ) : (
                 <div className="text-center text-gray-400 group-hover:text-gray-500 transition-colors">

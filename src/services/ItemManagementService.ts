@@ -63,6 +63,8 @@ export interface ItemManagementService {
     getLessonsForNewFigure(): Promise<{ lessons: Lesson[], thumbnailUrls: Map<string, string | null> }>;
     getGroupingEditorData(type: 'lesson' | 'figure'): Promise<GroupingEditorData>;
     saveGroupingConfiguration(type: 'lesson' | 'figure', config: GroupingSaveConfiguration): Promise<void>;
+    generatePreviewForNewLesson(file: File): Promise<{ thumbnailUrl: string }>;
+    generatePreviewForExistingItem(videoFile: File, timeSeconds: number): Promise<{ thumbnailUrl: string }>;
 }
 
 // --- Implementation ---
@@ -371,6 +373,19 @@ class ItemManagementServiceImpl implements ItemManagementService {
             this.syncQueueSvc.addTask('sync-grouping-config', { type }, true);
             if (allDeletedIds.length > 0) this.syncQueueSvc.addTask('sync-gallery', { type }, true);
         }
+    }
+    
+    public async generatePreviewForNewLesson(file: File): Promise<{ thumbnailUrl: string }> {
+        if (!file.type.startsWith('video/')) {
+            throw new Error('Invalid file type provided. Expected a video.');
+        }
+        const { dataUrl } = await this.thumbSvc.generateThumbnail(file, 0);
+        return { thumbnailUrl: dataUrl };
+    }
+
+    public async generatePreviewForExistingItem(videoFile: File, timeSeconds: number): Promise<{ thumbnailUrl: string }> {
+        const { dataUrl } = await this.thumbSvc.generateThumbnail(videoFile, timeSeconds);
+        return { thumbnailUrl: dataUrl };
     }
 }
 
