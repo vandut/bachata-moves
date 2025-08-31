@@ -1,5 +1,4 @@
 import { useRef, useCallback } from 'react';
-import { dataService } from '../services/DataService';
 import type { Lesson, Figure } from '../types';
 import type { AppSettings } from '../contexts/SettingsContext';
 
@@ -7,7 +6,7 @@ type OnExitCallback = () => void;
 
 interface PlayOptions {
     item: Lesson | Figure;
-    parentLesson?: Lesson;
+    videoUrl: string;
     onExit?: OnExitCallback;
     itemIds: string[];
     baseRoute: string;
@@ -53,18 +52,10 @@ export const useFullscreenPlayer = () => {
 
     const play = useCallback(async (options: PlayOptions) => {
         // FIX: Destructure settings and updateSettings from options to break circular dependency.
-        const { item, parentLesson, onExit, settings, updateSettings } = options;
+        const { item, onExit, settings, updateSettings, videoUrl } = options;
         onExitRef.current = onExit;
 
-        const lessonForVideo = 'uploadDate' in item ? item : parentLesson;
-        if (!lessonForVideo) {
-            console.error("No lesson provided for video source.");
-            return;
-        }
-
         try {
-            const videoUrl = await dataService.getVideoObjectUrl(lessonForVideo);
-            
             const container = document.createElement('div');
             container.style.position = 'fixed';
             container.style.top = '0';

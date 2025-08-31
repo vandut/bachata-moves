@@ -54,10 +54,11 @@ export interface ItemManagementService {
     getItemForViewer(type: 'lesson' | 'figure', id: string): Promise<ViewerData>;
     getItemForEditor(type: 'lesson' | 'figure', id: string): Promise<EditorData>;
     getItemForNewFigure(lessonId: string): Promise<EditorData>;
+    createLesson(data: { uploadDate: string; description: string | null }, videoFile: File): Promise<void>;
     saveItem(
         type: 'lesson' | 'figure', 
         data: Partial<Lesson & Figure>, 
-        options: { videoFile?: File, isNew: boolean, videoDurationMs?: number }
+        options: { isNew: boolean, videoDurationMs?: number }
     ): Promise<void>;
     getLessonsForNewFigure(): Promise<{ lessons: Lesson[], thumbnailUrls: Map<string, string | null> }>;
     getGroupingEditorData(type: 'lesson' | 'figure'): Promise<GroupingEditorData>;
@@ -134,10 +135,16 @@ class ItemManagementServiceImpl implements ItemManagementService {
         if (type === 'lesson') {
             item = (await this.localDBSvc.getLessons()).find(l => l.id === id);
             videoLessonSource = item as Lesson;
+        // FIX: When the item type is 'figure', the `item` variable was still typed as `Lesson | Figure`,
+        // causing a type error when accessing `item.lessonId`. By creating a new `figureItem` variable,
+        // TypeScript correctly infers its type as `Figure`, resolving the error.
         } else {
             const [figures, lessons] = await Promise.all([this.localDBSvc.getFigures(), this.localDBSvc.getLessons()]);
-            item = figures.find(f => f.id === id);
-            if (item) videoLessonSource = lessons.find(l => l.id === item.lessonId);
+            const figureItem = figures.find(f => f.id === id);
+            item = figureItem;
+            if (figureItem) {
+                videoLessonSource = lessons.find(l => l.id === figureItem.lessonId);
+            }
         }
 
         if (!item || !videoLessonSource) throw new Error("Item or its video source could not be found.");
@@ -205,11 +212,28 @@ class ItemManagementServiceImpl implements ItemManagementService {
 
         return { lessons: sortedLessons, thumbnailUrls };
     }
+    
+    public async createLesson(data: { uploadDate: string; description: string | null }, videoFile: File): Promise<void> {
+        const { blob: thumbnailBlob, durationMs } = await this.thumbSvc.generateThumbnail(videoFile, 0);
+        // FIX: In `createLesson`, cast the constructed lesson data to the expected type `Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>`.
+        // This resolves a TypeScript error where the compiler could not infer that all required properties were present.
+        const lessonData = {
+            ...data,
+            startTime: 0,
+            endTime: durationMs,
+        } as Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>;
+        
+        await this.localDBSvc.addLesson(lessonData, videoFile, thumbnailBlob);
+        
+        if (this.driveSvc.getAuthState().isSignedIn) {
+            this.syncQueueSvc.addTask('sync-gallery', { type: 'lesson' }, true);
+        }
+    }
 
     public async saveItem(
         type: 'lesson' | 'figure', 
         data: Partial<Lesson & Figure>, 
-        options: { videoFile?: File, isNew: boolean, videoDurationMs?: number }
+        options: { isNew: boolean, videoDurationMs?: number }
     ): Promise<void> {
         const commonData: Partial<Lesson & Figure> = {
             description: data.description,
@@ -233,16 +257,7 @@ class ItemManagementServiceImpl implements ItemManagementService {
                 categoryId: data.categoryId || null
             };
             if (options.isNew) {
-                if (!options.videoFile) throw new Error("Video file is required for a new lesson.");
-                // Get duration from video file and set default times
-                const { durationMs } = await this.thumbSvc.generateThumbnail(options.videoFile, 0);
-                const finalLessonData = {
-                    ...lessonData,
-                    startTime: 0,
-                    endTime: durationMs,
-                    thumbTime: 0,
-                };
-                await this.dataSvc.addLesson(finalLessonData as Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, options.videoFile);
+                throw new Error("Creating new lessons should use the `createLesson` method, not `saveItem`.");
             } else {
                 await this.dataSvc.updateLesson(data.id!, lessonData);
             }

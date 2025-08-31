@@ -91,12 +91,13 @@ const AddLessonModal: React.FC = () => {
     setError(null);
 
     try {
-      const lessonData: Partial<Lesson> = {
-        uploadDate: new Date(date).toISOString(),
-        description: description || null,
-      };
-      
-      await itemManagementService.saveItem('lesson', lessonData, { videoFile, isNew: true });
+      await itemManagementService.createLesson(
+        {
+          uploadDate: new Date(date).toISOString(),
+          description: description || null,
+        },
+        videoFile
+      );
       
       if (refresh) {
         refresh();

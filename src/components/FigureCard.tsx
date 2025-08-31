@@ -57,10 +57,14 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, thumbnail
   const handleMouseLeave = () => setIsHovering(false);
   
   const handleOpen = () => {
+    if (!videoUrl) {
+      console.warn("Attempted to open figure with no video URL.");
+      return;
+    }
     playInFullscreen({
         item: figure,
-        parentLesson,
-        onExit: () => {}, // The video URL is now managed by the gallery, no local state to clear
+        videoUrl,
+        onExit: () => {},
         itemIds,
         baseRoute,
         settings,

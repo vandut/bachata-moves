@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import BaseEditor from './BaseEditor';
@@ -9,6 +9,7 @@ import { thumbnailService } from '../services/ThumbnailService';
 import { itemManagementService, EditorData } from '../services/ItemManagementService';
 import { msToSecondsString, secondsStringToMs } from '../utils/formatters';
 import { useVideoPlayback } from '../hooks/useVideoPlayback';
+import { useTimelineScrubber } from '../hooks/useTimelineScrubber';
 
 interface GalleryContext {
     refresh: () => void;
@@ -40,7 +41,6 @@ const EditorScreen: React.FC = () => {
     const [formData, setFormData] = useState({ id: '', name: '', description: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
     const [newThumbnailUrl, setNewThumbnailUrl] = useState<string | null>(null);
     const [currentTimeMs, setCurrentTimeMs] = useState(0);
-    const [draggingElement, setDraggingElement] = useState<'start' | 'end' | 'scrub' | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const timelineRef = useRef<HTMLDivElement>(null);
 
@@ -118,6 +118,16 @@ const EditorScreen: React.FC = () => {
         };
         setTitle(getStaticTitle());
     }, [isLoading, error, editorData, isCreatingFigure, isEditingFigure, isEditingLesson, formData.uploadDate, t, locale]);
+    
+    // --- Timeline Scrubber Hook ---
+    const { draggingElement, onTimelineMouseDown, onHandleMouseDown } = useTimelineScrubber({
+      timelineRef,
+      videoRef,
+      videoDurationMs: editorData?.videoDurationMs || 0,
+      formData,
+      setFormData,
+      setCurrentTimeMs
+    });
 
     // --- Callbacks for BaseEditor ---
     const handleClose = () => {
@@ -182,57 +192,6 @@ const EditorScreen: React.FC = () => {
             setError(err instanceof Error ? err.message : t('editor.errorThumb'));
         }
     };
-    
-    const getTimeFromPosition = useCallback((clientX: number) => {
-        if (!timelineRef.current || !editorData || editorData.videoDurationMs === 0) return 0;
-        const rect = timelineRef.current.getBoundingClientRect();
-        const offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
-        return (offsetX / rect.width) * editorData.videoDurationMs;
-    }, [editorData]);
-
-    const handleDragMove = useCallback((clientX: number, element: 'start' | 'end' | 'scrub') => {
-        if (!videoRef.current || !editorData) return;
-        const newTimeMs = getTimeFromPosition(clientX);
-        
-        const seekVideoTo = (timeMs: number) => {
-            if (videoRef.current) {
-                videoRef.current.currentTime = timeMs / 1000;
-                setCurrentTimeMs(timeMs);
-            }
-        };
-
-        if (element === 'scrub') {
-            const clampedTime = Math.max(formData.startTime, Math.min(newTimeMs, formData.endTime));
-            seekVideoTo(clampedTime);
-        } else if (element === 'start') {
-            const clampedTime = Math.max(0, Math.min(newTimeMs, formData.endTime));
-            setFormData(prev => ({ ...prev, startTime: clampedTime }));
-            seekVideoTo(clampedTime);
-        } else if (element === 'end') {
-            const clampedTime = Math.max(formData.startTime, Math.min(newTimeMs, editorData.videoDurationMs));
-            setFormData(prev => ({ ...prev, endTime: clampedTime }));
-            seekVideoTo(clampedTime);
-        }
-    }, [getTimeFromPosition, formData.startTime, formData.endTime, editorData]);
-    
-    const handleDragEnd = useCallback(() => setDraggingElement(null), []);
-
-    useEffect(() => {
-        if (!draggingElement) return;
-        const onMouseMove = (e: MouseEvent) => handleDragMove(e.clientX, draggingElement);
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', handleDragEnd);
-        return () => {
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', handleDragEnd);
-        };
-    }, [draggingElement, handleDragMove, handleDragEnd]);
-    
-    const handleTimelineMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-        setDraggingElement('scrub');
-        handleDragMove(e.clientX, 'scrub');
-    };
-    const handleHandleMouseDown = (e: React.MouseEvent, h: 'start' | 'end') => { e.stopPropagation(); setDraggingElement(h); };
     
     const handleSave = async () => {
         if ((isCreatingFigure || isEditingFigure) && !formData.name.trim()) {
@@ -309,8 +268,8 @@ const EditorScreen: React.FC = () => {
                     videoDurationMs={editorData.videoDurationMs}
                     currentTimeMs={currentTimeMs}
                     draggingElement={draggingElement}
-                    onHandleMouseDown={handleHandleMouseDown}
-                    onTimelineMouseDown={handleTimelineMouseDown}
+                    onHandleMouseDown={onHandleMouseDown}
+                    onTimelineMouseDown={onTimelineMouseDown}
                     onSetThumbnail={handleSetThumbnail}
                     isSaving={isSaving}
                     thumbnailPreviewUrl={newThumbnailUrl || editorData.originalThumbnailUrl}
