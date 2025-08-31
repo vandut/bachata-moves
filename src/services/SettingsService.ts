@@ -1,4 +1,5 @@
 
+
 import type { AppSettings } from '../types';
 import { localDatabaseService, LocalDatabaseService } from './LocalDatabaseService';
 import { createLogger } from '../utils/logger';
@@ -74,6 +75,7 @@ export interface GroupingConfiguration {
 export interface SettingsService {
   getSettings(): Promise<AppSettings>;
   updateSettings(updates: Partial<AppSettings>, options?: { silent?: boolean }): Promise<void>;
+  applyRemoteSettings(updates: Partial<AppSettings>, modifiedTime: string): Promise<void>;
   subscribe(callback: (settings: AppSettings) => void): () => void;
   getSettingsSnapshot(): AppSettings | null;
 
@@ -160,6 +162,22 @@ class SettingsServiceImpl implements SettingsService {
       if (!options?.silent) {
         this.notify();
       }
+    }
+  }
+
+  public async applyRemoteSettings(updates: Partial<AppSettings>, modifiedTime: string): Promise<void> {
+    const currentSettings = await this.getSettings();
+    const newSettings = { ...currentSettings, ...updates };
+    this.settings = newSettings; // Optimistic update
+
+    try {
+        await this.localDB.saveAllSettings(newSettings, modifiedTime);
+        this.notify();
+    } catch (error) {
+        logger.error('Failed to apply remote settings', error);
+        // Revert optimistic update on failure
+        this.settings = currentSettings;
+        this.notify();
     }
   }
 

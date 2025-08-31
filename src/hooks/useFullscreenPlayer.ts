@@ -18,7 +18,8 @@ export const useFullscreenPlayer = () => {
     // FIX: Completed the hook implementation. The useRef should be for an HTMLVideoElement.
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
-    const onExitRef = useRef<OnExitCallback | undefined>();
+    // FIX: Provide an initial value of `undefined` to the `useRef` hook to resolve the "Expected 1 arguments, but got 0" error.
+    const onExitRef = useRef<OnExitCallback | undefined>(undefined);
 
     const cleanup = useCallback(async () => {
         if (document.fullscreenElement && document.exitFullscreen) {

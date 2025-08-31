@@ -47,7 +47,7 @@ export interface LocalDatabaseService {
 
   // Settings
   getRawSettings(): Promise<{ device: Partial<AppSettings> | undefined; sync: Partial<AppSettings> | undefined; }>;
-  saveAllSettings(settingsData: AppSettings): Promise<void>;
+  saveAllSettings(settingsData: AppSettings, modifiedTime?: string): Promise<void>;
   
   // Blob Handling
   getVideoBlob(videoId: string): Promise<Blob | undefined>;
@@ -542,7 +542,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     return { device, sync };
   }
 
-  public saveAllSettings = async (settingsData: AppSettings): Promise<void> => {
+  public saveAllSettings = async (settingsData: AppSettings, modifiedTime?: string): Promise<void> => {
     const db = await openBachataDB();
     const deviceSettings: Partial<AppSettings> = {};
     const syncSettings: Partial<AppSettings> & { modifiedTime?: string } = {};
@@ -588,8 +588,8 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
         }
     }
     
-    // Add a modifiedTime to the syncable settings object for comparison
-    syncSettings.modifiedTime = new Date().toISOString();
+    // Use provided modifiedTime for sync, otherwise generate a new one.
+    syncSettings.modifiedTime = modifiedTime || new Date().toISOString();
     
     const tx = db.transaction(SETTINGS_STORE, 'readwrite');
     await Promise.all([

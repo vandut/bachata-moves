@@ -2,6 +2,7 @@
 
 
 
+
 import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, AppSettings, FigureCategory, LessonCategory, School, Instructor } from '../types';
 import type { LocalDatabaseService } from './LocalDatabaseService';
 import type { GoogleDriveService } from './GoogleDriveService';
@@ -440,9 +441,8 @@ class SyncQueueServiceImpl implements SyncQueueService {
             figureInstructorOrder: instructorOrder,
         };
         
-        // The second argument `{ silent: true }` prevents an extra, unnecessary notification,
-        // as the main database changes will trigger one anyway.
-        await settingsService.updateSettings(settingsUpdate, { silent: true });
+        // Use the new service method to preserve the timestamp from the remote data.
+        await settingsService.applyRemoteSettings(settingsUpdate, remoteConfig.modifiedTime);
     }
 }
 
