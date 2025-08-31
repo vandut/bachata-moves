@@ -164,4 +164,7 @@ export interface GroupingConfig {
     instructors: Instructor[];
     showEmpty: boolean;
     showCount: boolean;
+    categoryOrder: string[];
+    schoolOrder: string[];
+    instructorOrder: string[];
 }

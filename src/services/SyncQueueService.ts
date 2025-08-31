@@ -373,26 +373,35 @@ class SyncQueueServiceImpl implements SyncQueueService {
     }
 
     private getLocalGroupingConfig = async (type: 'lesson' | 'figure'): Promise<GroupingConfig> => {
-        const [categories, schools, instructors, settings] = await Promise.all([
+        // Fetch all data in parallel
+        const [categories, schools, instructors, settings, rawSettings] = await Promise.all([
             type === 'lesson' ? this.localDB.getLessonCategories() : this.localDB.getFigureCategories(),
             this.localDB.getSchools(),
             this.localDB.getInstructors(),
-            settingsService.getSettings()
+            settingsService.getSettings(),
+            this.localDB.getRawSettings() // Fetch raw settings to get the sync object's modifiedTime
         ]);
-        
-        const getLatestTime = (items: any[]) => items.reduce((latest, item) => Math.max(latest, new Date(item.modifiedTime || 0).getTime()), 0);
-        const latestTime = Math.max(getLatestTime(categories), getLatestTime(schools), getLatestTime(instructors));
-        
+
+        // The timestamp for the config is stored on the sync-settings object itself
+        const modifiedTime = (rawSettings.sync as any)?.modifiedTime || '1970-01-01T00:00:00.000Z';
+
         return {
-            modifiedTime: latestTime > 0 ? new Date(latestTime).toISOString() : '1970-01-01T00:00:00.000Z',
-            categories, schools, instructors,
+            modifiedTime: modifiedTime,
+            categories,
+            schools,
+            instructors,
             showEmpty: type === 'lesson' ? settings.showEmptyLessonCategoriesInGroupedView : settings.showEmptyFigureCategoriesInGroupedView,
             showCount: type === 'lesson' ? settings.showLessonCountInGroupHeaders : settings.showFigureCountInGroupHeaders,
+            // Include the order arrays in the config
+            categoryOrder: type === 'lesson' ? settings.lessonCategoryOrder : settings.figureCategoryOrder,
+            schoolOrder: type === 'lesson' ? settings.lessonSchoolOrder : settings.figureSchoolOrder,
+            instructorOrder: type === 'lesson' ? settings.lessonInstructorOrder : settings.figureInstructorOrder,
         };
     }
 
     private applyRemoteGroupingConfig = async (remoteConfig: GroupingConfig, type: 'lesson' | 'figure'): Promise<void> => {
-        const { categories, schools, instructors, showEmpty, showCount } = remoteConfig;
+        // Destructure all properties from the remote config, including new order arrays
+        const { categories, schools, instructors, showEmpty, showCount, categoryOrder, schoolOrder, instructorOrder } = remoteConfig;
 
         type SyncableConfigItem = (LessonCategory | FigureCategory | School | Instructor);
 
@@ -416,14 +425,24 @@ class SyncQueueServiceImpl implements SyncQueueService {
         await syncItems(await this.localDB.getSchools(), schools, this.localDB.addSchool, this.localDB.updateSchool);
         await syncItems(await this.localDB.getInstructors(), instructors, this.localDB.addInstructor, this.localDB.updateInstructor);
 
+        // Create the settings update object with the new order arrays
         const settingsUpdate: Partial<AppSettings> = type === 'lesson' ? {
             showEmptyLessonCategoriesInGroupedView: showEmpty,
-            showLessonCountInGroupHeaders: showCount
+            showLessonCountInGroupHeaders: showCount,
+            lessonCategoryOrder: categoryOrder,
+            lessonSchoolOrder: schoolOrder,
+            lessonInstructorOrder: instructorOrder,
         } : {
             showEmptyFigureCategoriesInGroupedView: showEmpty,
-            showFigureCountInGroupHeaders: showCount
+            showFigureCountInGroupHeaders: showCount,
+            figureCategoryOrder: categoryOrder,
+            figureSchoolOrder: schoolOrder,
+            figureInstructorOrder: instructorOrder,
         };
-        await settingsService.updateSettings(settingsUpdate);
+        
+        // The second argument `{ silent: true }` prevents an extra, unnecessary notification,
+        // as the main database changes will trigger one anyway.
+        await settingsService.updateSettings(settingsUpdate, { silent: true });
     }
 }
 

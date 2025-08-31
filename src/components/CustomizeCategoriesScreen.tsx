@@ -1,14 +1,14 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../App';
-import type { ModalAction, FigureCategory, LessonCategory, AppSettings, School, Instructor } from '../types';
+import type { ModalAction, FigureCategory, LessonCategory, School, Instructor } from '../types';
 import { localDatabaseService } from '../services/LocalDatabaseService';
 import { dataService } from '../services/DataService';
 import { useGoogleDrive } from '../hooks/useGoogleDrive';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { settingsService, GroupingConfiguration } from '../services/SettingsService';
 
 interface GalleryContext {
     isMobile: boolean;
@@ -27,7 +27,7 @@ const CustomizeGroupingScreen: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { isMobile } = useOutletContext<GalleryContext>();
-    const { t, settings, updateSettings, reloadAllData } = useTranslation();
+    const { t, settings, reloadAllData } = useTranslation();
     const { isSignedIn, forceUploadGroupingConfig, forceDeleteGroupingItem } = useGoogleDrive();
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);
@@ -49,25 +49,11 @@ const CustomizeGroupingScreen: React.FC = () => {
                 getCategories: localDatabaseService.getLessonCategories, addCategory: localDatabaseService.addLessonCategory, updateCategory: localDatabaseService.updateLessonCategory, deleteCategory: dataService.deleteLessonCategory,
                 getSchools: localDatabaseService.getSchools, addSchool: localDatabaseService.addSchool, updateSchool: localDatabaseService.updateSchool, deleteSchool: dataService.deleteSchool,
                 getInstructors: localDatabaseService.getInstructors, addInstructor: localDatabaseService.addInstructor, updateInstructor: localDatabaseService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
-                updateSettingsKeys: {
-                    order: 'lessonCategoryOrder' as keyof AppSettings,
-                    schoolOrder: 'lessonSchoolOrder' as keyof AppSettings,
-                    instructorOrder: 'lessonInstructorOrder' as keyof AppSettings,
-                    showEmpty: 'showEmptyLessonCategoriesInGroupedView' as keyof AppSettings,
-                    showCount: 'showLessonCountInGroupHeaders' as keyof AppSettings,
-                }
             }
             : {
                 getCategories: localDatabaseService.getFigureCategories, addCategory: localDatabaseService.addFigureCategory, updateCategory: localDatabaseService.updateFigureCategory, deleteCategory: dataService.deleteFigureCategory,
                 getSchools: localDatabaseService.getSchools, addSchool: localDatabaseService.addSchool, updateSchool: localDatabaseService.updateSchool, deleteSchool: dataService.deleteSchool,
                 getInstructors: localDatabaseService.getInstructors, addInstructor: localDatabaseService.addInstructor, updateInstructor: localDatabaseService.updateInstructor, deleteInstructor: dataService.deleteInstructor,
-                updateSettingsKeys: {
-                    order: 'figureCategoryOrder' as keyof AppSettings,
-                    schoolOrder: 'figureSchoolOrder' as keyof AppSettings,
-                    instructorOrder: 'figureInstructorOrder' as keyof AppSettings,
-                    showEmpty: 'showEmptyFigureCategoriesInGroupedView' as keyof AppSettings,
-                    showCount: 'showFigureCountInGroupHeaders' as keyof AppSettings,
-                }
             };
     }, [type]);
 
@@ -161,7 +147,7 @@ const CustomizeGroupingScreen: React.FC = () => {
             
             const newCats = await createUpdateDelete(initialCategories, categories.filter(c => !c.isSpecial), config.addCategory, config.updateCategory);
             const newSchools = await createUpdateDelete(initialSchools, schools.filter(s => !s.isSpecial), config.addSchool, config.updateSchool);
-            const newInstructors = await createUpdateDelete(initialInstructors, instructors.filter(i => !i.isSpecial), config.addInstructor, config.updateInstructor);
+            const newInstructors = await createUpdateDelete(initialInstructors, instructors.filter(i => !i.isNew), config.addInstructor, config.updateInstructor);
             
             const newCatIdMap = new Map<string, string>();
             categories.filter(c => c.isNew).forEach((c, index) => { newCatIdMap.set(c.id, newCats[index].id); });
@@ -175,14 +161,14 @@ const CustomizeGroupingScreen: React.FC = () => {
             instructors.filter(i => i.isNew).forEach((i, index) => { newInstructorIdMap.set(i.id, newInstructors[index].id); });
             const finalInstructorOrder = instructors.map(item => newInstructorIdMap.get(item.id) || item.id);
             
-            const newSettings: Partial<AppSettings> = {
-                [config.updateSettingsKeys.order]: finalCategoryOrder,
-                [config.updateSettingsKeys.schoolOrder]: finalSchoolOrder,
-                [config.updateSettingsKeys.instructorOrder]: finalInstructorOrder,
-                [config.updateSettingsKeys.showEmpty]: showEmpty,
-                [config.updateSettingsKeys.showCount]: showCount,
+            const groupingConfig: GroupingConfiguration = {
+                categoryOrder: finalCategoryOrder,
+                schoolOrder: finalSchoolOrder,
+                instructorOrder: finalInstructorOrder,
+                showEmpty: showEmpty,
+                showCount: showCount,
             };
-            await updateSettings(newSettings);
+            await settingsService.saveGroupingConfiguration(type, groupingConfig);
             
             if (isSignedIn) {
                 await forceUploadGroupingConfig(type);

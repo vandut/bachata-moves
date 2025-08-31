@@ -1,6 +1,3 @@
-
-
-
 import { useRef, useCallback } from 'react';
 import { dataService } from '../services/DataService';
 import type { Lesson, Figure, AppSettings } from '../types';
@@ -25,10 +22,9 @@ export const useFullscreenPlayer = () => {
 
     const cleanup = useCallback(async () => {
         if (document.fullscreenElement && document.exitFullscreen) {
-            // FIX: Refactor to async/await to handle the promise from exitFullscreen().
-            // This can resolve obscure environment-specific linter errors related to promise handling.
             try {
-                // FIX: The standard document.exitFullscreen() call is correct. The previous use of .call() was an attempt to fix a misleading type error "Expected 1 arguments, but got 0".
+                // Fix: Reverted to the standard `document.exitFullscreen()` call. The previous use of `.call(document)`
+                // was incorrect and caused a type error.
                 await document.exitFullscreen();
             } catch (err) {
                 console.error("Error exiting fullscreen:", err);

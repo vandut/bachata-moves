@@ -1,5 +1,4 @@
 
-
 import type { AppSettings } from '../types';
 import { localDatabaseService, LocalDatabaseService } from './LocalDatabaseService';
 import { createLogger } from '../utils/logger';
@@ -65,6 +64,13 @@ const defaultSyncSettings: Partial<AppSettings> = {
 
 
 // --- Interface ---
+export interface GroupingConfiguration {
+  categoryOrder: string[];
+  schoolOrder: string[];
+  instructorOrder: string[];
+  showEmpty: boolean;
+  showCount: boolean;
+}
 export interface SettingsService {
   getSettings(): Promise<AppSettings>;
   updateSettings(updates: Partial<AppSettings>, options?: { silent?: boolean }): Promise<void>;
@@ -86,6 +92,9 @@ export interface SettingsService {
   toggleFigureInstructorCollapsed(instructorId: string): Promise<void>;
   toggleLessonUnassignedInstructorExpanded(): Promise<void>;
   toggleFigureUnassignedInstructorExpanded(): Promise<void>;
+
+  // New method for saving grouping configuration
+  saveGroupingConfiguration(type: 'lesson' | 'figure', config: GroupingConfiguration): Promise<void>;
 }
 
 // --- Implementation ---
@@ -211,6 +220,27 @@ class SettingsServiceImpl implements SettingsService {
 
   public toggleLessonUnassignedInstructorExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedLessonInstructorIsExpanded');
   public toggleFigureUnassignedInstructorExpanded = (): Promise<void> => this.toggleBoolean('uncategorizedFigureInstructorIsExpanded');
+
+  // --- Public Method for Saving Grouping ---
+  public async saveGroupingConfiguration(type: 'lesson' | 'figure', config: GroupingConfiguration): Promise<void> {
+    const settingsUpdate: Partial<AppSettings> = type === 'lesson'
+        ? {
+            lessonCategoryOrder: config.categoryOrder,
+            lessonSchoolOrder: config.schoolOrder,
+            lessonInstructorOrder: config.instructorOrder,
+            showEmptyLessonCategoriesInGroupedView: config.showEmpty,
+            showLessonCountInGroupHeaders: config.showCount,
+          }
+        : {
+            figureCategoryOrder: config.categoryOrder,
+            figureSchoolOrder: config.schoolOrder,
+            figureInstructorOrder: config.instructorOrder,
+            showEmptyFigureCategoriesInGroupedView: config.showEmpty,
+            showFigureCountInGroupHeaders: config.showCount,
+          };
+    
+    await this.updateSettings(settingsUpdate);
+  }
 }
 
 // --- Singleton Instance ---
