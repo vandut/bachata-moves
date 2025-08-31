@@ -1,5 +1,6 @@
 import type { DriveFile } from '../api/GoogleDriveApi';
-import type { Lesson, Figure, GroupingConfig } from '../types';
+import type { Lesson, Figure } from '../types';
+import type { GroupingConfig } from './SettingsService';
 import type { GoogleDriveService } from './GoogleDriveService';
 import { googleDriveService } from './GoogleDriveService';
 import { createLogger } from '../utils/logger';

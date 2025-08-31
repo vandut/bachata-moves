@@ -1,9 +1,6 @@
-
-
-
-
-
-import type { SyncTask, SyncTaskType, Lesson, Figure, GroupingConfig, AppSettings, FigureCategory, LessonCategory, School, Instructor } from '../types';
+import type { Lesson, Figure, FigureCategory, LessonCategory, School, Instructor } from '../types';
+import type { AppSettings } from '../contexts/SettingsContext';
+import type { GroupingConfig } from './SettingsService';
 import type { LocalDatabaseService } from './LocalDatabaseService';
 import type { GoogleDriveService } from './GoogleDriveService';
 import type { ExternalStorageService, RemoteItem } from './ExternalStorageService';
@@ -18,7 +15,28 @@ const logger = createLogger('SyncQueue');
 const generateId = (): string => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
 
-// --- Types and Interface ---
+// --- Types and Interface (Encapsulated) ---
+export type SyncTaskType = 
+  | 'sync-gallery'
+  | 'sync-grouping-config'
+  | 'sync-settings'
+  | 'sync-deleted-log'
+  | 'upload-lesson'
+  | 'download-lesson'
+  | 'upload-figure'
+  | 'download-figure'
+  | 'delete-local'
+  | 'delete-remote';
+
+export interface SyncTask {
+  id: string;
+  type: SyncTaskType;
+  payload?: any;
+  status: 'pending' | 'in-progress' | 'error';
+  createdAt: number;
+  error?: string;
+}
+
 export interface SyncQueueService {
     getQueue(): SyncTask[];
     getIsActive(): boolean;

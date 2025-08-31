@@ -1,14 +1,15 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useOutletContext, useLocation } from 'react-router-dom';
 import BaseModal from './BaseModal';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 import type { ModalAction, FigureCategory, LessonCategory, School, Instructor } from '../types';
 import { localDatabaseService } from '../services/LocalDatabaseService';
 import { dataService } from '../services/DataService';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { settingsService, GroupingConfiguration } from '../services/SettingsService';
+// FIX: Import `useSettings` hook to access settings context.
+import { useSettings } from '../contexts/SettingsContext';
 
 interface GalleryContext {
     isMobile: boolean;
@@ -27,7 +28,9 @@ const CustomizeGroupingScreen: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { isMobile } = useOutletContext<GalleryContext>();
-    const { t, settings, reloadAllData } = useTranslation();
+    // FIX: `settings` and `reloadAllData` come from `useSettings`, not `useTranslation`.
+    const { t } = useTranslation();
+    const { settings, reloadAllData } = useSettings();
     const { isSignedIn, forceUploadGroupingConfig, forceDeleteGroupingItem } = useGoogleDrive();
 
     const type = useMemo(() => location.pathname.startsWith('/lessons') ? 'lesson' : 'figure', [location.pathname]);

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation, useOutletContext } from 'react-router-dom';
 import BaseModal from './BaseModal';
@@ -7,8 +6,9 @@ import { dataService } from '../services/DataService';
 import type { Lesson, Figure, ModalAction } from '../types';
 import CustomSlider from './CustomSlider';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
-import { useTranslation } from '../App';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useTranslation } from '../contexts/I18nContext';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 // This context is provided by the parent gallery component (Lessons or Figures)
 interface GalleryContext {
@@ -22,7 +22,8 @@ const PlayerScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, refresh, itemIds } = useOutletContext<GalleryContext>();
-  const { t, locale, settings, updateSettings } = useTranslation();
+  const { t, locale } = useTranslation();
+  const { settings, updateSettings } = useSettings();
   const { forceDeleteItem } = useGoogleDrive();
   const { isMuted, volume } = settings;
 

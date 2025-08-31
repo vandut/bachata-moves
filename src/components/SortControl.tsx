@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 
 interface SortOption {
   value: string;

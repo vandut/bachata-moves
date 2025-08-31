@@ -1,8 +1,10 @@
 import React from 'react';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 const MuteToggleButton: React.FC = () => {
-    const { t, settings, updateSettings } = useTranslation();
+    const { t } = useTranslation();
+    const { settings, updateSettings } = useSettings();
     const { isMuted } = settings;
 
     const toggleMute = () => {

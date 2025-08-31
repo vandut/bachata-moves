@@ -1,15 +1,17 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+// FIX: Changed ContextMenuAction to be a type import, as it's only used for type annotations.
 import type { Figure, Lesson, FigureCategory, School, Instructor } from '../types';
 import { dataService } from '../services/DataService';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
 import { useFullscreenPlayer } from '../hooks/useFullscreenPlayer';
-import ContextMenu, { ContextMenuAction } from './ContextMenu';
+// FIX: ContextMenu is a default export. The original file was incomplete, causing the error.
+import ContextMenu, { type ContextMenuAction } from './ContextMenu';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface FigureCardProps {
   figure: Figure;
@@ -24,8 +26,8 @@ interface FigureCardProps {
 }
 
 const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCategories, schools, instructors, onRefresh, itemIds, baseRoute, onForceDelete }) => {
-  // FIX: Destructure updateSettings to pass to the fullscreen player hook.
-  const { t, settings, updateSettings } = useTranslation();
+  const { t } = useTranslation();
+  const { settings, updateSettings } = useSettings();
   const { isSignedIn, initiateSync } = useGoogleDrive();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -167,7 +169,6 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, figureCat
         onExit: handleExitFullscreen,
         itemIds,
         baseRoute,
-        // FIX: Pass settings and updateSettings to the hook.
         settings,
         updateSettings,
     });

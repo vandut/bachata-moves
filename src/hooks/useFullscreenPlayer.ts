@@ -1,6 +1,7 @@
 import { useRef, useCallback } from 'react';
 import { dataService } from '../services/DataService';
-import type { Lesson, Figure, AppSettings } from '../types';
+import type { Lesson, Figure } from '../types';
+import type { AppSettings } from '../contexts/SettingsContext';
 
 type OnExitCallback = () => void;
 

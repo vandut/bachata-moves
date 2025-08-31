@@ -2,17 +2,19 @@ import React, { useState, useRef } from 'react';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 import { backupService } from '../services/BackupService';
 import GoogleDriveSync from './GoogleDriveSync';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { isDev } from '../utils/logger';
+import { useSettings } from '../contexts/SettingsContext';
 
 type Status = { type: 'success' | 'error'; message: string } | null;
 
 const SettingsView: React.FC = () => {
   const isMobile = useMediaQuery('(max-width: 768px)');
-  const { t, settings, setLanguage, updateSettings, reloadAllData } = useTranslation();
+  const { t } = useTranslation();
+  const { settings, updateSettings, reloadAllData } = useSettings();
   const { isSignedIn } = useGoogleDrive();
   const devMode = isDev();
   
@@ -26,7 +28,7 @@ const SettingsView: React.FC = () => {
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = e.target.value as 'english' | 'polish';
-    setLanguage(newLanguage);
+    updateSettings({ language: newLanguage });
   };
   
   const handleAutoplayToggle = () => {

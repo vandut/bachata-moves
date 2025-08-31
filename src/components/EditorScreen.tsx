@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
@@ -6,8 +5,9 @@ import BaseEditor from './BaseEditor';
 import type { ModalAction, Lesson, Figure, School, Instructor } from '../types';
 import { localDatabaseService } from '../services/LocalDatabaseService';
 import { dataService } from '../services/DataService';
-import { useTranslation } from '../App';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useTranslation } from '../contexts/I18nContext';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface GalleryContext {
     refresh: () => void;
@@ -76,7 +76,8 @@ const EditorScreen: React.FC = () => {
     const { lessonId: lessonIdParam, figureId } = useParams<{ lessonId?: string; figureId?: string }>();
     const navigate = useNavigate();
     const { isMobile, refresh } = useOutletContext<GalleryContext>();
-    const { t, locale, settings, updateSettings } = useTranslation();
+    const { t, locale } = useTranslation();
+    const { settings, updateSettings } = useSettings();
     const { isSignedIn, forceAddItem, forceUpdateItem } = useGoogleDrive();
     const { isMuted, volume } = settings;
     const query = useQuery();

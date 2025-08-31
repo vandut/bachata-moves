@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 
 export interface ExcludedIds {
     years: string[];

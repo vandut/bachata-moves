@@ -1,6 +1,5 @@
-
-
-import type { Lesson, Figure, AppSettings, FigureCategory, LessonCategory, School, Instructor } from '../types';
+import type { Lesson, Figure, FigureCategory, LessonCategory, School, Instructor } from '../types';
+import type { AppSettings } from '../contexts/SettingsContext';
 import { openDB, deleteDB, type IDBPDatabase } from 'idb';
 import { createLogger } from '../utils/logger';
 

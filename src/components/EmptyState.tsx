@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../contexts/I18nContext';
 
 interface EmptyStateProps {
   icon: string;
@@ -9,6 +10,7 @@ interface EmptyStateProps {
 }
 
 const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, description, actionText, onAction }) => {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center justify-center text-center text-gray-500 p-4">
       <div className="flex items-center justify-center w-20 h-20 rounded-full bg-gray-100 mb-6">

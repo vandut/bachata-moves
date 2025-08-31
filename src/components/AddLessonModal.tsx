@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import type { Lesson, ModalAction } from '../types';
 import BaseModal from './BaseModal';
-import { useTranslation } from '../App';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useTranslation } from '../contexts/I18nContext';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import { dataService } from '../services/DataService';
 
 interface GalleryContext {

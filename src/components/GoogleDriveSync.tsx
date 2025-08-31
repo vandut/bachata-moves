@@ -1,6 +1,6 @@
 import React from 'react';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
-import { useTranslation } from '../App';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
+import { useTranslation } from '../contexts/I18nContext';
 
 const GoogleIcon: React.FC = () => (
     <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">

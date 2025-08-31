@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 import MuteToggleButton from './MuteToggleButton';
 import SyncStatus from './SyncStatus';
 import FilterControl, { ExcludedIds } from './FilterControl';

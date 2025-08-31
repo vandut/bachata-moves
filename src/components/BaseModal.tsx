@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MobileTopNav from './MobileTopNav';
 import type { ModalAction } from '../types';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 
 interface BaseModalProps {
   onClose: () => void;

@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { localDatabaseService } from '../services/LocalDatabaseService';
-import type { Figure, Lesson, FigureSortOrder, FigureCategory, AppSettings, School, Instructor } from '../types';
+import type { Figure, Lesson, FigureSortOrder, FigureCategory, School, Instructor } from '../types';
 import FigureCard from './FigureCard';
 import MobileTopNav from './MobileTopNav';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import DesktopTopNav from './DesktopTopNav';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 import EmptyState from './EmptyState';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import GalleryActionBar from './GalleryActionBar';
 import { GroupingOption } from './GroupingControl';
 import { settingsService } from '../services/SettingsService';
+import { useSettings } from '../contexts/SettingsContext';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 const UNASSIGNED_ID = '__unassigned__';
@@ -106,7 +107,8 @@ const FigureGrid: React.FC<{
 
 
 const FiguresGallery: React.FC = () => {
-  const { t, settings, updateSettings, reloadAllData, locale } = useTranslation();
+  const { t, locale, language } = useTranslation();
+  const { settings, updateSettings, reloadAllData } = useSettings();
   const { isSignedIn, initiateSync, forceDeleteItem } = useGoogleDrive();
   const [figures, setFigures] = useState<Figure[]>([]);
   const [lessonsMap, setLessonsMap] = useState<Map<string, Lesson>>(new Map());
@@ -123,7 +125,7 @@ const FiguresGallery: React.FC = () => {
     { value: 'oldest', label: t('sort.oldest') },
     { value: 'alphabetical_asc', label: t('sort.alphaAsc') },
     { value: 'alphabetical_desc', label: t('sort.alphaDesc') },
-  ], [t, settings.language]);
+  ], [t, language]);
   
   const GROUPING_OPTIONS: GroupingOption[] = useMemo(() => [
       { value: 'none', label: t('grouping.none') },
@@ -134,7 +136,7 @@ const FiguresGallery: React.FC = () => {
       { value: 'byInstructor', label: t('grouping.byInstructor') },
       { value: 'divider', label: '-', isDivider: true },
       { value: 'customize', label: t('grouping.customize'), isAction: true },
-  ], [t, settings.language]);
+  ], [t, language]);
 
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as FigureSortOrder;
@@ -146,7 +148,7 @@ const FiguresGallery: React.FC = () => {
   };
 
   const handleGroupingChange = async (newGroupingValue: string) => {
-      await updateSettings({ figureGrouping: newGroupingValue as AppSettings['figureGrouping'] });
+      await updateSettings({ figureGrouping: newGroupingValue as 'none' | 'byMonth' | 'byYear' | 'byCategory' | 'bySchool' | 'byInstructor' });
   };
   
   const handleFilterChange = (newExcludedIds: any) => {

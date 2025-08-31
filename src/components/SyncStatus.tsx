@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useTranslation } from '../App';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
-import { SyncTask } from '../types';
+import { useTranslation } from '../contexts/I18nContext';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
+import type { SyncTask } from '../services/SyncQueueService';
 
 const SyncStatus: React.FC = () => {
     const { t } = useTranslation();

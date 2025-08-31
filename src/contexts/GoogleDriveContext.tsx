@@ -1,9 +1,7 @@
-
 import React, { useState, useEffect, useCallback, createContext, useContext, ReactNode, useMemo } from 'react';
 import type { UserProfile } from '../api/GoogleIdentityAPI';
-import type { SyncTask, FigureCategory, LessonCategory, School, Instructor } from '../types';
-// FIX: Corrected import casing to resolve module resolution issue with duplicate filenames.
-import { syncQueueService } from '../services/SyncQueueService';
+import type { FigureCategory, LessonCategory, School, Instructor } from '../types';
+import { syncQueueService, type SyncTask } from '../services/SyncQueueService';
 import { googleDriveService, type AuthState } from '../services/GoogleDriveService';
 
 interface GoogleDriveContextType {

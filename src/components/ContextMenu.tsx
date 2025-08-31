@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 
 export interface ContextMenuAction {
   label: string;
@@ -58,203 +58,171 @@ const DesktopSubMenu = React.forwardRef<HTMLDivElement, {
     >
       <ul className="list-none m-0 p-0">
         {actions.map((action, index) => (
-          <MenuItem
-            key={index}
-            action={action}
-            onActionClick={handleActionClick}
-            isMobile={false}
-          />
+          <li key={index} role="none">
+            <button
+              type="button"
+              onClick={() => handleActionClick(action)}
+              disabled={action.submenu?.length === 0}
+              className={`w-full text-left px-4 py-2 text-sm flex items-center transition-colors rounded-md ${
+                action.isChecked ? 'font-semibold text-blue-600' : ''
+              } ${
+                action.isDestructive
+                  ? 'text-red-600 hover:bg-red-50'
+                  : 'text-gray-700 hover:bg-gray-100'
+              } disabled:text-gray-400 disabled:cursor-not-allowed`}
+              role="menuitem"
+            >
+              <span className="flex-grow truncate">{action.label}</span>
+              {action.isChecked && <i className="material-icons text-lg text-blue-600 ml-2">check</i>}
+            </button>
+          </li>
         ))}
       </ul>
     </div>
   );
 });
 
-// Unified MenuItem component
-const MenuItem = React.forwardRef<HTMLLIElement, {
-  action: ContextMenuAction;
-  onActionClick: (action: ContextMenuAction) => void | Promise<void>;
-  onSubmenuOpen?: () => void;
-  isMobile: boolean;
-}>((props, ref) => {
-  const { action, onActionClick, onSubmenuOpen, isMobile } = props;
-  const { label, isDestructive, icon, submenu, isChecked } = action;
-
-  if (label === '-') {
-    return <li role="separator" className="border-t border-gray-200 my-1"></li>;
-  }
-
-  // On desktop, items that open a submenu on hover should not be clickable.
-  const isDisabled = !isMobile && !!submenu;
-
-  return (
-    <li role="none" ref={ref} onMouseEnter={!isMobile && onSubmenuOpen ? onSubmenuOpen : undefined}>
-      <button
-        onClick={() => onActionClick(action)}
-        disabled={isDisabled}
-        className={`flex items-center w-full text-left px-4 py-3 text-sm transition-colors duration-150
-          ${isDestructive ? 'text-red-600 hover:bg-red-100' : 'text-gray-800 hover:bg-gray-100'}
-          ${isDisabled ? 'cursor-default' : ''}`
-        }
-        role="menuitem"
-      >
-        <div className="w-6 flex-shrink-0">
-          {isChecked && <i className="material-icons text-lg text-blue-600">check</i>}
-        </div>
-        {icon && <i className="material-icons mr-3 text-lg">{icon}</i>}
-        <span className="flex-grow">{label}</span>
-        {submenu && <i className="material-icons ml-auto text-lg">chevron_right</i>}
-      </button>
-    </li>
-  );
-});
-
-// Main ContextMenu Component
 const ContextMenu: React.FC<ContextMenuProps> = ({ isOpen, onClose, position, actions, isMobile }) => {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const submenuRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [activeSubMenu, setActiveSubMenu] = useState<ContextMenuAction[] | null>(null);
+  const parentItemRef = useRef<HTMLLIElement | null>(null);
+  const subMenuRef = useRef<HTMLDivElement>(null);
+  const subMenuTimeoutRef = useRef<number | null>(null);
 
-  // --- Mobile State ---
-  const [menuStack, setMenuStack] = useState<ContextMenuAction[][]>([actions]);
-
-  // --- Desktop State ---
-  const [activeSubmenu, setActiveSubmenu] = useState<{ action: ContextMenuAction; parentRef: HTMLLIElement | null } | null>(null);
-  const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
-  const openSubmenuTimer = useRef<number | undefined>(undefined);
-  const closeSubmenuTimer = useRef<number | undefined>(undefined);
-
-  // Reset state when menu is opened or actions change
   useEffect(() => {
-    if (isOpen) {
-      setMenuStack([actions]);
-      setActiveSubmenu(null);
+    if (!isOpen) {
+      setActiveSubMenu(null);
+      return;
     }
-  }, [isOpen, actions]);
-  
-  // Close on click outside or scroll
-  useEffect(() => {
-    if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      // Close if the click is outside both the main menu and the submenu (if it exists)
-      if (!menuRef.current?.contains(target) && !submenuRef.current?.contains(target)) {
+      const isClickOutside =
+        menuRef.current && !menuRef.current.contains(target) &&
+        (!subMenuRef.current || !subMenuRef.current.contains(target));
+      
+      if (isClickOutside) {
         onClose();
       }
     };
-    const handleScroll = () => onClose();
+
     document.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('scroll', handleScroll, true);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('scroll', handleScroll, true);
-      if (openSubmenuTimer.current) clearTimeout(openSubmenuTimer.current);
-      if (closeSubmenuTimer.current) clearTimeout(closeSubmenuTimer.current);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  const handleActionClick = useCallback(async (action: ContextMenuAction) => {
-    if (isMobile && action.submenu) {
-      setMenuStack(prev => [...prev, action.submenu!]);
-    } else {
-      if (action.onClick) {
-        await action.onClick();
-      }
-      onClose();
+  const handleActionClick = async (action: ContextMenuAction) => {
+    if (action.onClick) {
+      await action.onClick();
     }
-  }, [isMobile, onClose]);
+    onClose();
+  };
 
-  const handleBack = useCallback(() => {
-    setMenuStack(prev => prev.slice(0, -1));
-  }, []);
+  const handleMouseEnterItem = (action: ContextMenuAction, e: React.MouseEvent<HTMLLIElement>) => {
+    if (subMenuTimeoutRef.current) clearTimeout(subMenuTimeoutRef.current);
+    if (action.submenu && action.submenu.length > 0) {
+      setActiveSubMenu(action.submenu);
+      parentItemRef.current = e.currentTarget;
+    } else {
+      setActiveSubMenu(null);
+    }
+  };
 
-  const openDesktopSubmenu = useCallback((action: ContextMenuAction, index: number) => {
-    if (!action.submenu) return;
-    if (closeSubmenuTimer.current) clearTimeout(closeSubmenuTimer.current);
-    openSubmenuTimer.current = window.setTimeout(() => {
-      setActiveSubmenu({ action, parentRef: itemRefs.current[index] });
-    }, 150);
-  }, []);
-  
-  const closeDesktopSubmenu = useCallback((_event?: React.MouseEvent) => {
-    if (openSubmenuTimer.current) clearTimeout(openSubmenuTimer.current);
-    closeSubmenuTimer.current = window.setTimeout(() => {
-      setActiveSubmenu(null);
+  const handleMouseLeaveItem = () => {
+    subMenuTimeoutRef.current = window.setTimeout(() => {
+      setActiveSubMenu(null);
     }, 200);
-  }, []);
+  };
+  
+  const handleSubMenuMouseEnter = () => {
+    if (subMenuTimeoutRef.current) clearTimeout(subMenuTimeoutRef.current);
+  };
+
+  const handleSubMenuMouseLeave = () => {
+     subMenuTimeoutRef.current = window.setTimeout(() => {
+        setActiveSubMenu(null);
+    }, 200);
+  };
 
   if (!isOpen) return null;
 
-  // --- Positioning ---
-  const menuWidth = isMobile ? 256 : 192; // w-64 vs w-48
-  const currentActions = menuStack[menuStack.length - 1] || [];
-  const menuHeight = currentActions.reduce((h, a) => h + (a.label === '-' ? 9 : 44), 0);
-  const adjustedPosition = { ...position };
-  if (position.x + menuWidth > window.innerWidth) {
-    adjustedPosition.x = window.innerWidth - menuWidth - 10;
+  if (isMobile) {
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex flex-col justify-end animate-fade-in-fast" onClick={onClose}>
+        <div
+          ref={menuRef}
+          className="bg-white rounded-t-2xl p-2 pb-4 shadow-lg animate-slide-up-fast"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-10 h-1.5 bg-gray-300 rounded-full mx-auto my-2" />
+          <ul className="list-none m-0 p-0 max-h-[60vh] overflow-y-auto">
+            {actions.map((action, index) => (
+              <li key={index}>
+                <button
+                  onClick={() => handleActionClick(action)}
+                  className={`w-full text-left px-4 py-3 text-lg flex items-center transition-colors rounded-lg ${
+                    action.isDestructive ? 'text-red-600' : 'text-gray-800'
+                  }`}
+                >
+                  {action.icon && <i className="material-icons mr-4">{action.icon}</i>}
+                  <span className="flex-grow">{action.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    );
   }
-  if (position.y + menuHeight > window.innerHeight) {
-    adjustedPosition.y = window.innerHeight - menuHeight - 10;
-  }
-  
-  const parentMenu = menuStack.length > 1 ? menuStack[menuStack.length - 2] : null;
-  const parentAction = parentMenu?.find(a => a.submenu === currentActions);
+
+  // Desktop
+  const menuPositionStyle = {
+    top: position.y,
+    left: position.x,
+  };
 
   return (
     <>
       <div
         ref={menuRef}
-        className="fixed bg-white rounded-lg shadow-2xl py-2 z-50 animate-fade-in-fast"
-        style={{ top: adjustedPosition.y, left: adjustedPosition.x, width: `${menuWidth}px` }}
+        className="fixed bg-white rounded-lg shadow-2xl py-2 w-56 z-50 animate-fade-in-fast"
+        style={menuPositionStyle}
+        onMouseLeave={handleMouseLeaveItem}
         role="menu"
-        aria-orientation="vertical"
-        onMouseLeave={!isMobile ? closeDesktopSubmenu : undefined}
       >
-        {isMobile && parentAction && (
-          <div className="flex items-center px-2 pb-2 border-b border-gray-200 mb-2">
-            <button
-              onClick={handleBack}
-              className="p-2 text-gray-700 hover:bg-gray-100 rounded-full"
-              aria-label={t('common.goBack')}
-            >
-              <i className="material-icons">arrow_back</i>
-            </button>
-            <h3 className="ml-2 font-semibold text-gray-800">{parentAction.label}</h3>
-          </div>
-        )}
         <ul className="list-none m-0 p-0">
-          {currentActions.map((action, index) => (
-            <MenuItem
+          {actions.map((action, index) => (
+            <li
               key={index}
-              ref={el => { if (!isMobile) itemRefs.current[index] = el; }}
-              action={action}
-              onActionClick={handleActionClick}
-              onSubmenuOpen={() => openDesktopSubmenu(action, index)}
-              isMobile={!!isMobile}
-            />
+              role="none"
+              onMouseEnter={(e) => handleMouseEnterItem(action, e)}
+            >
+              <button
+                type="button"
+                onClick={() => handleActionClick(action)}
+                disabled={!action.onClick && (!action.submenu || action.submenu.length === 0)}
+                className={`w-full text-left px-4 py-2 text-sm flex items-center transition-colors rounded-md ${
+                  action.isDestructive
+                    ? 'text-red-600 hover:bg-red-50'
+                    : 'text-gray-700 hover:bg-gray-100'
+                } disabled:text-gray-400 disabled:cursor-not-allowed`}
+                role="menuitem"
+              >
+                {action.icon && <i className="material-icons mr-3 text-lg">{action.icon}</i>}
+                <span className="flex-grow truncate">{action.label}</span>
+                {action.submenu && action.submenu.length > 0 && <i className="material-icons text-lg">chevron_right</i>}
+              </button>
+            </li>
           ))}
         </ul>
-        <style>{`
-          @keyframes fade-in-fast {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-          }
-          .animate-fade-in-fast {
-            animation: fade-in-fast 0.1s ease-out forwards;
-          }
-        `}</style>
       </div>
-
-      {!isMobile && activeSubmenu?.action.submenu && (
+      {activeSubMenu && (
         <DesktopSubMenu
-          ref={submenuRef}
-          actions={activeSubmenu.action.submenu}
-          parentItemRef={activeSubmenu.parentRef}
+          ref={subMenuRef}
+          actions={activeSubMenu}
+          parentItemRef={parentItemRef.current}
           onClose={onClose}
-          onMouseEnter={() => {
-            if (closeSubmenuTimer.current) clearTimeout(closeSubmenuTimer.current);
-          }}
-          onMouseLeave={closeDesktopSubmenu}
+          onMouseEnter={handleSubMenuMouseEnter}
+          onMouseLeave={handleSubMenuMouseLeave}
         />
       )}
     </>

@@ -1,6 +1,5 @@
-
-
-import type { AppSettings } from '../types';
+import type { FigureCategory, LessonCategory, School, Instructor } from '../types';
+import type { AppSettings } from '../contexts/SettingsContext';
 import { localDatabaseService, LocalDatabaseService } from './LocalDatabaseService';
 import { createLogger } from '../utils/logger';
 
@@ -65,6 +64,17 @@ const defaultSyncSettings: Partial<AppSettings> = {
 
 
 // --- Interface ---
+export interface GroupingConfig {
+    modifiedTime: string;
+    categories: FigureCategory[] | LessonCategory[];
+    schools: School[];
+    instructors: Instructor[];
+    showEmpty: boolean;
+    showCount: boolean;
+    categoryOrder: string[];
+    schoolOrder: string[];
+    instructorOrder: string[];
+}
 export interface GroupingConfiguration {
   categoryOrder: string[];
   schoolOrder: string[];
@@ -207,14 +217,14 @@ class SettingsServiceImpl implements SettingsService {
         ? currentArray.filter(i => i !== id)
         : [...currentArray, id];
     
-    // Optimistic update and persist silently
-    this.updateSettings({ [key]: newArray } as Partial<AppSettings>, { silent: true });
+    // Optimistic update and persist
+    this.updateSettings({ [key]: newArray } as Partial<AppSettings>);
   }
 
   private async toggleBoolean(key: keyof AppSettings): Promise<void> {
       const currentSettings = await this.getSettings();
       const currentValue = !!currentSettings[key];
-      this.updateSettings({ [key]: !currentValue } as Partial<AppSettings>, { silent: true });
+      this.updateSettings({ [key]: !currentValue } as Partial<AppSettings>);
   }
 
   // --- Public Toggle Methods ---

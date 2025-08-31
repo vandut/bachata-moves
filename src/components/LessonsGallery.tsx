@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { localDatabaseService } from '../services/LocalDatabaseService';
-import type { Lesson, LessonSortOrder, LessonCategory, AppSettings, School, Instructor } from '../types';
+import type { Lesson, LessonSortOrder, LessonCategory, School, Instructor } from '../types';
 import LessonCard from './LessonCard';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import MobileTopNav from './MobileTopNav';
 import DesktopTopNav from './DesktopTopNav';
-import { useTranslation } from '../App';
+import { useTranslation } from '../contexts/I18nContext';
 import EmptyState from './EmptyState';
-import { useGoogleDrive } from '../hooks/useGoogleDrive';
+import { useGoogleDrive } from '../contexts/GoogleDriveContext';
 import GalleryActionBar from './GalleryActionBar';
 import { GroupingOption } from './GroupingControl';
 import { settingsService } from '../services/SettingsService';
+import { useSettings } from '../contexts/SettingsContext';
 
 const UNCATEGORIZED_ID = '__uncategorized__';
 const UNASSIGNED_ID = '__unassigned__';
@@ -105,7 +106,8 @@ const LessonGrid: React.FC<{
 
 
 const LessonsGallery: React.FC = () => {
-  const { t, settings, updateSettings, reloadAllData, locale } = useTranslation();
+  const { t, locale, language } = useTranslation();
+  const { settings, updateSettings, reloadAllData } = useSettings();
   const { isSignedIn, initiateSync, forceDeleteItem } = useGoogleDrive();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [lessonCategories, setLessonCategories] = useState<LessonCategory[]>([]);
@@ -119,7 +121,7 @@ const LessonsGallery: React.FC = () => {
   const SORT_OPTIONS = useMemo(() => [
     { value: 'newest', label: t('sort.newest') },
     { value: 'oldest', label: t('sort.oldest') },
-  ], [t, settings.language]);
+  ], [t, language]);
   
   const GROUPING_OPTIONS: GroupingOption[] = useMemo(() => [
     { value: 'none', label: t('grouping.none') },
@@ -130,7 +132,7 @@ const LessonsGallery: React.FC = () => {
     { value: 'byInstructor', label: t('grouping.byInstructor') },
     { value: 'divider', label: '-', isDivider: true },
     { value: 'customize', label: t('grouping.customize'), isAction: true },
-  ], [t, settings.language]);
+  ], [t, language]);
 
   const handleSortChange = async (newSortValue: string) => {
     const newSortOrder = newSortValue as LessonSortOrder;
@@ -138,7 +140,7 @@ const LessonsGallery: React.FC = () => {
   };
 
   const handleGroupingChange = async (newGroupingValue: string) => {
-    await updateSettings({ lessonGrouping: newGroupingValue as AppSettings['lessonGrouping'] });
+    await updateSettings({ lessonGrouping: newGroupingValue as 'none' | 'byMonth' | 'byYear' | 'byCategory' | 'bySchool' | 'byInstructor' });
   };
   
   const handleFilterChange = (newExcludedIds: any) => {
