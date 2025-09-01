@@ -111,7 +111,8 @@ class SyncQueueServiceImpl implements SyncQueueService {
             logger.info(`Skipping duplicate task: ${type}`, payload);
             return;
         }
-
+        
+        logger.info(`Adding task to queue: ${type}`, payload);
         const newTask: SyncTask = {
             id: generateId(), type, payload, status: 'pending', createdAt: Date.now(), priority: isPriority ? 1 : 0
         };
@@ -220,16 +221,36 @@ class SyncQueueServiceImpl implements SyncQueueService {
         }
         const { content: lessonData, metadata } = result;
     
-        if (lessonData?.videoDriveId) {
-            const videoBlob = await this.driveService.readBinaryFileById(lessonData.videoDriveId);
-            if (videoBlob) {
-                const lessonToSave = { ...lessonData, modifiedTime: metadata.modifiedTime };
-                await dataService.saveDownloadedLesson(lessonToSave, videoBlob);
-            } else {
-                logger.warn(`Could not download video blob for lesson ${lessonData.id}`);
-            }
+        if (!lessonData) {
+            logger.warn(`Lesson JSON ${jsonId} downloaded but was empty.`);
+            return;
+        }
+
+        const localLesson = (await this.localDB.getLessons()).find(l => l.id === lessonData.id);
+
+        if (localLesson) {
+            // Lesson exists locally, so the video blob should also exist.
+            // We only need to update the lesson's metadata, not re-download the video.
+            logger.info(`Lesson ${lessonData.id} already exists locally. Updating metadata only.`);
+            
+            await dataService.updateLesson(lessonData.id, {
+                ...lessonData,
+                modifiedTime: metadata.modifiedTime // Ensure we use the new remote timestamp
+            });
         } else {
-            logger.warn(`Lesson JSON ${jsonId} downloaded but had no videoDriveId.`);
+            // Lesson is completely new to this device. Download the video as well.
+            logger.info(`Lesson ${lessonData.id} is new. Downloading video blob.`);
+            if (lessonData.videoDriveId) {
+                const videoBlob = await this.driveService.readBinaryFileById(lessonData.videoDriveId);
+                if (videoBlob) {
+                    const lessonToSave = { ...lessonData, modifiedTime: metadata.modifiedTime };
+                    await dataService.saveDownloadedLesson(lessonToSave, videoBlob);
+                } else {
+                    logger.warn(`Could not download video blob for new lesson ${lessonData.id}`);
+                }
+            } else {
+                logger.warn(`New lesson JSON ${jsonId} has no videoDriveId.`);
+            }
         }
     }
 
@@ -283,17 +304,13 @@ class SyncQueueServiceImpl implements SyncQueueService {
 
     private isDuplicate = (type: SyncTaskType, payloadIdentifier: any): boolean => {
         if (!payloadIdentifier) return false;
-        const now = Date.now();
-        // Debounce gallery syncs for 2 seconds to catch rapid changes
-        const debounceMs = 2000;
-        return this.queue.some(task => {
-            if (task.type !== type || task.payload?.type !== payloadIdentifier) return false;
-            // If a task is already running, it's a duplicate.
-            if (task.status === 'in-progress') return true;
-            // If a pending task was added very recently, debounce.
-            if ((now - task.createdAt) < debounceMs) return true;
-            return false;
-        });
+        
+        // Prevent adding a new task if an identical one is already pending or in-progress.
+        return this.queue.some(task => 
+            task.type === type && 
+            task.payload?.type === payloadIdentifier &&
+            (task.status === 'pending' || task.status === 'in-progress')
+        );
     }
     
     private updateTaskStatus = (taskId: string, status: SyncTask['status'], error?: string): void => {

@@ -21,6 +21,8 @@ export const useGalleryProcessor = <T extends Lesson | Figure>(type: 'lesson' | 
         setDataVersion(v => v + 1);
     }, []);
 
+    // Effect for fetching and processing data from local DB.
+    // This runs on settings changes (filters, sorting), manual refreshes, or language changes.
     useEffect(() => {
         let isCancelled = false;
         setIsLoading(true);
@@ -31,17 +33,7 @@ export const useGalleryProcessor = <T extends Lesson | Figure>(type: 'lesson' | 
         
         (processor as (settings: AppSettings, locale: string) => Promise<ProcessedGalleryData<T>>)(settings, locale)
             .then(processedData => {
-                if (isCancelled) return;
-                
-                setGalleryData(processedData);
-                
-                const currentPath = type === 'lesson' ? '/lessons' : '/figures';
-                // FIX: Removed `processedData.totalItemCount > 0` condition. The sync should trigger
-                // on a fresh install (where itemCount is 0) to pull data from the cloud.
-                if (location.pathname === currentPath && isSignedIn && !location.state?.skipSync) {
-                    addTask('sync-grouping-config', { type }, true);
-                    addTask('sync-gallery', { type });
-                }
+                if (!isCancelled) setGalleryData(processedData);
             })
             .catch(console.error)
             .finally(() => {
@@ -49,8 +41,20 @@ export const useGalleryProcessor = <T extends Lesson | Figure>(type: 'lesson' | 
             });
 
         return () => { isCancelled = true; };
-    }, [settings, dataVersion, locale, location.pathname, isSignedIn, location.state, addTask, type]);
+    }, [settings, dataVersion, locale, type]);
 
+    // Effect to trigger sync on initial gallery load, navigation, or login.
+    // It is specifically designed NOT to run when `settings` change.
+    useEffect(() => {
+        const currentPath = type === 'lesson' ? '/lessons' : '/figures';
+        if (location.pathname === currentPath && isSignedIn && !location.state?.skipSync) {
+            console.log(`[useGalleryProcessor] Sync triggered for '${type}' due to navigation or login.`);
+            addTask('sync-grouping-config', { type }, true);
+            addTask('sync-gallery', { type });
+        }
+    }, [location.pathname, isSignedIn, type, addTask, location.state?.skipSync]);
+
+    // Effect for subscribing to DB changes, which triggers a data refresh.
     useEffect(() => {
         const unsubscribe = localDatabaseService.subscribe(refreshGallery);
         return () => unsubscribe();

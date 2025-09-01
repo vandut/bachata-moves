@@ -705,8 +705,13 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
         }
     }
     
-    // Use provided modifiedTime for sync, otherwise generate a new one.
-    syncSettings.modifiedTime = modifiedTime || new Date().toISOString();
+    // If a new modifiedTime is provided, use it. Otherwise, preserve the existing one.
+    if (modifiedTime) {
+        syncSettings.modifiedTime = modifiedTime;
+    } else {
+        const existingSyncSettings = await db.get(SETTINGS_STORE, SYNC_SETTINGS_KEY) as any;
+        syncSettings.modifiedTime = existingSyncSettings?.modifiedTime || new Date().toISOString();
+    }
     
     const tx = db.transaction(SETTINGS_STORE, 'readwrite');
     await Promise.all([

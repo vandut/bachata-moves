@@ -66,6 +66,23 @@ const defaultSyncSettings: Partial<AppSettings> = {
   lastSyncTimestamp: undefined,
 };
 
+// List of keys that are device-specific and should NOT be synced.
+const DEVICE_SETTING_KEYS: (keyof AppSettings)[] = [
+    'language', 'autoplayGalleryVideos', 'isMuted', 'volume',
+    'lessonSortOrder', 'figureSortOrder', 'lessonGrouping', 'figureGrouping',
+    'collapsedLessonDateGroups', 'collapsedFigureDateGroups',
+    'uncategorizedLessonCategoryIsExpanded', 'uncategorizedFigureCategoryIsExpanded',
+    'collapsedLessonCategories', 'collapsedFigureCategories',
+    'collapsedLessonSchools', 'collapsedFigureSchools',
+    'uncategorizedLessonSchoolIsExpanded', 'uncategorizedFigureSchoolIsExpanded',
+    'collapsedLessonInstructors', 'collapsedFigureInstructors',
+    'uncategorizedLessonInstructorIsExpanded', 'uncategorizedFigureInstructorIsExpanded',
+    'lessonFilter_excludedYears', 'lessonFilter_excludedCategoryIds',
+    'lessonFilter_excludedSchoolIds', 'lessonFilter_excludedInstructorIds',
+    'figureFilter_excludedYears', 'figureFilter_excludedCategoryIds',
+    'figureFilter_excludedSchoolIds', 'figureFilter_excludedInstructorIds',
+];
+
 
 // --- Interface ---
 interface RemoteGroupingItem {
@@ -176,8 +193,16 @@ class SettingsServiceImpl implements SettingsService {
     const newSettings = { ...currentSettings, ...updates };
     this.settings = newSettings; // Optimistic update
 
+    // Check if any of the updated keys are syncable settings
+    const didSyncSettingChange = Object.keys(updates).some(
+      key => !DEVICE_SETTING_KEYS.includes(key as keyof AppSettings)
+    );
+    
+    // Only generate a new timestamp if a syncable setting has changed.
+    const newModifiedTime = didSyncSettingChange ? new Date().toISOString() : undefined;
+
     try {
-      await this.localDB.saveAllSettings(newSettings);
+      await this.localDB.saveAllSettings(newSettings, newModifiedTime);
       if (!options?.silent) {
         this.notify();
       }
