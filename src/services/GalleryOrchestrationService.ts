@@ -76,16 +76,16 @@ const sortFigures = (figuresToSort: Figure[], lessonDataMap: Map<string, Lesson>
 
         switch (currentSortOrder) {
             case 'oldest': {
-                const dateComp = new Date(lessonA.uploadDate).getTime() - new Date(lessonB.uploadDate).getTime();
-                if (dateComp !== 0) return dateComp;
-                return a.startTime - b.startTime;
+                const effectiveTimestampA = new Date(lessonA.uploadDate).getTime() + a.startTime;
+                const effectiveTimestampB = new Date(lessonB.uploadDate).getTime() + b.startTime;
+                return effectiveTimestampA - effectiveTimestampB;
             }
             case 'alphabetical_asc': return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
             case 'alphabetical_desc': return b.name.localeCompare(a.name, undefined, { sensitivity: 'base' });
             case 'newest': default: {
-                const dateComp = new Date(lessonB.uploadDate).getTime() - new Date(lessonA.uploadDate).getTime();
-                if (dateComp !== 0) return dateComp;
-                return b.startTime - a.startTime;
+                const effectiveTimestampA = new Date(lessonA.uploadDate).getTime() + a.startTime;
+                const effectiveTimestampB = new Date(lessonB.uploadDate).getTime() + b.startTime;
+                return effectiveTimestampB - effectiveTimestampA;
             }
         }
     });
