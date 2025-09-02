@@ -272,19 +272,29 @@ class SyncQueueServiceImpl implements SyncQueueService {
     private async uploadLesson(lessonId: string): Promise<void> {
         const lesson = await this.localDB.getLessons().then(l => l.find(x => x.id === lessonId));
         if (!lesson) throw new Error(`Cannot upload lesson ${lessonId}: not found in local DB.`);
-        const videoFile = await dataService.getVideoFile(lesson.id);
-        if (!videoFile) throw new Error(`Cannot upload lesson ${lessonId}: video file not found.`);
         
-        const videoDriveFile = await this.driveService.writeFile(`/${FOLDERS.videos}/${lesson.id}.mp4`, videoFile, videoFile.type);
+        let videoDriveId = lesson.videoDriveId;
+
+        // Only upload the video if it hasn't been uploaded before.
+        if (!videoDriveId) {
+            logger.info(`Lesson ${lessonId} has no videoDriveId. Uploading video file...`);
+            const videoFile = await dataService.getVideoFile(lesson.id);
+            if (!videoFile) throw new Error(`Cannot upload NEW lesson ${lessonId}: video file not found.`);
+            
+            const videoDriveFile = await this.driveService.writeFile(`/${FOLDERS.videos}/${lesson.id}.mp4`, videoFile, videoFile.type);
+            videoDriveId = videoDriveFile.id;
+        } else {
+            logger.info(`Lesson ${lessonId} already has videoDriveId (${videoDriveId}). Skipping video upload.`);
+        }
         
-        const lessonWithVideoId: Lesson = { ...lesson, videoDriveId: videoDriveFile.id };
+        const lessonWithVideoId: Lesson = { ...lesson, videoDriveId: videoDriveId };
         const updatedLessonJson = JSON.stringify(lessonWithVideoId);
         
         const lessonDriveFile = await this.driveService.writeFile(`/${FOLDERS.lessons}/${lesson.id}.json`, updatedLessonJson, 'application/json');
 
         await dataService.updateLesson(lesson.id, { 
             driveId: lessonDriveFile.id,
-            videoDriveId: videoDriveFile.id, 
+            videoDriveId: videoDriveId, 
             modifiedTime: lessonDriveFile.modifiedTime 
         });
     }
