@@ -40,6 +40,23 @@ export interface ProcessedGalleryData<T> {
 export interface GalleryOrchestrationService {
     getProcessedLessons(settings: AppSettings, locale: string): Promise<ProcessedGalleryData<Lesson>>;
     getProcessedFigures(settings: AppSettings, locale: string): Promise<ProcessedGalleryData<Figure>>;
+    processLessons(
+        lessons: Lesson[],
+        categories: LessonCategory[],
+        schools: School[],
+        instructors: Instructor[],
+        settings: AppSettings,
+        locale: string
+    ): Omit<ProcessedGalleryData<Lesson>, 'thumbnailUrls' | 'videoUrls' | 'filterOptions'>;
+    processFigures(
+        figures: Figure[],
+        lessons: Lesson[],
+        categories: FigureCategory[],
+        schools: School[],
+        instructors: Instructor[],
+        settings: AppSettings,
+        locale: string
+    ): Omit<ProcessedGalleryData<Figure>, 'thumbnailUrls' | 'videoUrls' | 'filterOptions'>;
 }
 
 
@@ -103,14 +120,14 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
         this.dataSvc = dataSvc;
     }
 
-    public async getProcessedLessons(settings: AppSettings, locale: string): Promise<ProcessedGalleryData<Lesson>> {
-        const [lessons, categories, schools, instructors] = await Promise.all([
-            this.localDBSvc.getLessons(),
-            this.localDBSvc.getLessonCategories(),
-            this.localDBSvc.getLessonSchools(),
-            this.localDBSvc.getLessonInstructors(),
-        ]);
-
+    public processLessons(
+        lessons: Lesson[],
+        categories: LessonCategory[],
+        schools: School[],
+        instructors: Instructor[],
+        settings: AppSettings,
+        locale: string
+    ): Omit<ProcessedGalleryData<Lesson>, 'thumbnailUrls' | 'videoUrls' | 'filterOptions'> {
         const filteredLessons = lessons.filter(lesson => {
             const year = new Date(lesson.uploadDate).getFullYear().toString();
             if (settings.lessonFilter_excludedYears.includes(year)) return false;
@@ -121,7 +138,6 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
         });
 
         const allSortedLessons = sortLessons(filteredLessons, settings.lessonSortOrder);
-
         const groups: GalleryGroup<Lesson>[] = [];
 
         if (settings.lessonGrouping === 'none') {
@@ -144,7 +160,7 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
             }
         } else { // Category, School, or Instructor
             let groupingType: 'byCategory' | 'bySchool' | 'byInstructor' = settings.lessonGrouping;
-            let items: (LessonCategory | School | Instructor)[], order, collapsed, specialId, specialLabel, isSpecialExpanded, toggleSpecial;
+            let items: (LessonCategory | School | Instructor)[], order: string[], collapsed: string[], specialId: string, specialLabel: string, isSpecialExpanded: boolean, toggleSpecial: () => void;
             switch(groupingType) {
                 case 'bySchool':
                     items = schools; order = settings.lessonSchoolOrder; collapsed = settings.collapsedLessonSchools; specialId = UNASSIGNED_ID; specialLabel = "Unassigned";
@@ -181,13 +197,28 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
                 });
             }
         }
+        return {
+            groups, allItems: allSortedLessons, allItemIds: allSortedLessons.map(l => l.id), totalItemCount: lessons.length,
+            allCategories: categories, allSchools: schools, allInstructors: instructors,
+        };
+    }
+
+    public async getProcessedLessons(settings: AppSettings, locale: string): Promise<ProcessedGalleryData<Lesson>> {
+        const [lessons, categories, schools, instructors] = await Promise.all([
+            this.localDBSvc.getLessons(),
+            this.localDBSvc.getLessonCategories(),
+            this.localDBSvc.getLessonSchools(),
+            this.localDBSvc.getLessonInstructors(),
+        ]);
+
+        const processed = this.processLessons(lessons, categories, schools, instructors, settings, locale);
 
         const years = [...new Set(lessons.map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a, b) => b.localeCompare(a));
         
         // Pre-fetch URLs
         const thumbnailUrls = new Map<string, string | null>();
         const videoUrls = new Map<string, string | null>();
-        const urlPromises = allSortedLessons.map(async (lesson) => {
+        const urlPromises = processed.allItems.map(async (lesson) => {
             const [thumbUrl, videoUrl] = await Promise.all([
                 this.dataSvc.getLessonThumbnailUrl(lesson.id),
                 this.dataSvc.getVideoObjectUrl(lesson).catch(() => null)
@@ -198,18 +229,21 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
         await Promise.all(urlPromises);
 
         return {
-            groups, allItems: allSortedLessons, allItemIds: allSortedLessons.map(l => l.id), totalItemCount: lessons.length,
+            ...processed,
             thumbnailUrls, videoUrls,
-            allCategories: categories, allSchools: schools, allInstructors: instructors,
             filterOptions: { years: years.length > 0 ? years : [new Date().getFullYear().toString()], categories, schools, instructors }
         };
     }
 
-    public async getProcessedFigures(settings: AppSettings, locale: string): Promise<ProcessedGalleryData<Figure>> {
-        const [figures, lessons, categories, schools, instructors] = await Promise.all([
-            this.localDBSvc.getFigures(), this.localDBSvc.getLessons(),
-            this.localDBSvc.getFigureCategories(), this.localDBSvc.getFigureSchools(), this.localDBSvc.getFigureInstructors(),
-        ]);
+    public processFigures(
+        figures: Figure[],
+        lessons: Lesson[],
+        categories: FigureCategory[],
+        schools: School[],
+        instructors: Instructor[],
+        settings: AppSettings,
+        locale: string
+    ): Omit<ProcessedGalleryData<Figure>, 'thumbnailUrls' | 'videoUrls' | 'filterOptions'> {
         const lessonsMap = new Map(lessons.map(l => [l.id, l]));
 
         const filteredFigures = figures.filter(figure => {
@@ -248,7 +282,7 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
             }
         } else { // Category, School, or Instructor
             let groupingType: 'byCategory' | 'bySchool' | 'byInstructor' = settings.figureGrouping;
-            let items: (FigureCategory | School | Instructor)[], order, collapsed, specialId, specialLabel, isSpecialExpanded, toggleSpecial;
+            let items: (FigureCategory | School | Instructor)[], order: string[], collapsed: string[], specialId: string, specialLabel: string, isSpecialExpanded: boolean, toggleSpecial: () => void;
             switch(groupingType) {
                 case 'bySchool':
                     items = schools; order = settings.figureSchoolOrder; collapsed = settings.collapsedFigureSchools; specialId = UNASSIGNED_ID; specialLabel = "Unassigned";
@@ -286,27 +320,41 @@ class GalleryOrchestrationServiceImpl implements GalleryOrchestrationService {
             }
         }
 
+        return {
+            groups, allItems: allSortedFigures, allItemIds: allSortedFigures.map(f => f.id), totalItemCount: figures.length, lessonsMap,
+            allCategories: categories, allSchools: schools, allInstructors: instructors,
+        };
+    }
+
+    public async getProcessedFigures(settings: AppSettings, locale: string): Promise<ProcessedGalleryData<Figure>> {
+        const [figures, lessons, categories, schools, instructors] = await Promise.all([
+            this.localDBSvc.getFigures(), this.localDBSvc.getLessons(),
+            this.localDBSvc.getFigureCategories(), this.localDBSvc.getFigureSchools(),
+            this.localDBSvc.getFigureInstructors(),
+        ]);
+        
+        const processed = this.processFigures(figures, lessons, categories, schools, instructors, settings, locale);
+
         const years = [...new Set(lessons.map(l => new Date(l.uploadDate).getFullYear().toString()))].sort((a, b) => b.localeCompare(a));
         
         // Pre-fetch URLs
         const thumbnailUrls = new Map<string, string | null>();
         const videoUrls = new Map<string, string | null>();
-        const urlPromises = allSortedFigures.map(async (figure) => {
+        const urlPromises = processed.allItems.map(async (figure) => {
             const [thumbUrl, videoUrl] = await Promise.all([
                 this.dataSvc.getFigureThumbnailUrl(figure.id),
-                lessonsMap.has(figure.lessonId) ? this.dataSvc.getVideoObjectUrl(lessonsMap.get(figure.lessonId)!).catch(() => null) : Promise.resolve(null)
+                processed.lessonsMap!.has(figure.lessonId) ? this.dataSvc.getVideoObjectUrl(processed.lessonsMap!.get(figure.lessonId)!).catch(() => null) : Promise.resolve(null)
             ]);
             thumbnailUrls.set(figure.id, thumbUrl);
-            if (lessonsMap.has(figure.lessonId)) {
-                videoUrls.set(lessonsMap.get(figure.lessonId)!.videoId, videoUrl);
+            if (processed.lessonsMap!.has(figure.lessonId)) {
+                videoUrls.set(processed.lessonsMap!.get(figure.lessonId)!.videoId, videoUrl);
             }
         });
         await Promise.all(urlPromises);
 
         return {
-            groups, allItems: allSortedFigures, allItemIds: allSortedFigures.map(f => f.id), totalItemCount: figures.length, lessonsMap,
+            ...processed,
             thumbnailUrls, videoUrls,
-            allCategories: categories, allSchools: schools, allInstructors: instructors,
             filterOptions: { years: years.length > 0 ? years : [new Date().getFullYear().toString()], categories, schools, instructors }
         };
     }

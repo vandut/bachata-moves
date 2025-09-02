@@ -327,7 +327,7 @@ class BackupServiceImpl implements BackupService {
                     logger.info('All database writes complete.');
                     logger.info('--- Data Import Complete ---');
                     onStatusUpdate?.('settings.importStatusComplete');
-                    localDatabaseService.notifyListeners();
+                    localDatabaseService.notifyListeners({ type: 'all', action: 'clear' });
                     resolve();
                   })
                   .catch((err) => {

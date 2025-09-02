@@ -82,7 +82,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, thumbnailUrl, videoUrl,
   const handleChange = async (key: 'categoryId' | 'schoolId' | 'instructorId', value: string | null) => {
     try {
         await itemManagementService.updateItemProperty('lesson', lesson.id, key, value);
-        onRefresh();
+        // onRefresh is no longer needed as the gallery will react to DB changes
     } catch (err) {
         console.error(`Failed to update lesson ${key}:`, err);
     }
@@ -93,7 +93,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, thumbnailUrl, videoUrl,
     try {
       await itemManagementService.deleteItem('lesson', lesson.id);
       setShowDeleteConfirm(false);
-      onRefresh();
+      // onRefresh is no longer needed
     } catch (err) {
       console.error("Failed to delete lesson:", err);
     } finally {
@@ -211,4 +211,4 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, thumbnailUrl, videoUrl,
   );
 };
 
-export default LessonCard;
+export default React.memo(LessonCard);

@@ -83,7 +83,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, thumbnail
   const handleChange = async (key: 'categoryId' | 'schoolId' | 'instructorId', value: string | null) => {
     try {
         await itemManagementService.updateItemProperty('figure', figure.id, key, value);
-        onRefresh();
+        // onRefresh is no longer needed
     } catch (err) {
         console.error(`Failed to update figure ${key}:`, err);
     }
@@ -94,7 +94,7 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, thumbnail
     try {
       await itemManagementService.deleteItem('figure', figure.id);
       setShowDeleteConfirm(false);
-      onRefresh();
+      // onRefresh is no longer needed
     } catch (err) {
       console.error("Failed to delete figure:", err);
     } finally {
@@ -210,4 +210,4 @@ const FigureCard: React.FC<FigureCardProps> = ({ figure, parentLesson, thumbnail
   );
 };
 
-export default FigureCard;
+export default React.memo(FigureCard);

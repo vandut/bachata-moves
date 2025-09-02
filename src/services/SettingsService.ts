@@ -1,4 +1,4 @@
-import type { FigureCategory, LessonCategory, School, Instructor } from '../types';
+import type { FigureCategory, LessonCategory, School, Instructor, DbChangePayload } from '../types';
 import type { AppSettings } from '../contexts/SettingsContext';
 import { localDatabaseService, LocalDatabaseService } from './LocalDatabaseService';
 import { createLogger } from '../utils/logger';
@@ -426,7 +426,8 @@ class SettingsServiceImpl implements SettingsService {
         };
         
     await this.updateSettings(settingsUpdate);
-    this.localDB.notifyListeners(); // Force galleries to update with new data
+    const payload: DbChangePayload = type === 'lesson' ? { type: 'lessonCategory', action: 'batch' } : { type: 'figureCategory', action: 'batch' };
+    this.localDB.notifyListeners(payload); // Force galleries to update with new data
   }
 }
 

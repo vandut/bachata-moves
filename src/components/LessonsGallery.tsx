@@ -66,7 +66,7 @@ const LessonGrid: React.FC<{
         <div className={`grid ${gridClass} gap-6`}>
             {lessons.map((lesson) => (
                 <LessonCard 
-                    key={`${lesson.id}-${lesson.modifiedTime || ''}`} 
+                    key={lesson.id} 
                     lesson={lesson}
                     thumbnailUrl={thumbnailUrls.get(lesson.id) || null}
                     videoUrl={videoUrls.get(lesson.videoId) || null}

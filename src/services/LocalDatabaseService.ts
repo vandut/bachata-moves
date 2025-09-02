@@ -1,4 +1,4 @@
-import type { Lesson, Figure, FigureCategory, LessonCategory, School, Instructor } from '../types';
+import type { Lesson, Figure, FigureCategory, LessonCategory, School, Instructor, DbChangePayload } from '../types';
 import type { AppSettings } from '../contexts/SettingsContext';
 import { openDB, deleteDB, type IDBPDatabase } from 'idb';
 import { createLogger } from '../utils/logger';
@@ -8,6 +8,7 @@ import { createLogger } from '../utils/logger';
 export interface LocalDatabaseService {
   // Lessons
   getLessons(): Promise<Lesson[]>;
+  getLesson(id: string): Promise<Lesson | undefined>;
   addLesson(lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, videoFile: File, thumbnailBlob: Blob): Promise<Lesson>;
   updateLesson(lessonId: string, lessonUpdateData: Partial<Omit<Lesson, 'id'>>, newThumbnailBlob?: Blob | null): Promise<Lesson>;
   deleteLesson(lessonId: string): Promise<void>;
@@ -15,6 +16,7 @@ export interface LocalDatabaseService {
 
   // Figures
   getFigures(): Promise<Figure[]>;
+  getFigure(id: string): Promise<Figure | undefined>;
   addFigure(lessonId: string, figureData: Omit<Figure, 'id' | 'lessonId'>, thumbnailBlob: Blob): Promise<Figure>;
   updateFigure(figureId: string, figureUpdateData: Partial<Omit<Figure, 'id' | 'lessonId'>>, newThumbnailBlob?: Blob | null): Promise<Figure>;
   deleteFigure(figureId: string): Promise<void>;
@@ -76,8 +78,8 @@ export interface LocalDatabaseService {
   removeTombstones(driveIds: string[]): Promise<void>;
 
   // Subscription for live updates
-  subscribe(callback: () => void): () => void;
-  notifyListeners(): void;
+  subscribe(callback: (payload: DbChangePayload) => void): () => void;
+  notifyListeners(payload: DbChangePayload): void;
 }
 
 // --- Implementation ---
@@ -222,24 +224,21 @@ export async function openBachataDB(): Promise<IDBPDatabase> {
 }
 
 class IndexDbLocalDatabaseService implements LocalDatabaseService {
-  private listeners = new Set<() => void>();
+  private listeners = new Set<(payload: DbChangePayload) => void>();
 
   // --- Subscription ---
-  public subscribe = (callback: () => void): () => void => {
+  public subscribe = (callback: (payload: DbChangePayload) => void): () => void => {
     this.listeners.add(callback);
     return () => this.listeners.delete(callback);
   }
   
-  public notifyListeners = (): void => {
-    this.notify();
+  public notifyListeners = (payload: DbChangePayload): void => {
+    this.notify(payload);
   }
 
-  private notify = (): void => {
-    logger.info("Notifying listeners of data change.");
-    // Use a timeout to batch notifications and prevent rapid-fire updates
-    setTimeout(() => {
-      this.listeners.forEach(cb => cb());
-    }, 100);
+  private notify = (payload: DbChangePayload): void => {
+    logger.info("Notifying listeners of data change:", payload);
+    this.listeners.forEach(cb => cb(payload));
   }
 
   // --- Tombstone / Deleted IDs ---
@@ -273,6 +272,8 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const db = await openBachataDB();
     return db.getAll(LESSONS_STORE);
   }
+  public getLesson = (id: string) => openBachataDB().then(db => db.get(LESSONS_STORE, id));
+
 
   public addLesson = async (lessonData: Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>, videoFile: File, thumbnailBlob: Blob): Promise<Lesson> => {
     const db = await openBachataDB();
@@ -295,7 +296,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     ]);
     await tx.done;
 
-    this.notify();
+    this.notify({ type: 'lesson', action: 'add', ids: [newLesson.id] });
     return newLesson;
   }
   
@@ -322,7 +323,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     await Promise.all(writePromises);
     await tx.done;
 
-    this.notify();
+    this.notify({ type: 'lesson', action: 'update', ids: [lessonId] });
     return updatedLesson;
   }
 
@@ -351,7 +352,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     
     await Promise.all(deletePromises);
     await tx.done;
-    this.notify();
+    this.notify({ type: 'lesson', action: 'delete', ids: [lessonId] });
   }
 
   public saveDownloadedLesson = async (lesson: Lesson, videoFile: Blob, thumbnailBlob: Blob): Promise<void> => {
@@ -363,7 +364,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
         tx.objectStore(VIDEO_FILES_STORE).put(videoFile, lesson.videoId)
     ]);
     await tx.done;
-    this.notify();
+    this.notify({ type: 'lesson', action: 'update', ids: [lesson.id] });
   }
 
   // --- Figures ---
@@ -371,6 +372,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const db = await openBachataDB();
     return db.getAll(FIGURES_STORE);
   }
+  public getFigure = (id: string) => openBachataDB().then(db => db.get(FIGURES_STORE, id));
 
   public addFigure = async (lessonId: string, figureData: Omit<Figure, 'id' | 'lessonId'>, thumbnailBlob: Blob): Promise<Figure> => {
     const db = await openBachataDB();
@@ -383,7 +385,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     ]);
     await tx.done;
     
-    this.notify();
+    this.notify({ type: 'figure', action: 'add', ids: [newFigure.id] });
     return newFigure;
   }
 
@@ -407,7 +409,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     await Promise.all(writePromises);
     await tx.done;
     
-    this.notify();
+    this.notify({ type: 'figure', action: 'update', ids: [figureId] });
     return updatedFigure;
   }
 
@@ -419,7 +421,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
       tx.objectStore(FIGURE_THUMBNAILS_STORE).delete(figureId)
     ]);
     await tx.done;
-    this.notify();
+    this.notify({ type: 'figure', action: 'delete', ids: [figureId] });
   }
 
   public saveDownloadedFigure = async (figure: Figure, thumbnailBlob: Blob): Promise<void> => {
@@ -430,7 +432,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
       tx.objectStore(FIGURE_THUMBNAILS_STORE).put(thumbnailBlob, figure.id),
     ]);
     await tx.done;
-    this.notify();
+    this.notify({ type: 'figure', action: 'update', ids: [figure.id] });
   }
   
   // --- Figure Categories ---
@@ -447,7 +449,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
       driveId: driveId,
     };
     await db.put(FIGURE_CATEGORIES_STORE, newCategory);
-    this.notify();
+    this.notify({ type: 'figureCategory', action: 'add', ids: [newCategory.id] });
     return newCategory;
   }
 
@@ -461,20 +463,20 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
         ...categoryUpdateData, 
     };
     await db.put(FIGURE_CATEGORIES_STORE, updatedCategory);
-    this.notify();
+    this.notify({ type: 'figureCategory', action: 'update', ids: [categoryId] });
     return updatedCategory;
   }
   
   public saveFigureCategory = async (category: FigureCategory): Promise<void> => {
     const db = await openBachataDB();
     await db.put(FIGURE_CATEGORIES_STORE, category);
-    this.notify();
+    this.notify({ type: 'figureCategory', action: 'update', ids: [category.id] });
   };
 
   public deleteFigureCategory = async (categoryId: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(FIGURE_CATEGORIES_STORE, categoryId);
-    this.notify();
+    this.notify({ type: 'figureCategory', action: 'delete', ids: [categoryId] });
   }
 
   // --- Lesson Categories ---
@@ -491,7 +493,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
       driveId: driveId,
     };
     await db.put(LESSON_CATEGORIES_STORE, newCategory);
-    this.notify();
+    this.notify({ type: 'lessonCategory', action: 'add', ids: [newCategory.id] });
     return newCategory;
   }
 
@@ -505,20 +507,20 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
         ...categoryUpdateData, 
     };
     await db.put(LESSON_CATEGORIES_STORE, updatedCategory);
-    this.notify();
+    this.notify({ type: 'lessonCategory', action: 'update', ids: [categoryId] });
     return updatedCategory;
   }
   
   public saveLessonCategory = async (category: LessonCategory): Promise<void> => {
     const db = await openBachataDB();
     await db.put(LESSON_CATEGORIES_STORE, category);
-    this.notify();
+    this.notify({ type: 'lessonCategory', action: 'update', ids: [category.id] });
   };
 
   public deleteLessonCategory = async (categoryId: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(LESSON_CATEGORIES_STORE, categoryId);
-    this.notify();
+    this.notify({ type: 'lessonCategory', action: 'delete', ids: [categoryId] });
   }
 
   // --- Schools (Lesson) ---
@@ -530,7 +532,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const db = await openBachataDB();
     const newSchool: School = { id: generateId(), name, driveId };
     await db.put(LESSON_SCHOOLS_STORE, newSchool);
-    this.notify();
+    this.notify({ type: 'lessonSchool', action: 'add', ids: [newSchool.id] });
     return newSchool;
   }
   public updateLessonSchool = async (id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School> => {
@@ -539,18 +541,18 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     if (!school) throw new Error(`Lesson School with id "${id}" not found.`);
     const updatedSchool = { ...school, ...updateData };
     await db.put(LESSON_SCHOOLS_STORE, updatedSchool);
-    this.notify();
+    this.notify({ type: 'lessonSchool', action: 'update', ids: [id] });
     return updatedSchool;
   }
   public saveLessonSchool = async (school: School): Promise<void> => {
     const db = await openBachataDB();
     await db.put(LESSON_SCHOOLS_STORE, school);
-    this.notify();
+    this.notify({ type: 'lessonSchool', action: 'update', ids: [school.id] });
   }
   public deleteLessonSchool = async (id: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(LESSON_SCHOOLS_STORE, id);
-    this.notify();
+    this.notify({ type: 'lessonSchool', action: 'delete', ids: [id] });
   }
 
   // --- Schools (Figure) ---
@@ -562,7 +564,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const db = await openBachataDB();
     const newSchool: School = { id: generateId(), name, driveId };
     await db.put(FIGURE_SCHOOLS_STORE, newSchool);
-    this.notify();
+    this.notify({ type: 'figureSchool', action: 'add', ids: [newSchool.id] });
     return newSchool;
   }
   public updateFigureSchool = async (id: string, updateData: Partial<Omit<School, 'id'>>): Promise<School> => {
@@ -571,18 +573,18 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     if (!school) throw new Error(`Figure School with id "${id}" not found.`);
     const updatedSchool = { ...school, ...updateData };
     await db.put(FIGURE_SCHOOLS_STORE, updatedSchool);
-    this.notify();
+    this.notify({ type: 'figureSchool', action: 'update', ids: [id] });
     return updatedSchool;
   }
   public saveFigureSchool = async (school: School): Promise<void> => {
     const db = await openBachataDB();
     await db.put(FIGURE_SCHOOLS_STORE, school);
-    this.notify();
+    this.notify({ type: 'figureSchool', action: 'update', ids: [school.id] });
   }
   public deleteFigureSchool = async (id: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(FIGURE_SCHOOLS_STORE, id);
-    this.notify();
+    this.notify({ type: 'figureSchool', action: 'delete', ids: [id] });
   }
 
   // --- Instructors (Lesson) ---
@@ -594,7 +596,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const db = await openBachataDB();
     const newInstructor: Instructor = { id: generateId(), name, driveId };
     await db.put(LESSON_INSTRUCTORS_STORE, newInstructor);
-    this.notify();
+    this.notify({ type: 'lessonInstructor', action: 'add', ids: [newInstructor.id] });
     return newInstructor;
   }
   public updateLessonInstructor = async (id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor> => {
@@ -603,18 +605,18 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     if (!instructor) throw new Error(`Lesson Instructor with id "${id}" not found.`);
     const updatedInstructor = { ...instructor, ...updateData };
     await db.put(LESSON_INSTRUCTORS_STORE, updatedInstructor);
-    this.notify();
+    this.notify({ type: 'lessonInstructor', action: 'update', ids: [id] });
     return updatedInstructor;
   }
   public saveLessonInstructor = async (instructor: Instructor): Promise<void> => {
     const db = await openBachataDB();
     await db.put(LESSON_INSTRUCTORS_STORE, instructor);
-    this.notify();
+    this.notify({ type: 'lessonInstructor', action: 'update', ids: [instructor.id] });
   }
   public deleteLessonInstructor = async (id: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(LESSON_INSTRUCTORS_STORE, id);
-    this.notify();
+    this.notify({ type: 'lessonInstructor', action: 'delete', ids: [id] });
   }
 
   // --- Instructors (Figure) ---
@@ -626,7 +628,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     const db = await openBachataDB();
     const newInstructor: Instructor = { id: generateId(), name, driveId };
     await db.put(FIGURE_INSTRUCTORS_STORE, newInstructor);
-    this.notify();
+    this.notify({ type: 'figureInstructor', action: 'add', ids: [newInstructor.id] });
     return newInstructor;
   }
   public updateFigureInstructor = async (id: string, updateData: Partial<Omit<Instructor, 'id'>>): Promise<Instructor> => {
@@ -635,18 +637,18 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     if (!instructor) throw new Error(`Figure Instructor with id "${id}" not found.`);
     const updatedInstructor = { ...instructor, ...updateData };
     await db.put(FIGURE_INSTRUCTORS_STORE, updatedInstructor);
-    this.notify();
+    this.notify({ type: 'figureInstructor', action: 'update', ids: [id] });
     return updatedInstructor;
   }
   public saveFigureInstructor = async (instructor: Instructor): Promise<void> => {
     const db = await openBachataDB();
     await db.put(FIGURE_INSTRUCTORS_STORE, instructor);
-    this.notify();
+    this.notify({ type: 'figureInstructor', action: 'update', ids: [instructor.id] });
   }
   public deleteFigureInstructor = async (id: string): Promise<void> => {
     const db = await openBachataDB();
     await db.delete(FIGURE_INSTRUCTORS_STORE, id);
-    this.notify();
+    this.notify({ type: 'figureInstructor', action: 'delete', ids: [id] });
   }
 
   // --- Settings ---
@@ -711,6 +713,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
         tx.objectStore(SETTINGS_STORE).put(syncSettings, SYNC_SETTINGS_KEY)
     ]);
     await tx.done;
+    this.notify({ type: 'settings', action: 'update' });
   }
   
   // --- Blob Handling ---
@@ -731,7 +734,7 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
 
   public clearAllData = async (): Promise<void> => {
     await deleteDB(DB_NAME);
-    this.notify();
+    this.notify({ type: 'all', action: 'clear' });
   }
 }
 

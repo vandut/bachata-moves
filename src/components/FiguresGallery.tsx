@@ -68,7 +68,7 @@ const FigureGrid: React.FC<{
                 const parentLesson = lessonsMap.get(figure.lessonId);
                 return (
                     <FigureCard 
-                        key={`${figure.id}-${figure.modifiedTime || ''}`} 
+                        key={figure.id} 
                         figure={figure} 
                         parentLesson={parentLesson} 
                         thumbnailUrl={thumbnailUrls.get(figure.id) || null}

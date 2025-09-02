@@ -115,3 +115,13 @@ export interface ModalAction {
   isLoading?: boolean;
   loadingLabel?: string;
 }
+
+// --- Database Change Notification Types ---
+export type DbChangeType = 'lesson' | 'figure' | 'lessonCategory' | 'figureCategory' | 'lessonSchool' | 'figureSchool' | 'lessonInstructor' | 'figureInstructor' | 'settings' | 'all';
+export type DbAction = 'add' | 'update' | 'delete' | 'clear' | 'batch';
+
+export interface DbChangePayload {
+  type: DbChangeType;
+  action: DbAction;
+  ids?: string[];
+}
