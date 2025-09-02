@@ -63,7 +63,8 @@ const defaultSyncSettings: Partial<AppSettings> = {
   figureSchoolOrder: [],
   lessonInstructorOrder: [],
   figureInstructorOrder: [],
-  lastSyncTimestamp: undefined,
+  lessonGroupingConfig_modifiedTime: undefined,
+  figureGroupingConfig_modifiedTime: undefined,
 };
 
 // List of keys that are device-specific and should NOT be synced.
@@ -110,7 +111,6 @@ export interface SettingsService {
   getSettings(): Promise<AppSettings>;
   reloadSettings(): Promise<AppSettings>;
   updateSettings(updates: Partial<AppSettings>, options?: { silent?: boolean }): Promise<void>;
-  applyRemoteSettings(updates: Partial<AppSettings>, modifiedTime: string): Promise<void>;
   subscribe(callback: (settings: AppSettings) => void): () => void;
   getSettingsSnapshot(): AppSettings | null;
 
@@ -189,46 +189,26 @@ class SettingsServiceImpl implements SettingsService {
   }
 
   public async updateSettings(updates: Partial<AppSettings>, options?: { silent?: boolean }): Promise<void> {
+    // Force a fresh read from the DB by clearing the cache first to avoid race conditions.
+    this.settings = null;
     const currentSettings = await this.getSettings();
     const newSettings = { ...currentSettings, ...updates };
-    this.settings = newSettings; // Optimistic update
-
-    // Check if any of the updated keys are syncable settings
-    const didSyncSettingChange = Object.keys(updates).some(
-      key => !DEVICE_SETTING_KEYS.includes(key as keyof AppSettings)
-    );
-    
-    // Only generate a new timestamp if a syncable setting has changed.
-    const newModifiedTime = didSyncSettingChange ? new Date().toISOString() : undefined;
 
     try {
-      await this.localDB.saveAllSettings(newSettings, newModifiedTime);
-      if (!options?.silent) {
-        this.notify();
-      }
-    } catch (error) {
-      logger.error('Failed to save settings', error);
-      // Revert optimistic update on failure
-      this.settings = currentSettings;
-      if (!options?.silent) {
-        this.notify();
-      }
-    }
-  }
+        await this.localDB.saveAllSettings(newSettings);
+        // Invalidate the cache again so the next read is also guaranteed to be fresh from the database.
+        this.settings = null;
 
-  public async applyRemoteSettings(updates: Partial<AppSettings>, modifiedTime: string): Promise<void> {
-    const currentSettings = await this.getSettings();
-    const newSettings = { ...currentSettings, ...updates };
-    this.settings = newSettings; // Optimistic update
-
-    try {
-        await this.localDB.saveAllSettings(newSettings, modifiedTime);
-        this.notify();
+        if (!options?.silent) {
+            // This will cause listeners to fire, which in turn will call getSettings() and read the new DB state.
+            this.notify();
+        }
     } catch (error) {
-        logger.error('Failed to apply remote settings', error);
-        // Revert optimistic update on failure
-        this.settings = currentSettings;
-        this.notify();
+        logger.error('Failed to save settings', error);
+        this.settings = currentSettings; // Revert to pre-update state on error
+        if (!options?.silent) {
+            this.notify();
+        }
     }
   }
 
@@ -246,6 +226,11 @@ class SettingsServiceImpl implements SettingsService {
   private notify(): void {
     if (this.settings) {
       this.listeners.forEach(listener => listener(this.settings!));
+    } else {
+      // If settings are null (cache was invalidated), trigger a reload for all listeners.
+      this.getSettings().then(settings => {
+        this.listeners.forEach(listener => listener(settings));
+      });
     }
   }
 
@@ -299,6 +284,7 @@ class SettingsServiceImpl implements SettingsService {
             lessonInstructorOrder: config.instructorOrder,
             showEmptyLessonCategoriesInGroupedView: config.showEmpty,
             showLessonCountInGroupHeaders: config.showCount,
+            lessonGroupingConfig_modifiedTime: new Date().toISOString(),
           }
         : {
             figureCategoryOrder: config.categoryOrder,
@@ -306,6 +292,7 @@ class SettingsServiceImpl implements SettingsService {
             figureInstructorOrder: config.instructorOrder,
             showEmptyFigureCategoriesInGroupedView: config.showEmpty,
             showFigureCountInGroupHeaders: config.showCount,
+            figureGroupingConfig_modifiedTime: new Date().toISOString(),
           };
     
     await this.updateSettings(settingsUpdate);
@@ -313,7 +300,6 @@ class SettingsServiceImpl implements SettingsService {
 
   public async getGroupingConfigForUpload(type: 'lesson' | 'figure'): Promise<{ content: RemoteGroupingConfig; modifiedTime: string; }> {
     const allSettings = await this.getSettings();
-    const syncSettingsInDb = await this.localDB.getRawSettings().then(s => s.sync);
 
     const [dbCategories, dbSchools, dbInstructors] = await Promise.all(type === 'lesson' 
       ? [this.localDB.getLessonCategories(), this.localDB.getLessonSchools(), this.localDB.getLessonInstructors()]
@@ -361,7 +347,9 @@ class SettingsServiceImpl implements SettingsService {
             showCount: allSettings.showFigureCountInGroupHeaders,
         };
           
-    const modifiedTime = (syncSettingsInDb as any)?.modifiedTime || new Date(0).toISOString();
+    const modifiedTime = type === 'lesson'
+        ? allSettings.lessonGroupingConfig_modifiedTime || new Date(0).toISOString()
+        : allSettings.figureGroupingConfig_modifiedTime || new Date(0).toISOString();
 
     return { content, modifiedTime };
   }
@@ -427,15 +415,17 @@ class SettingsServiceImpl implements SettingsService {
             lessonInstructorOrder: instructors.map(i => i.id),
             showEmptyLessonCategoriesInGroupedView: showEmpty,
             showLessonCountInGroupHeaders: showCount,
+            lessonGroupingConfig_modifiedTime: modifiedTime,
         } : {
             figureCategoryOrder: categories.map(c => c.id),
             figureSchoolOrder: schools.map(s => s.id),
             figureInstructorOrder: instructors.map(i => i.id),
             showEmptyFigureCategoriesInGroupedView: showEmpty,
             showFigureCountInGroupHeaders: showCount,
+            figureGroupingConfig_modifiedTime: modifiedTime,
         };
         
-    await this.applyRemoteSettings(settingsUpdate, modifiedTime);
+    await this.updateSettings(settingsUpdate);
     this.localDB.notifyListeners(); // Force galleries to update with new data
   }
 }

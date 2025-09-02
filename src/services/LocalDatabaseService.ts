@@ -60,7 +60,7 @@ export interface LocalDatabaseService {
 
   // Settings
   getRawSettings(): Promise<{ device: Partial<AppSettings> | undefined; sync: Partial<AppSettings> | undefined; }>;
-  saveAllSettings(settingsData: AppSettings, modifiedTime?: string): Promise<void>;
+  saveAllSettings(settingsData: AppSettings): Promise<void>;
   
   // Blob Handling
   getVideoBlob(videoId: string): Promise<Blob | undefined>;
@@ -659,10 +659,10 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
     return { device, sync };
   }
 
-  public saveAllSettings = async (settingsData: AppSettings, modifiedTime?: string): Promise<void> => {
+  public saveAllSettings = async (settingsData: AppSettings): Promise<void> => {
     const db = await openBachataDB();
     const deviceSettings: Partial<AppSettings> = {};
-    const syncSettings: Partial<AppSettings> & { modifiedTime?: string } = {};
+    const syncSettings: Partial<AppSettings> = {};
     const deviceSettingKeys: (keyof AppSettings)[] = [
         'language',
         'autoplayGalleryVideos',
@@ -703,14 +703,6 @@ class IndexDbLocalDatabaseService implements LocalDatabaseService {
         } else {
             (syncSettings as any)[typedKey] = settingsData[typedKey];
         }
-    }
-    
-    // If a new modifiedTime is provided, use it. Otherwise, preserve the existing one.
-    if (modifiedTime) {
-        syncSettings.modifiedTime = modifiedTime;
-    } else {
-        const existingSyncSettings = await db.get(SETTINGS_STORE, SYNC_SETTINGS_KEY) as any;
-        syncSettings.modifiedTime = existingSyncSettings?.modifiedTime || new Date().toISOString();
     }
     
     const tx = db.transaction(SETTINGS_STORE, 'readwrite');

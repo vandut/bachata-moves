@@ -196,7 +196,8 @@ class SyncQueueServiceImpl implements SyncQueueService {
             await this.settingsSvc.applyRemoteGroupingConfig(type, remoteConfig, result.newTimestamp);
         } else if (result.outcome === 'uploaded' && result.newTimestamp) {
             logger.info(`Uploaded local grouping config for ${type}.`);
-            await this.settingsSvc.applyRemoteSettings({}, result.newTimestamp);
+            const key = type === 'lesson' ? 'lessonGroupingConfig_modifiedTime' : 'figureGroupingConfig_modifiedTime';
+            await this.settingsSvc.updateSettings({ [key]: result.newTimestamp });
         } else {
             logger.info(`Grouping config for ${type} is in sync.`);
         }

@@ -51,8 +51,9 @@ export interface AppSettings {
   figureFilter_excludedCategoryIds: string[];
   figureFilter_excludedSchoolIds: string[];
   figureFilter_excludedInstructorIds: string[];
-  // Sync settings
-  lastSyncTimestamp?: string;
+  // Sync settings - Timestamps for specific synced files
+  lessonGroupingConfig_modifiedTime?: string;
+  figureGroupingConfig_modifiedTime?: string;
 }
 
 
