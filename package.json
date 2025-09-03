@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:update": "playwright test --update-snapshots"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -19,7 +22,9 @@
     "react-router-dom": "^7.7.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/node": "^22.14.0",
+    "cross-env": "^10.0.0",
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
     "vite-plugin-pwa": "^1.0.2"

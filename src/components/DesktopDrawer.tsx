@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import type { NavItem } from '../types';
-import { isDev } from '../utils/logger';
+import { isDev, isE2ETest } from '../../config';
 import { APP_VERSION } from '../version';
 
 export const DESKTOP_DRAWER_WIDTH = 240;
@@ -52,7 +52,7 @@ const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems, hasError }) => 
         </ul>
       </nav>
       <div className="flex-shrink-0 p-4 border-t border-gray-200">
-        <p className="text-xs text-center text-gray-400">Version: {APP_VERSION}</p>
+        {!isE2ETest() && <p className="text-xs text-center text-gray-400">Version: {APP_VERSION}</p>}
       </div>
     </div>
   );

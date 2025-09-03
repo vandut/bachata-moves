@@ -162,3 +162,7 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# PlayWright test reports
+playwright-report
+test-results
