@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test';
 
-test('should render the empty state on first visit', async ({ page }) => {
-  await page.goto('/#figures');
+test.describe('Figures Page', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#figures');
+    await page.waitForSelector('main');
+  });
 
-  await expect(page.locator('main')).toBeVisible();
-
-  await expect(page).toHaveScreenshot('empty-figures-page.png');
+  test('empty figures page', async ({ page }) => {
+    await expect(page).toHaveScreenshot('empty-figures-page.png');
+  });
 });

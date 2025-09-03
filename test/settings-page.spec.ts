@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test';
 
-test('should render the on first visit', async ({ page }) => {
-  await page.goto('/#settings');
+test.describe('Settings Page', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#settings');
+    await page.waitForSelector('main');
+  });
 
-  await expect(page.locator('main')).toBeVisible();
-
-  await expect(page).toHaveScreenshot('initial-settings-page.png');
+  test('initial settings page', async ({ page }) => {
+    await expect(page).toHaveScreenshot('initial-settings-page.png');
+  });
 });
