@@ -1,5 +1,6 @@
 import { type Page, type Locator } from '@playwright/test';
 import { GalleryOptionsSelectors } from './gallery-options';
+import { ContextMenuSelectors } from './context-menu';
 
 /**
  * A comprehensive collection of Playwright selectors for the Lessons Gallery page.
@@ -8,6 +9,7 @@ import { GalleryOptionsSelectors } from './gallery-options';
 export class LessonsPageSelectors {
   readonly page: Page;
   readonly options: GalleryOptionsSelectors;
+  readonly contextMenu: ContextMenuSelectors;
 
   // --- Main View ---
   readonly view: Locator;
@@ -20,9 +22,6 @@ export class LessonsPageSelectors {
   readonly pageTitle: Locator;
   readonly desktopTopNav: Locator;
   readonly mobileTopNav: Locator;
-  
-  // --- Context Menu ---
-  readonly contextMenu: Locator;
 
   // --- Modals ---
   readonly addLessonModal: {
@@ -52,6 +51,7 @@ export class LessonsPageSelectors {
   constructor(page: Page) {
     this.page = page;
     this.options = new GalleryOptionsSelectors(page);
+    this.contextMenu = new ContextMenuSelectors(page);
 
     // --- Main View ---
     this.view = page.locator('#lessons-gallery-view');
@@ -64,9 +64,6 @@ export class LessonsPageSelectors {
     this.pageTitle = page.locator('[data-component="page-title"]');
     this.desktopTopNav = page.locator('#desktop-top-nav');
     this.mobileTopNav = page.locator('#mobile-top-nav');
-    
-    // --- Context Menu ---
-    this.contextMenu = page.locator('[role="menu"]');
 
     // --- Modals ---
     const addModalLocator = page.locator('[data-modal-name="AddLessonModal"]');
@@ -115,13 +112,5 @@ export class LessonsPageSelectors {
    */
   getAllCards(): Locator {
     return this.page.locator(`[data-component="lesson-card"]`);
-  }
-
-  /**
-   * Gets a specific item from the currently open context menu.
-   * @param label The text label of the menu item (e.g., 'Edit', 'Remove').
-   */
-  getContextMenuItem(label: 'Open' | 'Category' | 'School' | 'Instructor' | 'Edit' | 'Remove'): Locator {
-    return this.contextMenu.getByRole('menuitem', { name: label });
   }
 }

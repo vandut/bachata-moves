@@ -1,5 +1,6 @@
 import { type Page, type Locator } from '@playwright/test';
 import { GalleryOptionsSelectors } from './gallery-options';
+import { ContextMenuSelectors } from './context-menu';
 
 /**
  * A comprehensive collection of Playwright selectors for the Figures Gallery page.
@@ -7,6 +8,7 @@ import { GalleryOptionsSelectors } from './gallery-options';
 export class FiguresPageSelectors {
   readonly page: Page;
   readonly options: GalleryOptionsSelectors;
+  readonly contextMenu: ContextMenuSelectors;
 
   // --- Main View ---
   readonly view: Locator;
@@ -19,9 +21,6 @@ export class FiguresPageSelectors {
   readonly pageTitle: Locator;
   readonly desktopTopNav: Locator;
   readonly mobileTopNav: Locator;
-  
-  // --- Context Menu ---
-  readonly contextMenu: Locator;
 
   // --- Modals ---
   readonly addFigureModal_step1: {
@@ -60,6 +59,7 @@ export class FiguresPageSelectors {
   constructor(page: Page) {
     this.page = page;
     this.options = new GalleryOptionsSelectors(page);
+    this.contextMenu = new ContextMenuSelectors(page);
 
     // --- Main View ---
     this.view = page.locator('#figures-gallery-view');
@@ -72,9 +72,6 @@ export class FiguresPageSelectors {
     this.pageTitle = page.locator('[data-component="page-title"]');
     this.desktopTopNav = page.locator('#desktop-top-nav');
     this.mobileTopNav = page.locator('#mobile-top-nav');
-    
-    // --- Context Menu ---
-    this.contextMenu = page.locator('[role="menu"]');
 
     // --- Modals ---
     const addModalStep1Locator = page.locator('[data-modal-name="AddFigureModal"]');
@@ -134,7 +131,7 @@ export class FiguresPageSelectors {
    * @param label The text label of the menu item.
    */
   getContextMenuItem(label: 'Open' | 'Category' | 'School' | 'Instructor' | 'Edit' | 'Remove'): Locator {
-    return this.contextMenu.getByRole('menuitem', { name: label });
+    return this.contextMenu.getItem(label);
   }
 
   /**
