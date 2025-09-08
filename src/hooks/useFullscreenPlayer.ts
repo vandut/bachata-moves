@@ -15,69 +15,42 @@ interface PlayOptions {
 }
 
 export const useFullscreenPlayer = () => {
-    // FIX: Completed the hook implementation. The useRef should be for an HTMLVideoElement.
     const videoRef = useRef<HTMLVideoElement | null>(null);
-    const containerRef = useRef<HTMLDivElement | null>(null);
-    // FIX: Provide an initial value of `undefined` to the `useRef` hook to resolve the "Expected 1 arguments, but got 0" error.
     const onExitRef = useRef<OnExitCallback | undefined>(undefined);
 
-    const cleanup = useCallback(async () => {
-        if (document.fullscreenElement && document.exitFullscreen) {
-            try {
-                // Fix: Reverted to the standard `document.exitFullscreen()` call. The previous use of `.call(document)`
-                // was incorrect and caused a type error.
-                await document.exitFullscreen();
-            } catch (err) {
-                console.error("Error exiting fullscreen:", err);
-            }
-        }
-        if (containerRef.current && containerRef.current.parentNode === document.body) {
-            document.body.removeChild(containerRef.current);
-            containerRef.current = null;
-        }
-        if (videoRef.current) {
+    const cleanup = useCallback(() => {
+        // Remove the video element from the DOM
+        if (videoRef.current && videoRef.current.parentNode) {
+            videoRef.current.parentNode.removeChild(videoRef.current);
             videoRef.current = null;
         }
-        // FIX: The error "Expected 1 arguments, but got 0" is likely a misleading linter error.
-        // Refactoring to store the callback, clear the ref, and then call the stored callback is a safer pattern
-        // that can prevent race conditions or confusing compiler behavior.
+
+        // Call the onExit callback if it exists
         const exitCb = onExitRef.current;
         onExitRef.current = undefined;
-        // The check is moved to after getting the callback, and a typeof check is used
-        // which can sometimes help with TypeScript's control flow analysis for complex types.
         if (typeof exitCb === 'function') {
             exitCb();
         }
     }, []);
 
     const play = useCallback(async (options: PlayOptions) => {
-        // FIX: Destructure settings and updateSettings from options to break circular dependency.
         const { item, onExit, settings, updateSettings, videoUrl } = options;
         onExitRef.current = onExit;
 
         try {
-            const container = document.createElement('div');
-            container.style.position = 'fixed';
-            container.style.top = '0';
-            container.style.left = '0';
-            container.style.width = '100vw';
-            container.style.height = '100vh';
-            container.style.backgroundColor = 'black';
-            container.style.display = 'flex';
-            container.style.alignItems = 'center';
-            container.style.justifyContent = 'center';
-            container.style.zIndex = '9999';
-            containerRef.current = container;
-
             const video = document.createElement('video');
             videoRef.current = video;
             video.src = videoUrl;
             video.controls = true;
             video.autoplay = true;
-            video.style.maxWidth = '100%';
-            video.style.maxHeight = '100%';
+            video.style.position = 'absolute'; // Hide element before it's fullscreen
+            video.style.left = '-9999px';
             video.muted = settings.isMuted;
             video.volume = settings.volume;
+
+            // Apply the same control attributes as the editor's video player
+            video.setAttribute('controlsList', 'nodownload noplaybackrate');
+            video.toggleAttribute('disablePictureInPicture', true);
 
             video.addEventListener('volumechange', () => {
                 if (video.muted !== settings.isMuted) updateSettings({ isMuted: video.muted });
@@ -96,16 +69,23 @@ export const useFullscreenPlayer = () => {
                     video.play().catch(e => console.warn("Fullscreen loop playback failed", e));
                 }
             });
-
-            container.appendChild(video);
-            document.body.appendChild(container);
             
-            if (container.requestFullscreen) {
-                await container.requestFullscreen();
+            // Add dblclick listener to exit fullscreen, as requested
+            video.addEventListener('dblclick', () => {
+                if (document.fullscreenElement === video) {
+                    document.exitFullscreen().catch(err => console.error("Error exiting fullscreen on dblclick:", err));
+                }
+            });
+
+            document.body.appendChild(video);
+            
+            if (video.requestFullscreen) {
+                await video.requestFullscreen();
             }
 
             const onFullscreenChange = () => {
-                if (!document.fullscreenElement) {
+                // When we exit fullscreen, document.fullscreenElement is no longer our video.
+                if (document.fullscreenElement !== video) {
                     cleanup();
                     document.removeEventListener('fullscreenchange', onFullscreenChange);
                 }
@@ -114,7 +94,7 @@ export const useFullscreenPlayer = () => {
 
         } catch (error) {
             console.error("Failed to play video in fullscreen:", error);
-            cleanup();
+            cleanup(); // Ensure cleanup happens on error
         }
     }, [cleanup]);
 

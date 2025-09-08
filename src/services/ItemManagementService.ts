@@ -172,8 +172,19 @@ class ItemManagementServiceImpl implements ItemManagementService {
 
         const videoElement = document.createElement('video');
         videoElement.src = videoUrl;
-        const videoDurationMs = await new Promise<number>((resolve) => {
-            videoElement.addEventListener('loadedmetadata', () => resolve(videoElement.duration * 1000));
+        const videoDurationMs = await new Promise<number>((resolve, reject) => {
+            const onError = () => {
+                videoElement.removeEventListener('loadedmetadata', onLoaded);
+                videoElement.removeEventListener('error', onError);
+                reject(new Error('Video metadata could not be loaded. The file might be corrupted.'));
+            };
+            const onLoaded = () => {
+                videoElement.removeEventListener('loadedmetadata', onLoaded);
+                videoElement.removeEventListener('error', onError);
+                resolve(videoElement.duration * 1000);
+            };
+            videoElement.addEventListener('loadedmetadata', onLoaded);
+            videoElement.addEventListener('error', onError);
         });
 
         return { item, videoUrl, videoFile, videoDurationMs, schools, instructors, originalThumbnailUrl };

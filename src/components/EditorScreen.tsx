@@ -93,7 +93,7 @@ const EditorScreen: React.FC = () => {
                 console.error("Failed to load editor data:", e);
                 setError(e instanceof Error ? e.message : t('editor.itemNotFound'));
             } finally {
-                if (isCancelled) setIsLoading(false);
+                if (!isCancelled) setIsLoading(false);
             }
         };
         loadData();
