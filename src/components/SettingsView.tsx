@@ -70,7 +70,7 @@ const SettingsView: React.FC = () => {
   return (
     <>
       {isMobile ? <MobileTopNav title={pageTitle} /> : null}
-      <div className="p-4 md:p-8">
+      <div id="settings-view" className="p-4 md:p-8">
         {!isMobile && <DesktopTopNav title={pageTitle} />}
         <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl">
           {!isE2ETest() && <p className="text-right -mt-4 -mr-4 mb-4 text-xs text-gray-400">Version: {APP_VERSION}</p>}
@@ -100,6 +100,7 @@ const SettingsView: React.FC = () => {
                 <div
                     onClick={handleAutoplayToggle}
                     role="switch"
+                    data-action="toggle-autoplay"
                     aria-checked={settings.autoplayGalleryVideos}
                     className="flex items-center justify-between mt-4 cursor-pointer"
                 >
@@ -134,10 +135,10 @@ const SettingsView: React.FC = () => {
                 </div>
                 <p className="text-gray-500 mt-1">{t('settings.dataManagementDesc')}</p>
                 <div className="mt-4 space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
-                    <button onClick={handleExport} disabled={isActionInProgress} className="w-full sm:w-auto bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <button onClick={handleExport} data-action="export-data" disabled={isActionInProgress} className="w-full sm:w-auto bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
                         {backupStatus.status === 'exporting' ? t('settings.exporting') : t('settings.exportData')}
                     </button>
-                    <button onClick={handleImportClick} disabled={isActionInProgress} className="w-full sm:w-auto bg-green-500 text-white font-bold py-2 px-4 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
+                    <button onClick={handleImportClick} data-action="import-data" disabled={isActionInProgress} className="w-full sm:w-auto bg-green-500 text-white font-bold py-2 px-4 rounded hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
                         {backupStatus.status === 'importing' ? t('settings.importing') : t('settings.importData')}
                     </button>
                     <input type="file" ref={fileInputRef} onChange={handleFileSelected} className="sr-only" accept=".json" />

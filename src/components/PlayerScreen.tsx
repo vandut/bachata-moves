@@ -234,6 +234,8 @@ const PlayerScreen: React.FC = () => {
         isMobile={isMobile}
         primaryAction={primaryAction}
         secondaryActions={secondaryActions}
+        // FIX: Added the required `modalName` prop to satisfy the BaseModalProps interface.
+        modalName="PlayerScreen"
         desktopWidth=""
         desktopHeight=""
         desktopStyle={desktopModalStyle}

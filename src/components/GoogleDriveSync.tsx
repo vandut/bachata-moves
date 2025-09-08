@@ -27,6 +27,7 @@ const GoogleDriveSync: React.FC = () => {
                 <div className="sm:flex sm:justify-start">
                     <button
                         onClick={signIn}
+                        data-action="google-signin"
                         className="w-full sm:w-auto inline-flex items-center justify-center bg-white border border-gray-300 text-gray-700 font-bold px-4 py-2 rounded-lg shadow-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors duration-200 gap-2"
                     >
                         <GoogleIcon />
@@ -45,6 +46,7 @@ const GoogleDriveSync: React.FC = () => {
                     <div className="space-y-3 sm:space-y-0 sm:flex sm:space-x-3">
                         <button
                             onClick={() => signOut()}
+                            data-action="google-signout"
                             disabled={isSyncActive}
                             className="w-full sm:w-auto bg-white text-gray-700 border border-gray-300 font-bold py-2 px-4 rounded hover:bg-gray-100 transition-colors disabled:opacity-50"
                         >

@@ -1,17 +1,54 @@
-# Contract for Integration and E2E Tests
+# E2E Testing Commenting Contract
 
-## 1. Purpose
+This document outlines the standard for adding comments to E2E test files, including selector files (Page Object Models) and spec files.
 
-This document outlines the requirements for all end-to-end (E2E) and integration tests in this directory. The primary goal is to ensure the application provides a consistent and correct user experience across different form factors.
+## Guiding Principle
 
-## 2. Multi-Device Testing is Mandatory
+Code should be as self-documenting as possible. Well-named variables, functions, and classes are preferred over explanatory comments.
 
-All tests that validate UI behavior or appearance **must** be executed against both **desktop** and **mobile** viewports.
+## Rules
 
-### Implementation
+1.  **Avoid Redundant Comments**: Do not add comments that merely restate what the code is doing.
 
-- The Playwright configuration (`playwright.config.ts`) is set up to run every test file against two projects: a "Desktop" project and a "Mobile" project.
-- Screenshot snapshots will be generated and compared for each viewport independently. This means a single test will have at least two snapshots (e.g., `my-test-desktop.png` and `my-test-mobile.png`).
-- Tests should be written to be environment-agnostic and should not contain logic specific to a single form factor unless absolutely necessary.
+    *   **Incorrect**:
+        ```typescript
+        // Click the login button
+        await page.getByRole('button', { name: 'Login' }).click();
+        ```
 
-This approach ensures that our application's responsiveness is automatically verified with every test run.
+    *   **Correct**:
+        ```typescript
+        await page.getByRole('button', { name: 'Login' }).click();
+        ```
+
+2.  **Use Comments for "Why," not "What"**: Comments are valuable when they explain the reasoning behind a piece of code that might not be immediately obvious. This is particularly useful for explaining workarounds, business logic, or complex assertions.
+
+    *   **Example**:
+        ```typescript
+        // This test simulates a user with an expired session.
+        // We must clear local storage before navigating to the page.
+        await page.evaluate(() => localStorage.clear());
+        ```
+
+3.  **Use Section Dividers**: Comments are encouraged for visually structuring files, especially larger selector files. This improves readability and navigation.
+
+    *   **Example**:
+        ```typescript
+        // --- Main View ---
+        readonly view: Locator;
+        readonly grid: Locator;
+
+        // --- Modals ---
+        readonly addLessonModal: { ... };
+        ```
+
+4.  **JSDoc for Public APIs**: Public methods and classes, especially in shared selector files, should have clear JSDoc comments explaining their purpose, parameters, and return values.
+
+    *   **Example**:
+        ```typescript
+        /**
+         * Gets the locator for a specific lesson card by its ID.
+         * @param lessonId The unique ID of the lesson.
+         */
+        getCardById(lessonId: string): Locator { ... }
+        ```

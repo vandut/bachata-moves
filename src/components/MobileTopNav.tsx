@@ -11,12 +11,13 @@ interface MobileTopNavProps {
 const MobileTopNav: React.FC<MobileTopNavProps> = ({ title, onBack, rightAction }) => {
   const { t } = useTranslation();
   return (
-    <header className="flex-shrink-0 flex items-center h-16 px-4 bg-white border-b border-gray-200 shadow-sm">
+    <header id="mobile-top-nav" className="flex-shrink-0 flex items-center h-16 px-4 bg-white border-b border-gray-200 shadow-sm">
       <div className="w-1/5">
         {onBack && (
           <button
             type="button"
             onClick={onBack}
+            data-action="go-back"
             className="p-2 -ml-2 text-gray-700 hover:bg-gray-100 rounded-full"
             aria-label={t('common.goBack')}
           >
@@ -25,7 +26,7 @@ const MobileTopNav: React.FC<MobileTopNavProps> = ({ title, onBack, rightAction 
         )}
       </div>
       <div className="w-3/5 text-center">
-        <h1 className="text-lg font-semibold text-gray-800 truncate">{title}</h1>
+        <h1 data-component="page-title" className="text-lg font-semibold text-gray-800 truncate">{title}</h1>
       </div>
       <div className="w-1/5 flex justify-end">
         {rightAction}

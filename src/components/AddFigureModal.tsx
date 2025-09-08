@@ -99,6 +99,7 @@ const AddFigureModal: React.FC = () => {
             primaryAction={primaryAction}
             title={t('addFigureModal.title')}
             isMobile={isMobile}
+            modalName="AddFigureModal"
             desktopWidth="max-w-4xl"
             error={error}
         >

@@ -81,10 +81,12 @@ export const useGalleryProcessor = <T extends Lesson | Figure>(type: 'lesson' | 
 
             if (type === 'lesson') {
                 const { items, categories, schools, instructors } = rawData as RawData<Lesson>;
-                processed = galleryOrchestrationService.processLessons(items, categories, schools, instructors, settings, locale);
+                // FIX: Cast the result to the generic type to satisfy TypeScript.
+                processed = galleryOrchestrationService.processLessons(items, categories, schools, instructors, settings, locale) as Omit<ProcessedGalleryData<T>, 'thumbnailUrls' | 'videoUrls' | 'filterOptions'>;
             } else {
                 const { items, lessons, categories, schools, instructors } = rawData as RawData<Figure>;
-                processed = galleryOrchestrationService.processFigures(items, lessons, categories, schools, instructors, settings, locale);
+                // FIX: Cast the result to the generic type to satisfy TypeScript.
+                processed = galleryOrchestrationService.processFigures(items, lessons, categories, schools, instructors, settings, locale) as Omit<ProcessedGalleryData<T>, 'thumbnailUrls' | 'videoUrls' | 'filterOptions'>;
             }
             
             // Fetch URLs for the visible items

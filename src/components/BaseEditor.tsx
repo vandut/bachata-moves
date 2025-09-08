@@ -65,7 +65,7 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     const commonSelectClasses = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm";
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8 gap-y-6">
+        <div data-component="editor-screen" className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8 gap-y-6">
             <div className="space-y-4">
                 <div className="aspect-video w-full bg-black rounded-lg flex items-center justify-center text-white">
                     {videoUrl ? (
@@ -117,7 +117,7 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
                             <input type="number" id="endTime" value={msToSecondsString(formData.endTime)} onChange={onFormChange} step="0.04" min="0" max={msToSecondsString(videoDurationMs)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
                         </div>
                     </div>
-                    <button type="button" onClick={onSetThumbnail} disabled={isSaving} className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400">{t('editor.setThumb')}</button>
+                    <button type="button" onClick={onSetThumbnail} data-action="set-thumbnail" disabled={isSaving} className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400">{t('editor.setThumb')}</button>
                 </div>
             </div>
             <div className="space-y-6 p-2">

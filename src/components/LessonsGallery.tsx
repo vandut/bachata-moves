@@ -63,7 +63,7 @@ const LessonGrid: React.FC<{
 }> = ({ lessons, lessonCategories, schools, instructors, onRefresh, baseRoute, allLessonIds, thumbnailUrls, videoUrls }) => {
     const gridClass = useMediaQuery('(max-width: 768px)') ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]";
     return (
-        <div className={`grid ${gridClass} gap-6`}>
+        <div data-component="gallery-grid" className={`grid ${gridClass} gap-6`}>
             {lessons.map((lesson) => (
                 <LessonCard 
                     key={lesson.id} 
@@ -242,7 +242,7 @@ const LessonsGallery: React.FC = () => {
       return <Outlet context={outletContext} />;
     }
     return (
-      <div className="h-full flex flex-col">
+      <div id="lessons-gallery-view" className="h-full flex flex-col">
         <MobileTopNav title={pageTitle} />
         <div className="px-4 pt-4 pb-2 flex justify-end">
           {actionMenu}
@@ -256,7 +256,7 @@ const LessonsGallery: React.FC = () => {
   
   // --- Desktop View ---
   const galleryContent = (
-    <div className="p-8 h-full flex flex-col">
+    <div id="lessons-gallery-view" className="p-8 h-full flex flex-col">
       <DesktopTopNav title={pageTitle} rightAction={actionMenu} />
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col p-2 -m-2">
         {renderContent()}

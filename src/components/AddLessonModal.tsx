@@ -198,6 +198,7 @@ const AddLessonModal: React.FC = () => {
       primaryAction={primaryAction}
       title={t('addLessonModal.title')}
       isMobile={isMobile}
+      modalName="AddLessonModal"
       error={error}
       desktopWidth="max-w-md"
     >

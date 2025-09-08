@@ -63,7 +63,7 @@ const FigureGrid: React.FC<{
     videoUrls: Map<string, string | null>;
 }> = ({ figures, lessonsMap, figureCategories, schools, instructors, onRefresh, baseRoute, allFigureIds, thumbnailUrls, videoUrls }) => {
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
+        <div data-component="gallery-grid" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))] gap-6">
             {figures.map((figure) => {
                 const parentLesson = lessonsMap.get(figure.lessonId);
                 return (
@@ -250,7 +250,7 @@ const FiguresGallery: React.FC = () => {
       return <Outlet context={outletContext} />;
     }
     return (
-      <div className="h-full flex flex-col">
+      <div id="figures-gallery-view" className="h-full flex flex-col">
         <MobileTopNav title={pageTitle} />
         <div className="px-4 pt-4 pb-2 flex justify-end">
           {actionMenu}
@@ -264,7 +264,7 @@ const FiguresGallery: React.FC = () => {
   
   // --- Desktop View ---
   const galleryContent = (
-    <div className="p-8 h-full flex flex-col">
+    <div id="figures-gallery-view" className="p-8 h-full flex flex-col">
       <DesktopTopNav title={pageTitle} rightAction={actionMenu} />
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col p-2 -m-2">
         {renderContent()}

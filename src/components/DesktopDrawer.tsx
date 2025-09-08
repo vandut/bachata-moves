@@ -18,6 +18,7 @@ const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems, hasError }) => 
 
   return (
     <div
+      id="desktop-drawer"
       className="bg-white border-r border-gray-200 h-full flex flex-col shadow-lg flex-shrink-0"
       style={{ width: DESKTOP_DRAWER_WIDTH, userSelect: 'none' }}
       onContextMenu={(e) => e.preventDefault()}
@@ -37,6 +38,8 @@ const DesktopDrawer: React.FC<DesktopDrawerProps> = ({ navItems, hasError }) => 
               <li key={item.path}>
                 <Link
                   to={item.path}
+                  data-component="nav-link"
+                  data-path={item.path}
                   className={`flex items-center w-full text-left p-4 my-1 rounded-lg transition-colors duration-200 ${
                     activePath.startsWith(item.path)
                       ? 'bg-blue-100 text-blue-600 font-semibold'

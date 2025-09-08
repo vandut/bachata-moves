@@ -56,9 +56,10 @@ const GalleryActionBar: React.FC<GalleryActionBarProps> = ({
   const { t } = useTranslation();
 
   return (
-    <div className="flex items-center space-x-2">
+    <div id="gallery-action-bar" className="flex items-center space-x-2">
       <button
         onClick={onAddClick}
+        data-action="add-new"
         className="inline-flex items-center justify-center w-10 h-10 rounded-md border border-transparent shadow-sm bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         aria-label={t('common.addNew')}
       >

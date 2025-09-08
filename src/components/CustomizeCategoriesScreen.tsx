@@ -185,6 +185,7 @@ const CustomizeGroupingScreen: React.FC = () => {
             primaryAction={primaryAction}
             title={t('customizeCategories.title')}
             isMobile={isMobile}
+            modalName="CustomizeGroupingScreen"
             desktopWidth="max-w-xl"
             error={error}
         >

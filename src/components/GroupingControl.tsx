@@ -59,6 +59,7 @@ const GroupingControl: React.FC<GroupingControlProps> = ({ options, value, onCha
           type="button"
           className={buttonClass}
           id="grouping-menu-button"
+          data-action="open-grouping"
           aria-expanded={isOpen}
           aria-haspopup="true"
           onClick={() => setIsOpen(!isOpen)}

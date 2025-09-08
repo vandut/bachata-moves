@@ -49,6 +49,7 @@ const SortControl: React.FC<SortControlProps> = ({ options, value, onChange, isM
           type="button"
           className={buttonClass}
           id="menu-button"
+          data-action="open-sort"
           aria-expanded={isOpen}
           aria-haspopup="true"
           onClick={() => setIsOpen(!isOpen)}

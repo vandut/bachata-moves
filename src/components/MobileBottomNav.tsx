@@ -13,6 +13,7 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ navItems, hasError })
 
   return (
     <div
+      id="mobile-bottom-nav"
       className="bg-white border-t border-gray-200 shadow-[0_-1px_10px_rgba(0,0,0,0.05)] flex-shrink-0"
       style={{ userSelect: 'none' }}
       onContextMenu={(e) => e.preventDefault()}
@@ -26,6 +27,8 @@ const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ navItems, hasError })
               <Link
                 key={item.path}
                 to={item.path}
+                data-component="nav-link"
+                data-path={item.path}
                 className={`flex-1 flex flex-col items-center justify-center py-2 transition-colors duration-200 relative ${
                   isActive
                     ? 'text-blue-600'

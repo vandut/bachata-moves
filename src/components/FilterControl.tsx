@@ -177,6 +177,7 @@ const FilterControl: React.FC<FilterControlProps> = ({
             <button
                 type="button"
                 onClick={handleToggleDropdown}
+                data-action="open-filters"
                 className={buttonClass}
                 id="filter-menu-button"
                 aria-expanded={isOpen}

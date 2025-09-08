@@ -287,6 +287,7 @@ const EditorScreen: React.FC = () => {
             title={title} 
             isMobile={isMobile} 
             primaryAction={primaryAction} 
+            modalName="EditorScreen"
             desktopWidth="max-w-6xl" 
             error={isSaving ? error : null} // Only show modal-level error when saving
         >

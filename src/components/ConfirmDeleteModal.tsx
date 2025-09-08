@@ -26,6 +26,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
       className="fixed inset-0 bg-black bg-opacity-70 z-[60] flex justify-center items-center p-4" // z-60 to be on top of BaseModal's z-50
       onClick={onClose}
       role="dialog"
+      data-modal-name="ConfirmDeleteModal"
       aria-modal="true"
       aria-labelledby="confirm-delete-title"
     >
@@ -46,6 +47,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
            <button
             type="button"
             onClick={onClose}
+            data-action="cancel-delete"
             disabled={isDeleting}
             className="w-full sm:w-auto inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
           >
@@ -54,6 +56,7 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
           <button
             type="button"
             onClick={onConfirm}
+            data-action="confirm-delete"
             disabled={isDeleting}
             className="w-full sm:w-auto inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-red-400"
           >
