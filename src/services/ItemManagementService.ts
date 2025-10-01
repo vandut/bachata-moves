@@ -54,7 +54,7 @@ export interface ItemManagementService {
     getItemForViewer(type: 'lesson' | 'figure', id: string): Promise<ViewerData>;
     getItemForEditor(type: 'lesson' | 'figure', id: string): Promise<EditorData>;
     getItemForNewFigure(lessonId: string): Promise<EditorData>;
-    createLesson(data: { uploadDate: string; description: string | null }, videoFile: File): Promise<void>;
+    createLesson(data: { uploadDate: string; categoryId: string | null; schoolId: string | null; instructorId: string | null; }, videoFile: File): Promise<void>;
     saveItem(
         type: 'lesson' | 'figure', 
         data: Partial<Lesson & Figure>, 
@@ -226,12 +226,11 @@ class ItemManagementServiceImpl implements ItemManagementService {
         return { lessons: sortedLessons, thumbnailUrls };
     }
     
-    public async createLesson(data: { uploadDate: string; description: string | null }, videoFile: File): Promise<void> {
+    public async createLesson(data: { uploadDate: string; categoryId: string | null; schoolId: string | null; instructorId: string | null; }, videoFile: File): Promise<void> {
         const { blob: thumbnailBlob, durationMs } = await this.thumbSvc.generateThumbnail(videoFile, 0);
-        // FIX: In `createLesson`, cast the constructed lesson data to the expected type `Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>`.
-        // This resolves a TypeScript error where the compiler could not infer that all required properties were present.
         const lessonData = {
             ...data,
+            description: null,
             startTime: 0,
             endTime: durationMs,
         } as Omit<Lesson, 'id' | 'videoId' | 'thumbTime'>;

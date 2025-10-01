@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import type { Lesson, ModalAction } from '../types';
+import type { ModalAction, LessonCategory, School, Instructor } from '../types';
 import BaseModal from './BaseModal';
 import { useTranslation } from '../contexts/I18nContext';
 import { itemManagementService } from '../services/ItemManagementService';
+import { localDatabaseService } from '../services/LocalDatabaseService';
 
 
 interface GalleryContext {
@@ -16,7 +17,6 @@ const AddLessonModal: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -25,6 +25,42 @@ const AddLessonModal: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [categoryId, setCategoryId] = useState('');
+  const [schoolId, setSchoolId] = useState('');
+  const [instructorId, setInstructorId] = useState('');
+  const [lessonCategories, setLessonCategories] = useState<LessonCategory[]>([]);
+  const [schools, setSchools] = useState<School[]>([]);
+  const [instructors, setInstructors] = useState<Instructor[]>([]);
+  const [isLoadingDropdowns, setIsLoadingDropdowns] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDropdownData = async () => {
+        setIsLoadingDropdowns(true);
+        try {
+            const [cats, schs, insts] = await Promise.all([
+                localDatabaseService.getLessonCategories(),
+                localDatabaseService.getLessonSchools(),
+                localDatabaseService.getLessonInstructors(),
+            ]);
+            if (isMounted) {
+                setLessonCategories(cats);
+                setSchools(schs);
+                setInstructors(insts);
+            }
+        } catch (err) {
+            console.error("Failed to load dropdown data for Add Lesson Modal", err);
+            if(isMounted) setError(t('common.error'));
+        } finally {
+            if (isMounted) {
+                setIsLoadingDropdowns(false);
+            }
+        }
+    };
+    loadDropdownData();
+    return () => { isMounted = false; };
+  }, [t]);
 
   const processFile = async (file: File | null | undefined) => {
     if (file && file.type.startsWith('video/')) {
@@ -97,7 +133,9 @@ const AddLessonModal: React.FC = () => {
       await itemManagementService.createLesson(
         {
           uploadDate: new Date(date).toISOString(),
-          description: description || null,
+          categoryId: categoryId || null,
+          schoolId: schoolId || null,
+          instructorId: instructorId || null,
         },
         videoFile
       );
@@ -121,6 +159,8 @@ const AddLessonModal: React.FC = () => {
     disabled: !videoFile || !date,
     isLoading: isSaving,
   };
+  
+  const commonSelectClasses = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm disabled:bg-gray-100";
   
   const FormFields = (
     <>
@@ -158,7 +198,6 @@ const AddLessonModal: React.FC = () => {
         )}
       </div>
 
-
       {/* Date Input */}
       <div>
         <label htmlFor="lesson-date" className="block text-sm font-medium text-gray-700">{t('addLessonModal.date')} <span className="text-red-500">{t('addLessonModal.required')}</span></label>
@@ -175,19 +214,31 @@ const AddLessonModal: React.FC = () => {
         />
       </div>
 
-      {/* Description */}
+      {/* Category */}
       <div>
-        <label htmlFor="description" className="block text-sm font-medium text-gray-700">
-            {t('addLessonModal.descriptionOptional')}
-        </label>
-        <textarea
-            id="description"
-            rows={3}
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            placeholder={t('addLessonModal.descriptionPlaceholder')}
-        />
+        <label htmlFor="lesson-category" className="block text-sm font-medium text-gray-700">{t('common.category')}</label>
+        <select id="lesson-category" value={categoryId} onChange={e => setCategoryId(e.target.value)} className={commonSelectClasses} disabled={isLoadingDropdowns}>
+            <option value="">{t('common.uncategorized')}</option>
+            {lessonCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+        </select>
+      </div>
+      
+      {/* School */}
+      <div>
+        <label htmlFor="lesson-school" className="block text-sm font-medium text-gray-700">{t('common.school')}</label>
+        <select id="lesson-school" value={schoolId} onChange={e => setSchoolId(e.target.value)} className={commonSelectClasses} disabled={isLoadingDropdowns}>
+            <option value="">{t('common.unassigned')}</option>
+            {schools.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
+      </div>
+
+      {/* Instructor */}
+      <div>
+        <label htmlFor="lesson-instructor" className="block text-sm font-medium text-gray-700">{t('common.instructor')}</label>
+        <select id="lesson-instructor" value={instructorId} onChange={e => setInstructorId(e.target.value)} className={commonSelectClasses} disabled={isLoadingDropdowns}>
+            <option value="">{t('common.unassigned')}</option>
+            {instructors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select>
       </div>
     </>
   );
