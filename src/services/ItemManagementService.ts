@@ -203,15 +203,61 @@ class ItemManagementServiceImpl implements ItemManagementService {
     }
 
     public async getItemForNewFigure(lessonId: string): Promise<EditorData> {
-        const lesson = await this.localDBSvc.getLessons().then(l => l.find(x => x.id === lessonId));
+        // 1. Fetch all necessary data in parallel
+        const [
+            lesson,
+            allLessonCategories,
+            allLessonSchools,
+            allLessonInstructors,
+            allFigureCategories,
+            allFigureSchools,
+            allFigureInstructors
+        ] = await Promise.all([
+            this.localDBSvc.getLesson(lessonId),
+            this.localDBSvc.getLessonCategories(),
+            this.localDBSvc.getLessonSchools(),
+            this.localDBSvc.getLessonInstructors(),
+            this.localDBSvc.getFigureCategories(),
+            this.localDBSvc.getFigureSchools(),
+            this.localDBSvc.getFigureInstructors()
+        ]);
+    
         if (!lesson) throw new Error("Source lesson for new figure not found.");
-
-        const newItem: Figure = {
-            id: 'new', lessonId: lesson.id, name: '', description: null,
-            startTime: lesson.startTime, endTime: lesson.endTime, thumbTime: lesson.thumbTime,
-            categoryId: lesson.categoryId, schoolId: lesson.schoolId, instructorId: lesson.instructorId,
+    
+        // 2. Helper function to match names and get target ID
+        const findMatchingIdByName = (
+            sourceId: string | null | undefined,
+            sourceList: { id: string; name: string }[],
+            targetList: { id: string; name: string }[]
+        ): string | null => {
+            if (!sourceId) return null;
+            const sourceItem = sourceList.find(item => item.id === sourceId);
+            if (!sourceItem) return null;
+            // Case-insensitive matching
+            const targetItem = targetList.find(item => item.name.trim().toLowerCase() === sourceItem.name.trim().toLowerCase());
+            return targetItem ? targetItem.id : null;
         };
-
+    
+        // 3. Find matching IDs
+        const matchedCategoryId = findMatchingIdByName(lesson.categoryId, allLessonCategories, allFigureCategories);
+        const matchedSchoolId = findMatchingIdByName(lesson.schoolId, allLessonSchools, allFigureSchools);
+        const matchedInstructorId = findMatchingIdByName(lesson.instructorId, allLessonInstructors, allFigureInstructors);
+    
+        // 4. Create the new figure template with matched properties
+        const newItem: Figure = {
+            id: 'new',
+            lessonId: lesson.id,
+            name: '',
+            description: null,
+            startTime: lesson.startTime,
+            endTime: lesson.endTime,
+            thumbTime: lesson.thumbTime,
+            categoryId: matchedCategoryId,
+            schoolId: matchedSchoolId,
+            instructorId: matchedInstructorId,
+        };
+    
+        // 5. Get the rest of the editor data (video URL, etc.)
         return this._getEditorData(newItem, lesson);
     }
     
