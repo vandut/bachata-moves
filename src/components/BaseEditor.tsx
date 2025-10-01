@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from '../contexts/I18nContext';
-import type { School, Instructor } from '../types';
+import type { School, Instructor, LessonCategory, FigureCategory } from '../types';
 
 interface BaseEditorProps {
     videoUrl: string | null;
@@ -11,10 +11,10 @@ interface BaseEditorProps {
     onVolumeChange: () => void;
     onVideoKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
     formData: {
-        description: string;
         startTime: number;
         endTime: number;
         thumbTime: number;
+        categoryId?: string | null;
         schoolId?: string | null;
         instructorId?: string | null;
     };
@@ -31,6 +31,7 @@ interface BaseEditorProps {
     thumbnailPreviewUrl: string | null;
     headerContent: React.ReactNode;
     msToSecondsString: (ms: number) => string;
+    categories: (LessonCategory | FigureCategory)[];
     schools: School[];
     instructors: Instructor[];
 }
@@ -57,6 +58,7 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     thumbnailPreviewUrl,
     headerContent,
     msToSecondsString,
+    categories,
     schools,
     instructors
 }) => {
@@ -147,6 +149,13 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
                     <h4 className="text-lg font-medium text-gray-800">{t('editor.metadata')}</h4>
                     {headerContent}
                     <div>
+                        <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700">{t('common.category')}</label>
+                        <select id="categoryId" name="categoryId" value={formData.categoryId || ''} onChange={onFormChange} className={commonSelectClasses}>
+                            <option value="">{t('common.uncategorized')}</option>
+                            {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+                        </select>
+                    </div>
+                    <div>
                         <label htmlFor="schoolId" className="block text-sm font-medium text-gray-700">{t('common.school')}</label>
                         <select id="schoolId" name="schoolId" value={formData.schoolId || ''} onChange={onFormChange} className={commonSelectClasses}>
                             <option value="">{t('common.unassigned')}</option>
@@ -160,7 +169,6 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
                             {instructors.map(instructor => <option key={instructor.id} value={instructor.id}>{instructor.name}</option>)}
                         </select>
                     </div>
-                    <div><label htmlFor="description" className="block text-sm font-medium text-gray-700">{t('common.description')}</label><textarea id="description" rows={4} value={formData.description} onChange={onFormChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" /></div>
                 </div>
                 <div className="mt-4">
                     <h4 className="text-lg font-medium text-gray-800 mb-3">{t('editor.thumbnail')}</h4>

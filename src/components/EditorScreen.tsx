@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, useOutletContext, useParams } from 'react-router-dom';
 import BaseModal from './BaseModal';
 import BaseEditor from './BaseEditor';
-import type { ModalAction, Lesson, Figure, School, Instructor } from '../types';
+import type { ModalAction, Lesson, Figure, School, Instructor, LessonCategory, FigureCategory } from '../types';
 import { useTranslation } from '../contexts/I18nContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { itemManagementService, EditorData } from '../services/ItemManagementService';
@@ -37,7 +37,7 @@ const EditorScreen: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [formData, setFormData] = useState({ id: '', name: '', description: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
+    const [formData, setFormData] = useState({ id: '', name: '', categoryId: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
     const [newThumbnailUrl, setNewThumbnailUrl] = useState<string | null>(null);
     const [currentTimeMs, setCurrentTimeMs] = useState(0);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -78,11 +78,11 @@ const EditorScreen: React.FC = () => {
                 setFormData({
                     id: item.id,
                     name: (item as Figure).name || '',
-                    description: item.description || '',
                     uploadDate: (item as Lesson).uploadDate ? new Date((item as Lesson).uploadDate).toISOString().split('T')[0] : '',
                     startTime: item.startTime || 0,
                     endTime: item.endTime,
                     thumbTime: item.thumbTime,
+                    categoryId: item.categoryId || '',
                     schoolId: item.schoolId || '',
                     instructorId: item.instructorId || '',
                 });
@@ -317,6 +317,7 @@ const EditorScreen: React.FC = () => {
                     thumbnailPreviewUrl={newThumbnailUrl || editorData.originalThumbnailUrl}
                     headerContent={renderHeaderContent()}
                     msToSecondsString={msToSecondsString}
+                    categories={editorData.categories}
                     schools={editorData.schools}
                     instructors={editorData.instructors}
                 />

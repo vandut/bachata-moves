@@ -21,6 +21,7 @@ export interface EditorData {
     videoUrl: string;
     videoDurationMs: number;
     videoFile: File;
+    categories: (LessonCategory[] | FigureCategory[]);
     schools: School[];
     instructors: Instructor[];
     originalThumbnailUrl: string | null;
@@ -159,11 +160,13 @@ class ItemManagementServiceImpl implements ItemManagementService {
         const type = 'uploadDate' in item ? 'lesson' : 'figure';
         const [
             videoUrl, videoFile, originalThumbnailUrl,
+            categories,
             schools, instructors
         ] = await Promise.all([
             this.dataSvc.getVideoObjectUrl(videoLessonSource),
             this.dataSvc.getVideoFile(videoLessonSource.id),
             type === 'lesson' ? this.dataSvc.getLessonThumbnailUrl(item.id) : this.dataSvc.getFigureThumbnailUrl(item.id),
+            type === 'lesson' ? this.localDBSvc.getLessonCategories() : this.localDBSvc.getFigureCategories(),
             type === 'lesson' ? this.localDBSvc.getLessonSchools() : this.localDBSvc.getFigureSchools(),
             type === 'lesson' ? this.localDBSvc.getLessonInstructors() : this.localDBSvc.getFigureInstructors(),
         ]);
@@ -187,7 +190,7 @@ class ItemManagementServiceImpl implements ItemManagementService {
             videoElement.addEventListener('error', onError);
         });
 
-        return { item, videoUrl, videoFile, videoDurationMs, schools, instructors, originalThumbnailUrl };
+        return { item, videoUrl, videoFile, videoDurationMs, categories, schools, instructors, originalThumbnailUrl };
     }
 
     public async getItemForEditor(type: 'lesson' | 'figure', id: string): Promise<EditorData> {
@@ -248,7 +251,6 @@ class ItemManagementServiceImpl implements ItemManagementService {
         options: { isNew: boolean, videoDurationMs?: number }
     ): Promise<void> {
         const commonData: Partial<Lesson & Figure> = {
-            description: data.description,
             startTime: data.startTime,
             endTime: data.endTime,
             thumbTime: data.thumbTime,
