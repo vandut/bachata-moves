@@ -37,7 +37,8 @@ const EditorScreen: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-    const [formData, setFormData] = useState({ id: '', name: '', categoryId: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
+    // FIX: Added lessonId to the form state to ensure it's tracked when creating a new figure.
+    const [formData, setFormData] = useState({ id: '', name: '', lessonId: '', categoryId: '', uploadDate: '', startTime: 0, endTime: 0, thumbTime: 0, schoolId: '', instructorId: '' });
     const [newThumbnailUrl, setNewThumbnailUrl] = useState<string | null>(null);
     const [currentTimeMs, setCurrentTimeMs] = useState(0);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -78,6 +79,8 @@ const EditorScreen: React.FC = () => {
                 setFormData({
                     id: item.id,
                     name: (item as Figure).name || '',
+                    // FIX: Populate lessonId from the loaded item data. This is crucial for creating new figures.
+                    lessonId: (item as Figure).lessonId || '',
                     uploadDate: (item as Lesson).uploadDate ? new Date((item as Lesson).uploadDate).toISOString().split('T')[0] : '',
                     startTime: item.startTime || 0,
                     endTime: item.endTime,
