@@ -9,6 +9,7 @@ interface BaseEditorProps {
     onLoadedMetadata: () => void;
     onTimeUpdate: () => void;
     onVolumeChange: () => void;
+    onVideoKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
     formData: {
         description: string;
         startTime: number;
@@ -24,6 +25,8 @@ interface BaseEditorProps {
     onHandleMouseDown: (event: React.MouseEvent<HTMLDivElement>, handle: 'start' | 'end') => void;
     onTimelineMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
     onSetThumbnail: () => void;
+    onSetStartTime: () => void;
+    onSetEndTime: () => void;
     isSaving: boolean;
     thumbnailPreviewUrl: string | null;
     headerContent: React.ReactNode;
@@ -39,6 +42,7 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     onLoadedMetadata,
     onTimeUpdate,
     onVolumeChange,
+    onVideoKeyDown,
     formData,
     onFormChange,
     videoDurationMs,
@@ -47,6 +51,8 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     onHandleMouseDown,
     onTimelineMouseDown,
     onSetThumbnail,
+    onSetStartTime,
+    onSetEndTime,
     isSaving,
     thumbnailPreviewUrl,
     headerContent,
@@ -63,11 +69,17 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
     const currentPercent = videoDurationMs > 0 ? (currentTimeMs / videoDurationMs) * 100 : 0;
     
     const commonSelectClasses = "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm";
+    const setTimeButtonClasses = "w-full inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50";
 
     return (
         <div data-component="editor-screen" className="grid grid-cols-1 md:grid-cols-2 md:gap-x-8 gap-y-6">
             <div className="space-y-4">
-                <div className="aspect-video w-full bg-black rounded-lg flex items-center justify-center text-white">
+                <div
+                    className="aspect-video w-full bg-black rounded-lg flex items-center justify-center text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-50 focus:ring-blue-500"
+                    onKeyDownCapture={onVideoKeyDown}
+                    tabIndex={0}
+                    aria-label="Video player for trimming. Use left and right arrow keys to seek."
+                >
                     {videoUrl ? (
                         <video 
                             ref={videoRef} 
@@ -107,14 +119,24 @@ const BaseEditor: React.FC<BaseEditorProps> = ({
                         </div>
                         <div className="absolute top-0 h-full w-0.5 bg-red-500 pointer-events-none" style={{ left: `${currentPercent}%` }}/>
                     </div>
-                    <div className="flex justify-between items-center mt-6 space-x-4">
-                        <div className="flex-1">
-                            <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">{t('editor.startTime')}</label>
-                            <input type="number" id="startTime" value={msToSecondsString(formData.startTime)} onChange={onFormChange} step="0.04" min="0" max={msToSecondsString(videoDurationMs)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                    <div className="flex justify-between items-start mt-6 space-x-4">
+                        <div className="flex-1 space-y-2">
+                            <div>
+                                <label htmlFor="startTime" className="block text-sm font-medium text-gray-700">{t('editor.startTime')}</label>
+                                <input type="number" id="startTime" value={msToSecondsString(formData.startTime)} onChange={onFormChange} step="0.04" min="0" max={msToSecondsString(videoDurationMs)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                            </div>
+                            <button type="button" onClick={onSetStartTime} data-action="set-start-time" disabled={isSaving} className={setTimeButtonClasses}>
+                                {t('editor.setAsStart')}
+                            </button>
                         </div>
-                        <div className="flex-1">
-                            <label htmlFor="endTime" className="block text-sm font-medium text-gray-700">{t('editor.endTime')}</label>
-                            <input type="number" id="endTime" value={msToSecondsString(formData.endTime)} onChange={onFormChange} step="0.04" min="0" max={msToSecondsString(videoDurationMs)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                        <div className="flex-1 space-y-2">
+                            <div>
+                                <label htmlFor="endTime" className="block text-sm font-medium text-gray-700">{t('editor.endTime')}</label>
+                                <input type="number" id="endTime" value={msToSecondsString(formData.endTime)} onChange={onFormChange} step="0.04" min="0" max={msToSecondsString(videoDurationMs)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" />
+                            </div>
+                            <button type="button" onClick={onSetEndTime} data-action="set-end-time" disabled={isSaving} className={setTimeButtonClasses}>
+                                {t('editor.setAsEnd')}
+                            </button>
                         </div>
                     </div>
                     <button type="button" onClick={onSetThumbnail} data-action="set-thumbnail" disabled={isSaving} className="mt-4 w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400">{t('editor.setThumb')}</button>

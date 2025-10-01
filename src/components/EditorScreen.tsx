@@ -179,6 +179,46 @@ const EditorScreen: React.FC = () => {
         }
     };
     
+    const handleSetStartTime = () => {
+        setFormData(prev => {
+            const newStartTime = Math.max(0, Math.min(currentTimeMs, prev.endTime));
+            return { ...prev, startTime: newStartTime };
+        });
+        if (videoRef.current) {
+            videoRef.current.currentTime = currentTimeMs / 1000;
+        }
+    };
+
+    const handleSetEndTime = () => {
+        setFormData(prev => {
+            const newEndTime = Math.max(prev.startTime, Math.min(currentTimeMs, editorData?.videoDurationMs || Infinity));
+            return { ...prev, endTime: newEndTime };
+        });
+        if (videoRef.current) {
+            videoRef.current.currentTime = currentTimeMs / 1000;
+        }
+    };
+    
+    const handleVideoKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (!videoRef.current) return;
+
+        let seekAmount = 0;
+        if (event.key === 'ArrowRight') {
+            seekAmount = 0.5; // Seek forward 0.5 seconds
+        } else if (event.key === 'ArrowLeft') {
+            seekAmount = -0.5; // Seek backward 0.5 seconds
+        }
+
+        if (seekAmount !== 0) {
+            event.preventDefault();
+            const newTime = videoRef.current.currentTime + seekAmount;
+            // Clamp the new time between 0 and the video's duration
+            videoRef.current.currentTime = Math.max(0, Math.min(newTime, videoRef.current.duration));
+            // Update the React state to keep the UI (e.g., scrubber) in sync
+            setCurrentTimeMs(videoRef.current.currentTime * 1000);
+        }
+    };
+
     const handleSetThumbnail = async () => {
         if (!editorData?.videoFile || !videoRef.current) return;
         
@@ -262,6 +302,7 @@ const EditorScreen: React.FC = () => {
                     onLoadedMetadata={handleLoadedMetadata}
                     onTimeUpdate={handleTimeUpdate}
                     onVolumeChange={handleVolumeChange}
+                    onVideoKeyDown={handleVideoKeyDown}
                     formData={formData}
                     onFormChange={handleFormChange}
                     videoDurationMs={editorData.videoDurationMs}
@@ -270,6 +311,8 @@ const EditorScreen: React.FC = () => {
                     onHandleMouseDown={onHandleMouseDown}
                     onTimelineMouseDown={onTimelineMouseDown}
                     onSetThumbnail={handleSetThumbnail}
+                    onSetStartTime={handleSetStartTime}
+                    onSetEndTime={handleSetEndTime}
                     isSaving={isSaving}
                     thumbnailPreviewUrl={newThumbnailUrl || editorData.originalThumbnailUrl}
                     headerContent={renderHeaderContent()}
